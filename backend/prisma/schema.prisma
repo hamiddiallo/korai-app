@@ -1,0 +1,80 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id              String   @id @default(uuid())
+  fullName        String
+  email           String   @unique
+  passwordHash    String
+  role            String
+  phone           String?
+  healthFacility  String?
+  professionalId  String?
+  linkedPatientId String?
+  createdAt       DateTime @default(now())
+
+  patientProfile  Patient?  @relation("PatientAccount")
+  createdPatients Patient[] @relation("PatientCreator")
+  createdCases    OrlCase[] @relation("CaseCreator")
+  assignedCases   OrlCase[] @relation("AssignedSpecialist")
+}
+
+model Patient {
+  id                      String   @id @default(uuid())
+  userId                  String?  @unique
+  createdByUserId         String
+  firstName               String
+  lastName                String
+  birthDate               String?
+  sex                     String?
+  phone                   String?
+  address                 String?
+  consentForAi            Boolean  @default(false)
+  consentForTeleExpertise Boolean  @default(false)
+  isValidated             Boolean  @default(true)
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+
+  account User?     @relation("PatientAccount", fields: [userId], references: [id])
+  creator User      @relation("PatientCreator", fields: [createdByUserId], references: [id])
+  cases   OrlCase[]
+}
+
+model OrlCase {
+  id                     String   @id @default(uuid())
+  externalAiCaseId       String?
+  patientId              String
+  createdByUserId        String
+  assignedSpecialistId   String?
+  symptoms               String
+  clinicalNotes          String?
+  aiResponseJson         String?
+  organizedAiSummaryJson String?
+  status                 String
+  urgency                String
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  patient            Patient @relation(fields: [patientId], references: [id])
+  creator            User    @relation("CaseCreator", fields: [createdByUserId], references: [id])
+  assignedSpecialist User?   @relation("AssignedSpecialist", fields: [assignedSpecialistId], references: [id])
+}
+
+model ClinicalReferenceItem {
+  id          String   @id @default(uuid())
+  type        String
+  label       String
+  description String?
+  isActive    Boolean  @default(true)
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([type, isActive])
+}

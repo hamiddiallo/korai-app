@@ -1,0 +1,9 @@
+import type { User } from '../types.js';
+
+declare global {
+  namespace Express {
+    interface Request {
+      user?: Omit<User, 'passwordHash'>;
+    }
+  }
+}
