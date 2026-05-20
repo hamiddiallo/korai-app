@@ -228,41 +228,62 @@ class _AdminHomePageState extends State<AdminHomePage> {
           ],
 
           // Counter grid
-          GridView.count(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            crossAxisCount: 2,
-            crossAxisSpacing: 12,
-            mainAxisSpacing: 12,
-            childAspectRatio: 1.4,
+          Column(
             children: [
-              _buildStatCard(
-                title: 'Comptes Utilisateurs',
-                count: _userCount,
-                icon: Icons.people_outline_rounded,
-                color: Colors.blue.shade600,
-                onTap: () => _navigateTo('USERS'),
+              Row(
+                children: [
+                  Expanded(
+                    child: _buildStatCard(
+                      title: 'Comptes Utilisateurs',
+                      count: _userCount,
+                      icon: Icons.people_outline_rounded,
+                      color: Colors.blue.shade600,
+                      onTap: () => _navigateTo('USERS'),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _buildStatCard(
+                      title: 'Total Patients',
+                      count: _patientCount,
+                      icon: Icons.personal_injury_rounded,
+                      color: Colors.teal.shade600,
+                      onTap: () => _navigateTo('PATIENTS'),
+                    ),
+                  ),
+                ],
               ),
-              _buildStatCard(
-                title: 'Total Patients',
-                count: _patientCount,
-                icon: Icons.personal_injury_rounded,
-                color: Colors.teal.shade600,
-                onTap: () => _navigateTo('PATIENTS'),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: _buildStatCard(
+                      title: 'Symptômes IA',
+                      count: _symptomCount,
+                      icon: Icons.sick_outlined,
+                      color: Colors.amber.shade700,
+                      onTap: () => _navigateTo('SYMPTOMS'),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _buildStatCard(
+                      title: 'Antécédents Médicaux',
+                      count: _historyCount,
+                      icon: Icons.history_edu_outlined,
+                      color: Colors.purple.shade600,
+                      onTap: () => _navigateTo('HISTORIES'),
+                    ),
+                  ),
+                ],
               ),
+              const SizedBox(height: 12),
               _buildStatCard(
-                title: 'Symptômes IA',
-                count: _symptomCount,
-                icon: Icons.sick_outlined,
-                color: Colors.amber.shade700,
-                onTap: () => _navigateTo('SYMPTOMS'),
-              ),
-              _buildStatCard(
-                title: 'Configuration Clinique',
-                count: _historyCount + _touchCount,
-                icon: Icons.settings_suggest_rounded,
-                color: Colors.purple.shade600,
-                onTap: () => _navigateTo('HISTORIES'),
+                title: 'Vérifications au Toucher',
+                count: _touchCount,
+                icon: Icons.touch_app_outlined,
+                color: Colors.deepOrange.shade600,
+                onTap: () => _navigateTo('TOUCHES'),
               ),
             ],
           ),
@@ -382,53 +403,56 @@ class _AdminHomePageState extends State<AdminHomePage> {
     required Color color,
     required VoidCallback onTap,
   }) {
-    return Material(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(16),
-      child: InkWell(
-        onTap: onTap,
+    return SizedBox(
+      height: 110,
+      child: Material(
+        color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        child: Container(
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: Colors.grey.shade200),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(6),
-                    decoration: BoxDecoration(
-                      color: color.withOpacity(0.1),
-                      shape: BoxShape.circle,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(16),
+          child: Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: Colors.grey.shade200),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: BoxDecoration(
+                        color: color.withOpacity(0.1),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(icon, color: color, size: 18),
                     ),
-                    child: Icon(icon, color: color, size: 18),
-                  ),
-                  const Icon(Icons.arrow_forward_ios_rounded, color: Colors.grey, size: 12),
-                ],
-              ),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    '$count',
-                    style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: Color(0xFF1E293B)),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontSize: 11, color: Colors.grey, fontWeight: FontWeight.w600),
-                  ),
-                ],
-              ),
-            ],
+                    const Icon(Icons.arrow_forward_ios_rounded, color: Colors.grey, size: 12),
+                  ],
+                ),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '$count',
+                      style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: Color(0xFF1E293B)),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 11, color: Colors.grey, fontWeight: FontWeight.w600),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
         ),
       ),

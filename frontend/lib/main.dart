@@ -1,3 +1,4 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 
 import 'core/api/api_client.dart';
@@ -10,6 +11,16 @@ import 'features/patient/presentation/patient_home_page.dart';
 
 void main() {
   runApp(const KoraiApp());
+}
+
+class MyCustomScrollBehavior extends MaterialScrollBehavior {
+  @override
+  Set<PointerDeviceKind> get dragDevices => {
+        PointerDeviceKind.touch,
+        PointerDeviceKind.mouse,
+        PointerDeviceKind.stylus,
+        PointerDeviceKind.trackpad,
+      };
 }
 
 class KoraiApp extends StatefulWidget {
@@ -38,6 +49,7 @@ class _KoraiAppState extends State<KoraiApp> {
           debugShowCheckedModeBanner: false,
           title: 'Korai ORL',
           theme: AppTheme.light(),
+          scrollBehavior: MyCustomScrollBehavior(),
           home: session.isAuthenticated ? _homeForRole() : LoginPage(session: session),
         );
       },

@@ -87,26 +87,59 @@ export class DataStore {
       });
     }
 
-    const clinicalItemCount = await prisma.clinicalReferenceItem.count();
-    if (clinicalItemCount > 0) return;
+    const itemsToSeed = [
+      // SYMPTOMS
+      { type: 'SYMPTOM', label: 'Otalgie', description: "Douleur à l'oreille, pouvant être d'origine interne ou irradiée.", sortOrder: 10 },
+      { type: 'SYMPTOM', label: 'Otorrhée', description: "Écoulement de liquide (clair, purulent ou sanguin) provenant du conduit auditif.", sortOrder: 20 },
+      { type: 'SYMPTOM', label: 'Hypoacousie', description: "Baisse partielle de l'acuité auditive.", sortOrder: 30 },
+      { type: 'SYMPTOM', label: 'Acouphènes', description: "Perception de bruits parasites (sifflements, bourdonnements) sans source externe.", sortOrder: 40 },
+      { type: 'SYMPTOM', label: 'Fièvre', description: "Élévation de la température corporelle, souvent associée à une infection.", sortOrder: 50 },
+      { type: 'SYMPTOM', label: 'Vertiges', description: "Sensation de rotation ou de perte d'équilibre, souvent liée à l'oreille interne.", sortOrder: 60 },
+      { type: 'SYMPTOM', label: 'Prurit auriculaire', description: "Démangeaisons à l'intérieur ou autour du conduit auditif.", sortOrder: 70 },
+      { type: 'SYMPTOM', label: 'Sensation de plénitude', description: "Sensation désagréable d'oreille pleine ou bouchée.", sortOrder: 80 },
+      { type: 'SYMPTOM', label: 'Écoulement purulent', description: "Sécrétion épaisse et jaunâtre/verdâtre, signe d'une surinfection.", sortOrder: 90 },
+      { type: 'SYMPTOM', label: 'Perforation tympanique', description: "Rupture ou trou dans la membrane du tympan.", sortOrder: 100 },
+      { type: 'SYMPTOM', label: 'Rhinorrhée', description: "Écoulement nasal, pouvant aggraver les troubles ORL via la trompe d'Eustache.", sortOrder: 110 },
+      { type: 'SYMPTOM', label: 'Obstruction nasale', description: "Nez bouché, gênant la respiration et la ventilation de l'oreille.", sortOrder: 120 },
+      { type: 'SYMPTOM', label: 'Douleur mastoïdienne', description: "Douleur derrière l'oreille, au niveau de l'os mastoïde.", sortOrder: 130 },
+      { type: 'SYMPTOM', label: 'Paralysie faciale', description: "Perte de mobilité d'une moitié du visage, complication grave possible.", sortOrder: 140 },
 
-    await prisma.clinicalReferenceItem.createMany({
-      data: [
-        { type: 'SYMPTOM', label: 'Douleur oreille', sortOrder: 1 },
-        { type: 'SYMPTOM', label: 'Ecoulement auriculaire', sortOrder: 2 },
-        { type: 'SYMPTOM', label: 'Baisse audition', sortOrder: 3 },
-        { type: 'SYMPTOM', label: 'Fievre', sortOrder: 4 },
-        { type: 'SYMPTOM', label: 'Vertiges', sortOrder: 5 },
-        { type: 'MEDICAL_HISTORY', label: 'Otites repetees', sortOrder: 1 },
-        { type: 'MEDICAL_HISTORY', label: 'Chirurgie ORL', sortOrder: 2 },
-        { type: 'MEDICAL_HISTORY', label: 'Allergies connues', sortOrder: 3 },
-        { type: 'MEDICAL_HISTORY', label: 'Diabete', sortOrder: 4 },
-        { type: 'TOUCH_CHECK', label: 'Douleur a la traction du pavillon', sortOrder: 1 },
-        { type: 'TOUCH_CHECK', label: 'Douleur a la pression du tragus', sortOrder: 2 },
-        { type: 'TOUCH_CHECK', label: 'Sensibilite mastoidienne', sortOrder: 3 },
-        { type: 'TOUCH_CHECK', label: 'Ganglions cervicaux palpables', sortOrder: 4 }
-      ]
-    });
+      // MEDICAL HISTORY (ANTECEDENTS)
+      { type: 'MEDICAL_HISTORY', label: 'Otites récurrentes', description: "Antécédent d'otites moyennes aiguës à répétition (au moins 3 épisodes en 6 mois ou 4 en un an).", sortOrder: 10 },
+      { type: 'MEDICAL_HISTORY', label: 'Chirurgie ORL', description: "Antécédent d'intervention chirurgicale de la sphère ORL (tympanoplastie, aérateurs transtympaniques, etc.).", sortOrder: 20 },
+      { type: 'MEDICAL_HISTORY', label: 'Traumatisme auriculaire', description: "Antécédent de choc physique, d'agression sonore, d'introduction d'objet ou d'accident barométrique sur l'oreille.", sortOrder: 30 },
+      { type: 'MEDICAL_HISTORY', label: 'Perforation tympanique ancienne', description: "Présence connue d'une brèche non cicatrisée ou d'une séquelle de perforation de la membrane du tympan.", sortOrder: 40 },
+      { type: 'MEDICAL_HISTORY', label: 'Cholestéatome', description: "Antécédent de cholestéatome de l'oreille moyenne, nécessitant une surveillance régulière.", sortOrder: 50 },
+      { type: 'MEDICAL_HISTORY', label: 'Diabète', description: "Diabète de type 1 ou 2, facteur favorisant les infections ORL sévères.", sortOrder: 60 },
+      { type: 'MEDICAL_HISTORY', label: 'Immunodépression', description: "Déficit immunitaire congénital ou acquis (VIH, chimiothérapie, traitement immunosuppresseur).", sortOrder: 70 },
+      { type: 'MEDICAL_HISTORY', label: 'Allergie', description: "Terrain allergique (rhinite allergique, asthme) pouvant provoquer un dysfonctionnement tubaire.", sortOrder: 80 },
+      { type: 'MEDICAL_HISTORY', label: 'Tabagisme', description: "Consommation de tabac (active ou passive), irritant les muqueuses respiratoires.", sortOrder: 90 },
+      { type: 'MEDICAL_HISTORY', label: 'Barotraumatisme', description: "Lésion de l'oreille causée par des variations rapides de pression (plongée, avion).", sortOrder: 100 },
+      { type: 'MEDICAL_HISTORY', label: 'HTA', description: "Hypertension artérielle, pouvant être liée à des acouphènes ou des troubles vasculaires.", sortOrder: 110 },
+
+      // TOUCH CHECKS
+      { type: 'TOUCH_CHECK', label: 'Douleur à la traction du pavillon', description: "Douleur provoquée par la mobilisation du pavillon de l'oreille, évocatrice d'une otite externe.", sortOrder: 10 },
+      { type: 'TOUCH_CHECK', label: 'Douleur à la pression du tragus', description: "Signe du tragus positif, douleur lors de la pression sur le tragus.", sortOrder: 20 },
+      { type: 'TOUCH_CHECK', label: 'Sensibilité mastoïdienne', description: "Douleur provoquée par la palpation de la zone osseuse située derrière l'oreille (mastoïde).", sortOrder: 30 },
+      { type: 'TOUCH_CHECK', label: 'Ganglions cervicaux palpables', description: "Présence d'adénopathies cervicales sensibles ou non dans le territoire de drainage de l'oreille.", sortOrder: 40 }
+    ];
+
+    for (const item of itemsToSeed) {
+      const existing = await prisma.clinicalReferenceItem.findFirst({
+        where: { type: item.type, label: item.label }
+      });
+      if (!existing) {
+        await prisma.clinicalReferenceItem.create({ data: item });
+      } else {
+        await prisma.clinicalReferenceItem.update({
+          where: { id: existing.id },
+          data: {
+            description: item.description,
+            sortOrder: item.sortOrder
+          }
+        });
+      }
+    }
   }
 
   async createUser(input: {
