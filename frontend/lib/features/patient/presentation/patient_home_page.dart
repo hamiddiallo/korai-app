@@ -132,7 +132,10 @@ class _PatientHomePageState extends State<PatientHomePage> {
                   ],
                 ),
           body: _currentTab == 1
-              ? KoraiChatbotScreen(userName: widget.session.user?.fullName)
+              ? KoraiChatbotScreen(
+                  apiClient: widget.session.apiClient,
+                  userName: widget.session.user?.fullName,
+                )
               : _currentTab == 2
                   ? _buildProfileTab()
                   : viewModel.isReadOnly
@@ -297,13 +300,6 @@ class _PatientHomePageState extends State<PatientHomePage> {
             patient: patient,
             emptyMessage: 'Aucune consultation enregistrée sur votre dossier.',
             showStartButton: false,
-            onOpenConsultation: (consultation) {
-              showConsultationDetailSheet(
-                context,
-                consultation,
-                patientName: patient?.fullName,
-              );
-            },
           ),
         ],
       ),

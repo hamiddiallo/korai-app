@@ -348,12 +348,6 @@ class NurseConsultationViewModel extends ChangeNotifier {
     required String notes,
   }) async {
     final selectedImage = image;
-    if (selectedImage == null) {
-      errorMessage = 'Ajouter une image ORL avant validation.';
-      currentStep = 4;
-      notifyListeners();
-      return;
-    }
 
     isSubmitting = true;
     errorMessage = null;
@@ -400,14 +394,6 @@ class NurseConsultationViewModel extends ChangeNotifier {
     required String sex,
     required String notes,
   }) async {
-    final selectedImage = image;
-
-    if (selectedImage == null) {
-      errorMessage = 'Ajouter une image ORL avant l analyse IA.';
-      notifyListeners();
-      return;
-    }
-
     await _run(() async {
       aiCase = null;
       aiCase = await _repository.diagnose(
@@ -421,7 +407,7 @@ class NurseConsultationViewModel extends ChangeNotifier {
           sex: sex,
           notes: notes,
         ),
-        image: selectedImage,
+        image: image,
       );
     });
   }

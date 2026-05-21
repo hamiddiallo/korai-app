@@ -23,6 +23,40 @@ type CreateInput = {
   touchObservations?: Record<string, string>;
 };
 
+const persistAiAndFinalize = async (
+  consultationId: string,
+  input: {
+    createdByUserId: string;
+    requestSpecialistReview: boolean;
+    hadOtoscopicImage: boolean;
+  },
+  rawJson: unknown
+) => {
+  const extract = extractAiFieldsFromRaw(rawJson, { hadOtoscopicImage: input.hadOtoscopicImage });
+  const externalAiCaseId =
+    rawJson && typeof rawJson === 'object' && 'case_id' in rawJson
+      ? String((rawJson as { case_id: unknown }).case_id)
+      : undefined;
+
+  await consultationDao.createAiResponse(consultationId, rawJson, extract);
+
+  const status = input.requestSpecialistReview
+    ? ConsultationStatus.PENDING_SPECIALIST_REVIEW
+    : ConsultationStatus.AI_COMPLETED;
+
+  const updated = await consultationDao.update(consultationId, {
+    externalAiCaseId,
+    status
+  });
+
+  if (input.requestSpecialistReview && updated) {
+    await expertiseService.requestReview(updated.id, input.createdByUserId);
+  }
+
+  const withAi = await consultationDao.findById(consultationId);
+  return toLegacyOrlCase(withAi!);
+};
+
 export const consultationService = {
   async createDraft(input: CreateInput) {
     const patient = await patientDao.findById(input.patientId);
@@ -35,9 +69,12 @@ export const consultationService = {
     return toLegacyOrlCase(consultation);
   },
 
-  async createWithAi(
+  /**
+   * Analyse IA : image presente → /diagnose-separate ; sinon → /rag/analyze.
+   */
+  async submitDiagnosis(
     input: CreateInput & {
-      image: Express.Multer.File;
+      image?: Express.Multer.File;
       showSources: boolean;
       requestSpecialistReview: boolean;
     }
@@ -45,48 +82,39 @@ export const consultationService = {
     const patient = await patientDao.findById(input.patientId);
     if (!patient) throw notFound('Patient introuvable');
 
-    const draft = await consultationDao.create({
+    const consultation = await consultationDao.create({
       ...input,
       status: ConsultationStatus.PENDING_AI
     });
 
-    await consultationDao.createOtoscopicImage({
-      consultationId: draft.id,
-      earSide: input.earSide,
-      mimeType: input.image.mimetype,
-      fileName: input.image.originalname,
-      byteSize: input.image.size
-    });
+    if (input.image) {
+      await consultationDao.createOtoscopicImage({
+        consultationId: consultation.id,
+        earSide: input.earSide,
+        mimeType: input.image.mimetype,
+        fileName: input.image.originalname,
+        byteSize: input.image.size
+      });
 
-    const rawJson = await aiService.diagnoseSeparate({
-      image: input.image,
+      const rawJson = await aiService.diagnoseSeparate({
+        image: input.image,
+        symptoms: input.clinicalNarrative,
+        showSources: input.showSources
+      });
+
+      return persistAiAndFinalize(consultation.id, {
+        createdByUserId: input.createdByUserId,
+        requestSpecialistReview: input.requestSpecialistReview,
+        hadOtoscopicImage: true
+      }, rawJson);
+    }
+
+    const rawJson = await aiService.ragAnalyze({
       symptoms: input.clinicalNarrative,
       showSources: input.showSources
     });
 
-    const extract = extractAiFieldsFromRaw(rawJson);
-    const externalAiCaseId =
-      rawJson && typeof rawJson === 'object' && 'case_id' in rawJson
-        ? String((rawJson as { case_id: unknown }).case_id)
-        : undefined;
-
-    await consultationDao.createAiResponse(draft.id, rawJson, extract);
-
-    const status = input.requestSpecialistReview
-      ? ConsultationStatus.PENDING_SPECIALIST_REVIEW
-      : ConsultationStatus.AI_COMPLETED;
-
-    const updated = await consultationDao.update(draft.id, {
-      externalAiCaseId,
-      status
-    });
-
-    if (input.requestSpecialistReview && updated) {
-      await expertiseService.requestReview(updated.id, input.createdByUserId);
-    }
-
-    const withAi = await consultationDao.findById(draft.id);
-    return toLegacyOrlCase(withAi!);
+    return persistAiAndFinalize(consultation.id, { ...input, hadOtoscopicImage: false }, rawJson);
   },
 
   async listForUser(user: AuthenticatedUser) {

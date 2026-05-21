@@ -8,6 +8,7 @@ const app = createApp();
 
 app.listen(env.PORT, () => {
   console.log(`Korai backend listening on http://localhost:${env.PORT}`);
+  console.log(`AI service (proxy): ${env.AI_SERVICE_BASE_URL}`);
   console.log('Demo nurse: nurse@korai.local / Password123!');
   console.log('Demo specialist: orl@korai.local / Password123!');
   console.log('Demo admin: admin@korai.local / Password123!');

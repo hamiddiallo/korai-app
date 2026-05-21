@@ -1,6 +1,7 @@
 import FormData from 'form-data';
 import sharp from 'sharp';
 import { env } from '../../config/env.js';
+import { HttpError } from '../../common/errors/http-error.js';
 import type { AiSummary } from '../../common/types.js';
 
 type DiagnoseInput = {
@@ -34,7 +35,10 @@ export type AiResponseExtract = {
 };
 
 /** Extraction des champs derives a partir de rawJson (une seule fois a la persistance). */
-export const extractAiFieldsFromRaw = (raw: unknown): AiResponseExtract => {
+export const extractAiFieldsFromRaw = (
+  raw: unknown,
+  options?: { hadOtoscopicImage?: boolean }
+): AiResponseExtract => {
   const objectValue = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
   const imageAi = (objectValue.image_ai ?? objectValue.imageDiagnosis ?? objectValue.image_result) as
     | Record<string, unknown>
@@ -42,6 +46,8 @@ export const extractAiFieldsFromRaw = (raw: unknown): AiResponseExtract => {
   const ragAi = (objectValue.rag_ai ?? objectValue.ragDiagnosis ?? objectValue.rag_result) as
     | Record<string, unknown>
     | undefined;
+  const ragSummary = pickString(objectValue.summary);
+  const hasRagContent = Boolean(ragAi || ragSummary || pickString(objectValue.rag_diagnosis));
 
   const confidence = Number(
     objectValue.confidence ??
@@ -54,23 +60,29 @@ export const extractAiFieldsFromRaw = (raw: unknown): AiResponseExtract => {
   const confidenceLabel =
     Number.isNaN(confidence) ? 'UNKNOWN' : confidence >= 0.75 ? 'HIGH' : confidence >= 0.45 ? 'MEDIUM' : 'LOW';
 
+  const expectImage = options?.hadOtoscopicImage ?? false;
+
   return {
     imageOpinion:
       pickString(imageAi?.diagnosis) ??
       pickString(imageAi?.label) ??
       pickString(objectValue.image_diagnosis),
     ragOpinion:
-      pickString(ragAi?.diagnosis) ?? pickString(ragAi?.answer) ?? pickString(objectValue.rag_diagnosis),
+      pickString(ragAi?.diagnosis) ??
+      pickString(ragAi?.answer) ??
+      pickString(objectValue.rag_diagnosis) ??
+      ragSummary,
     likelyDiagnosis:
       pickString(objectValue.likely_diagnosis) ??
       pickString(objectValue.final_diagnosis) ??
       pickString(imageAi?.diagnosis) ??
-      pickString(ragAi?.diagnosis),
+      pickString(ragAi?.diagnosis) ??
+      ragSummary,
     confidenceLabel,
     warnings: [
       ...(confidenceLabel === 'LOW' ? ['Confiance IA faible: demander une validation ORL.'] : []),
-      ...(!imageAi ? ['Avis IA image absent ou non reconnu dans la reponse.'] : []),
-      ...(!ragAi ? ['Avis IA symptomes/RAG absent ou non reconnu dans la reponse.'] : [])
+      ...(expectImage && !imageAi ? ['Avis IA image absent ou non reconnu dans la reponse.'] : []),
+      ...(!hasRagContent ? ['Avis IA symptomes/RAG absent ou non reconnu dans la reponse.'] : [])
     ],
     sources: [...collectSources(objectValue), ...collectSources(ragAi)]
   };
@@ -94,7 +106,78 @@ export async function anonymizeImageForExternalAi(file: Express.Multer.File): Pr
   return pipeline.jpeg({ quality: 92, mozjpeg: true }).toBuffer();
 }
 
+const mergeAiHeaders = (init: RequestInit): HeadersInit => {
+  const base =
+    init.headers instanceof Headers
+      ? Object.fromEntries(init.headers.entries())
+      : { ...(init.headers as Record<string, string> | undefined) };
+
+  if (env.AI_SERVICE_BASE_URL.includes('ngrok')) {
+    base['ngrok-skip-browser-warning'] = 'true';
+  }
+
+  return base;
+};
+
+const callAiService = async (path: string, init: RequestInit): Promise<unknown> => {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), env.AI_SERVICE_TIMEOUT_MS);
+
+  try {
+    const response = await fetch(`${env.AI_SERVICE_BASE_URL}${path}`, {
+      ...init,
+      headers: mergeAiHeaders(init),
+      signal: controller.signal
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new HttpError(
+        502,
+        'AI_SERVICE_ERROR',
+        `Service IA indisponible (${response.status})`,
+        errorText
+      );
+    }
+
+    return response.json();
+  } catch (error) {
+    if (error instanceof HttpError) throw error;
+    throw new HttpError(502, 'AI_SERVICE_ERROR', 'Impossible de joindre le service IA', String(error));
+  } finally {
+    clearTimeout(timeout);
+  }
+};
+
 export const aiService = {
+  /** Proxy JSON → FastAPI POST /chat */
+  chat(input: { message: string; conversationId?: string; showSources?: boolean }) {
+    return callAiService('/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        message: input.message,
+        conversation_id: input.conversationId,
+        show_sources: input.showSources ?? true
+      })
+    });
+  },
+
+  /** Proxy formulaire → FastAPI POST /rag/analyze */
+  ragAnalyze(input: { symptoms: string; showSources?: boolean }) {
+    const body = new URLSearchParams({
+      symptoms: input.symptoms,
+      show_sources: String(input.showSources ?? true)
+    });
+
+    return callAiService('/rag/analyze', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: body.toString()
+    });
+  },
+
+  /** Proxy multipart (image anonymisee) → FastAPI POST /diagnose-separate — usage interne consultations uniquement. */
   async diagnoseSeparate(input: DiagnoseInput) {
     const sanitizedBuffer = await anonymizeImageForExternalAi(input.image);
 
@@ -106,25 +189,10 @@ export const aiService = {
     form.append('symptoms', input.symptoms);
     form.append('show_sources', String(input.showSources));
 
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), env.AI_SERVICE_TIMEOUT_MS);
-
-    try {
-      const response = await fetch(`${env.AI_SERVICE_BASE_URL}/diagnose-separate`, {
-        method: 'POST',
-        body: form as unknown as BodyInit,
-        headers: form.getHeaders(),
-        signal: controller.signal
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`AI service failed ${response.status}: ${errorText}`);
-      }
-
-      return response.json();
-    } finally {
-      clearTimeout(timeout);
-    }
+    return callAiService('/diagnose-separate', {
+      method: 'POST',
+      body: form as unknown as BodyInit,
+      headers: form.getHeaders()
+    });
   }
 };

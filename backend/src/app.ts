@@ -7,6 +7,7 @@ import { adminRouter } from './modules/admin/admin.routes.js';
 import { clinicalReferenceRouter } from './modules/clinical-reference/clinical-reference.routes.js';
 import { patientRouter } from './modules/patients/patient.routes.js';
 import { consultationRouter } from './modules/consultations/consultation.routes.js';
+import { aiRouter } from './modules/ai/ai.routes.js';
 
 export const createApp = () => {
   const app = express();
@@ -23,6 +24,7 @@ export const createApp = () => {
   app.use('/clinical-items', clinicalReferenceRouter);
   app.use('/patients', patientRouter);
   app.use('/cases', consultationRouter);
+  app.use('/ai', aiRouter);
 
   app.use(errorMiddleware);
 

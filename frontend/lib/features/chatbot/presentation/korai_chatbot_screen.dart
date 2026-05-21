@@ -1,5 +1,7 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
+
+import '../../../core/api/api_client.dart';
+import '../../ai/data/ai_repository.dart';
 
 class ChatMessage {
   ChatMessage({
@@ -14,8 +16,13 @@ class ChatMessage {
 }
 
 class KoraiChatbotScreen extends StatefulWidget {
-  const KoraiChatbotScreen({super.key, this.userName});
+  const KoraiChatbotScreen({
+    super.key,
+    required this.apiClient,
+    this.userName,
+  });
 
+  final ApiClient apiClient;
   final String? userName;
 
   @override
@@ -23,24 +30,14 @@ class KoraiChatbotScreen extends StatefulWidget {
 }
 
 class _KoraiChatbotScreenState extends State<KoraiChatbotScreen> {
+  late final AiRepository _aiRepository = AiRepository(widget.apiClient);
+
   final TextEditingController _inputController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   final List<ChatMessage> _messages = [];
   bool _isTyping = false;
-
-  // Preset Questions & Answers
-  final Map<String, String> _qaDatabase = {
-    "qu'est-ce que korai ?":
-        "KORAI est votre assistant d'aide au diagnostic ORL intelligent. Il analyse les symptômes cliniques, les images d'otoscopie et les antécédents pour guider la décision clinique.",
-    "comment utiliser l'otoscope ?":
-        "Pour utiliser l'otoscope KORAI, connectez l'appareil en Wi-Fi à votre smartphone, accédez à la section 'Image ORL', puis prenez un cliché net du tympan en évitant les mouvements brusques.",
-    "quels sont les signes d'une otite moyenne ?":
-        "Une otite moyenne aiguë (OMA) se manifeste généralement par une otalgie intense, de la fièvre, une baisse d'audition, et un tympan congestif ou bombant à l'examen otoscopique.",
-    "comment soulager une otalgie en urgence ?":
-        "Pour calmer une douleur à l'oreille, il est recommandé de prendre un antalgique par voie orale (comme le paracétamol) selon la posologie. Évitez d'introduire des gouttes auriculaires sans avis médical si le tympan n'a pas été vérifié.",
-    "quelle est la précision du diagnostic ia ?":
-        "L'IA KORAI affiche une précision diagnostique supérieure à 92% sur la classification des principales pathologies tympaniques (otite moyenne, tympan sain, bouchon de cérumen). Cependant, l'analyse reste une aide à la décision et doit être validée par un praticien.",
-  };
+  String? _conversationId;
+  String? _errorBanner;
 
   final List<String> _suggestions = [
     "Qu'est-ce que KORAI ?",
@@ -53,12 +50,12 @@ class _KoraiChatbotScreenState extends State<KoraiChatbotScreen> {
   @override
   void initState() {
     super.initState();
-    // Add welcome message
+    _conversationId = 'flutter_${DateTime.now().millisecondsSinceEpoch}';
     final name = widget.userName ?? 'Praticien';
     _messages.add(
       ChatMessage(
         text:
-            "Bonjour $name ! Je suis KORAI, votre assistant virtuel ORL. Comment puis-je vous accompagner dans vos consultations aujourd'hui ?",
+            "Bonjour $name ! Je suis KORAI, votre assistant virtuel ORL. Posez-moi une question clinique.",
         isUser: false,
         timestamp: DateTime.now(),
       ),
@@ -84,11 +81,12 @@ class _KoraiChatbotScreenState extends State<KoraiChatbotScreen> {
     });
   }
 
-  void _handleSendMessage(String text) {
-    if (text.trim().isEmpty) return;
+  Future<void> _handleSendMessage(String text) async {
+    if (text.trim().isEmpty || _isTyping) return;
 
     _inputController.clear();
     setState(() {
+      _errorBanner = null;
       _messages.add(
         ChatMessage(
           text: text,
@@ -100,39 +98,54 @@ class _KoraiChatbotScreenState extends State<KoraiChatbotScreen> {
     });
     _scrollToBottom();
 
-    // Simulate AI response
-    Timer(const Duration(seconds: 1), () {
-      final normalizedQuery = text.trim().toLowerCase().replaceAll('?', '').trim();
-      String response =
-          "Je ne suis pas sûr de comprendre cette question clinique pour le moment. Mes réponses de test couvrent l'otoscope, l'otite moyenne, les otalgies ou les détails sur l'IA KORAI.";
+    try {
+      final result = await _aiRepository.sendChat(
+        message: text.trim(),
+        conversationId: _conversationId,
+        showSources: true,
+      );
 
-      for (final entry in _qaDatabase.entries) {
-        if (normalizedQuery.contains(entry.key) || entry.key.contains(normalizedQuery)) {
-          response = entry.value;
-          break;
-        }
+      _conversationId = result.conversationId ?? _conversationId;
+
+      var responseText = result.response.trim();
+      if (responseText.isEmpty) {
+        responseText = 'Le service IA n\'a pas renvoyé de réponse exploitable.';
+      }
+      if (result.sources.isNotEmpty) {
+        responseText = '$responseText\n\nSources :\n${result.sources.map((s) => '• $s').join('\n')}';
       }
 
-      if (mounted) {
-        setState(() {
-          _messages.add(
-            ChatMessage(
-              text: response,
-              isUser: false,
-              timestamp: DateTime.now(),
-            ),
-          );
-          _isTyping = false;
-        });
-        _scrollToBottom();
-      }
-    });
+      if (!mounted) return;
+      setState(() {
+        _messages.add(
+          ChatMessage(
+            text: responseText,
+            isUser: false,
+            timestamp: DateTime.now(),
+          ),
+        );
+        _isTyping = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _errorBanner = error.toString();
+        _messages.add(
+          ChatMessage(
+            text:
+                'Désolé, le service IA est momentanément indisponible. Vérifiez que le backend Korai tourne et que AI_SERVICE_BASE_URL (ngrok) est correct dans backend/.env.',
+            isUser: false,
+            timestamp: DateTime.now(),
+          ),
+        );
+        _isTyping = false;
+      });
+    }
+    _scrollToBottom();
   }
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-
     return Scaffold(
       backgroundColor: Colors.grey.shade50,
       appBar: AppBar(
@@ -163,7 +176,7 @@ class _KoraiChatbotScreenState extends State<KoraiChatbotScreen> {
                     Icon(Icons.circle, color: Colors.green, size: 8),
                     SizedBox(width: 4),
                     Text(
-                      'IA en ligne',
+                      'IA connectée',
                       style: TextStyle(fontSize: 11, color: Colors.green, fontWeight: FontWeight.w600),
                     ),
                   ],
@@ -175,7 +188,25 @@ class _KoraiChatbotScreenState extends State<KoraiChatbotScreen> {
       ),
       body: Column(
         children: [
-          // Message List
+          if (_errorBanner != null)
+            Material(
+              color: Colors.orange.shade50,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: Row(
+                  children: [
+                    Icon(Icons.warning_amber_rounded, color: Colors.orange.shade800, size: 18),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        _errorBanner!,
+                        style: TextStyle(fontSize: 12, color: Colors.orange.shade900),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
           Expanded(
             child: ListView.builder(
               controller: _scrollController,
@@ -187,14 +218,8 @@ class _KoraiChatbotScreenState extends State<KoraiChatbotScreen> {
               },
             ),
           ),
-
-          // Typing Indicator
           if (_isTyping) _buildTypingIndicator(),
-
-          // Suggestions Bar
           if (_messages.length == 1 && !_isTyping) _buildSuggestionsBar(),
-
-          // Input Bar
           _buildInputBar(),
         ],
       ),
@@ -247,7 +272,7 @@ class _KoraiChatbotScreenState extends State<KoraiChatbotScreen> {
           border: message.isUser ? null : Border.all(color: const Color(0xFFE2E8F0)),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.02),
+              color: Colors.black.withValues(alpha: 0.02),
               blurRadius: 5,
               offset: const Offset(0, 1),
             ),
@@ -334,6 +359,7 @@ class _KoraiChatbotScreenState extends State<KoraiChatbotScreen> {
                 controller: _inputController,
                 textInputAction: TextInputAction.send,
                 onSubmitted: _handleSendMessage,
+                enabled: !_isTyping,
                 decoration: InputDecoration(
                   hintText: 'Posez une question à KORAI...',
                   hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 14),
@@ -363,7 +389,7 @@ class _KoraiChatbotScreenState extends State<KoraiChatbotScreen> {
               ),
               child: IconButton(
                 icon: const Icon(Icons.send_rounded, color: Colors.white, size: 20),
-                onPressed: () => _handleSendMessage(_inputController.text),
+                onPressed: _isTyping ? null : () => _handleSendMessage(_inputController.text),
               ),
             ),
           ],

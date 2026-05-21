@@ -53,16 +53,22 @@ class NurseRepository {
         .toList();
   }
 
+  /// Sans image → backend appelle `/rag/analyze` ; avec image → `/diagnose-separate`.
   Future<AiCase> diagnose({
     required ConsultationCreatePayload payload,
-    required File image,
+    File? image,
   }) async {
-    final response = await apiClient.postMultipart(
-      path: '/cases/diagnose',
-      fileField: 'file',
-      file: image,
-      fields: payload.toMultipartFields(),
-    );
+    final Map<String, dynamic> response;
+    if (image != null) {
+      response = await apiClient.postMultipart(
+        path: '/cases/diagnose',
+        fileField: 'file',
+        file: image,
+        fields: payload.toMultipartFields(),
+      );
+    } else {
+      response = await apiClient.postJson('/cases/diagnose', payload.toJsonBody());
+    }
     return AiCase.fromJson(response['case'] as Map<String, dynamic>);
   }
 

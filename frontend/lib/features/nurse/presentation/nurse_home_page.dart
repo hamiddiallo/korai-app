@@ -342,13 +342,6 @@ class _NurseHomePageState extends State<NurseHomePage> {
                       Navigator.pop(context);
                       _startExistingPatientConsultation(patient, prefillNarrative: draft.symptoms);
                     },
-                    onOpenConsultation: (consultation) {
-                      showConsultationDetailSheet(
-                        context,
-                        consultation,
-                        patientName: patient.fullName,
-                      );
-                    },
                   ),
                 ],
               ),
@@ -622,7 +615,10 @@ class _NurseHomePageState extends State<NurseHomePage> {
       case 0:
         return _buildDashboard();
       case 1:
-        return KoraiChatbotScreen(userName: widget.session.user?.fullName);
+        return KoraiChatbotScreen(
+          apiClient: widget.session.apiClient,
+          userName: widget.session.user?.fullName,
+        );
       case 2:
         return _buildConsultationTab();
       case 3:
@@ -1407,53 +1403,12 @@ class _NurseHomePageState extends State<NurseHomePage> {
           Expanded(
             child: _cases.isEmpty
                 ? const Center(child: Text('Aucun diagnostic enregistré.'))
-                : ListView.builder(
-                    itemCount: _cases.sortedByNewest().length,
-                    itemBuilder: (context, index) {
-                      final c = _cases.sortedByNewest()[index];
-                      final summary = c.summary;
-                      final patientName = _patientNameForCase(c);
-                      final isCompleted = c.isCompleted;
-
-                      return Card(
-                        margin: const EdgeInsets.only(bottom: 12),
-                        elevation: 0,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          side: BorderSide(color: Colors.grey.shade200),
-                        ),
-                        child: ListTile(
-                          leading: CircleAvatar(
-                            backgroundColor: isCompleted ? const Color(0xFFE8F5E9) : const Color(0xFFFFF3E0),
-                            child: Icon(
-                              isCompleted ? Icons.check_circle_outline : Icons.pending_actions_outlined,
-                              color: isCompleted ? Colors.green : Colors.orange,
-                            ),
-                          ),
-                          title: Text(
-                            ConsultationFormat.formatDateTime(c.createdAt),
-                            style: const TextStyle(fontWeight: FontWeight.bold),
-                          ),
-                          subtitle: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              if (patientName != null)
-                                Text(patientName, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
-                              Text(
-                                '${ConsultationFormat.statusLabel(c.status)} · ${summary.likelyDiagnosis ?? 'En attente'}',
-                                style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
-                              ),
-                            ],
-                          ),
-                          trailing: const Icon(Icons.chevron_right),
-                          onTap: () => showConsultationDetailSheet(
-                            context,
-                            c,
-                            patientName: patientName,
-                          ),
-                        ),
-                      );
-                    },
+                : SingleChildScrollView(
+                    child: ConsultationHistoryList(
+                      consultations: _cases.sortedByNewest(),
+                      showStartButton: false,
+                      patientNameFor: _patientNameForCase,
+                    ),
                   ),
           ),
         ],
@@ -2239,8 +2194,8 @@ class RecapStep extends StatelessWidget {
         ),
         SummaryLine(
           label: 'Image ORL',
-          value: hasImage ? 'Photo prête' : 'Manquante',
-          valueColor: hasImage ? Colors.green : Colors.red,
+          value: hasImage ? 'Photo prête (diagnostic image + symptômes)' : 'Non fournie (analyse symptômes seule)',
+          valueColor: hasImage ? Colors.green : Colors.orange,
         ),
         if (hasImage) ...[
           const SizedBox(height: 8),

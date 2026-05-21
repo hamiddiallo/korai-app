@@ -6,10 +6,28 @@ API Node.js TypeScript pour l'authentification, les roles, les patients, les cas
 
 ```bash
 cp .env.example .env
+# Editer .env : coller l'URL ngrok du service FastAPI dans AI_SERVICE_BASE_URL
 npm install
 npm run db:push
 npm run dev
 ```
+
+### Service IA (ngrok)
+
+Le backend ne contacte **pas** `localhost:8000`. Il proxy vers l'URL definie dans `.env` :
+
+```env
+AI_SERVICE_BASE_URL=https://votre-tunnel.ngrok-free.app
+```
+
+Au demarrage, l'URL configuree est affichee dans les logs. Routes proxy :
+
+| Korai backend | FastAPI (ngrok) |
+|---------------|-----------------|
+| `POST /ai/chat` | `POST /chat` |
+| `POST /ai/rag/analyze` | `POST /rag/analyze` |
+| `POST /cases/diagnose` (avec `file`) | `POST /diagnose-separate` |
+| `POST /cases/diagnose` (sans `file`) | `POST /rag/analyze` |
 
 Comptes de demonstration crees au demarrage:
 

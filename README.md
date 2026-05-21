@@ -18,7 +18,7 @@ Voir [PROJET_REPERE.md](/Users/hamid/Downloads/Korai-app/PROJET_REPERE.md) pour 
 - Profil admin avec gestion des comptes, patients et referentiels cliniques.
 - Creation de patient cote infirmier.
 - Creation de cas ORL avec image + symptomes.
-- Proxy backend vers l'API IA `POST /diagnose-separate`.
+- Proxy backend vers l'API IA FastAPI (URL ngrok `AI_SERVICE_BASE_URL`) : chat, RAG, diagnose-separate.
 - Organisation de la reponse IA en synthese exploitable.
 - Flux infirmier Flutter refactore en MVVM leger avec ViewModel.
 

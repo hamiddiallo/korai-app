@@ -38,12 +38,7 @@ export class ConsultationController {
       }
     }
 
-    if (!req.file) {
-      const orlCase = await consultationService.createDraft(baseInput);
-      return res.status(201).json({ case: orlCase });
-    }
-
-    const orlCase = await consultationService.createWithAi({
+    const orlCase = await consultationService.submitDiagnosis({
       ...baseInput,
       image: req.file,
       showSources: body.showSources,
