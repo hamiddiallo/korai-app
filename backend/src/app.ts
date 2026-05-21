@@ -1,12 +1,12 @@
 import cors from 'cors';
 import express from 'express';
-import { adminRouter } from './admin/admin.routes.js';
-import { authRouter } from './auth/auth.routes.js';
-import { caseRouter } from './cases/case.routes.js';
-import { clinicalRouter } from './clinical/clinical.routes.js';
-import { errorMiddleware } from './common/error.middleware.js';
 import { env } from './config/env.js';
-import { patientRouter } from './patients/patient.routes.js';
+import { errorMiddleware } from './common/errors/error.middleware.js';
+import { authRouter } from './modules/auth/auth.routes.js';
+import { adminRouter } from './modules/admin/admin.routes.js';
+import { clinicalReferenceRouter } from './modules/clinical-reference/clinical-reference.routes.js';
+import { patientRouter } from './modules/patients/patient.routes.js';
+import { consultationRouter } from './modules/consultations/consultation.routes.js';
 
 export const createApp = () => {
   const app = express();
@@ -20,9 +20,9 @@ export const createApp = () => {
 
   app.use('/auth', authRouter);
   app.use('/admin', adminRouter);
-  app.use('/clinical-items', clinicalRouter);
+  app.use('/clinical-items', clinicalReferenceRouter);
   app.use('/patients', patientRouter);
-  app.use('/cases', caseRouter);
+  app.use('/cases', consultationRouter);
 
   app.use(errorMiddleware);
 

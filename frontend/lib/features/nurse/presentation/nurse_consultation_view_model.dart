@@ -3,6 +3,9 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:image_picker/image_picker.dart';
 
+import '../../../core/domain/clinical_snapshot.dart';
+import '../../../core/domain/consultation_create_payload.dart';
+import '../../../core/domain/korai_enums.dart';
 import '../../../core/utils/orl_image_editor.dart';
 import '../data/nurse_repository.dart';
 import '../domain/ai_case.dart';
@@ -27,6 +30,7 @@ class NurseConsultationViewModel extends ChangeNotifier {
   bool isSubmitting = false;
   bool isEditingImage = false;
   bool requestSpecialistReview = false;
+  EarSide earSide = EarSide.both;
   String? errorMessage;
   List<ClinicalReferenceItem> symptoms = [];
   List<ClinicalReferenceItem> medicalHistories = [];
@@ -83,10 +87,41 @@ class NurseConsultationViewModel extends ChangeNotifier {
         .toList();
     if (matching.isEmpty) return null;
 
-    final drafts = matching.where((c) => c.status == 'DRAFT').toList();
+    final drafts = matching.where((c) => c.isDraft).toList();
     if (drafts.isNotEmpty) return drafts.first;
 
     return matching.last;
+  }
+
+  void applyClinicalPrefillFromCase(AiCase? consultation) {
+    if (consultation == null) return;
+    earSide = consultation.earSide;
+
+    if (consultation.symptomIds.isNotEmpty ||
+        consultation.medicalHistoryIds.isNotEmpty ||
+        consultation.touchCheckIds.isNotEmpty) {
+      selectedSymptomIds
+        ..clear()
+        ..addAll(consultation.symptomIds);
+      selectedMedicalHistoryIds
+        ..clear()
+        ..addAll(consultation.medicalHistoryIds);
+      selectedTouchCheckIds
+        ..clear()
+        ..addAll(consultation.touchCheckIds);
+      touchCheckObservations
+        ..clear()
+        ..addAll(consultation.touchObservations);
+      notifyListeners();
+      return;
+    }
+
+    applyClinicalPrefillFromNarrative(consultation.symptoms);
+  }
+
+  void setEarSide(EarSide value) {
+    earSide = value;
+    notifyListeners();
   }
 
   void applyClinicalPrefillFromNarrative(String? narrative) {
@@ -335,8 +370,8 @@ class NurseConsultationViewModel extends ChangeNotifier {
       );
 
       aiCase = await _repository.diagnose(
-        patientId: patient!.id,
-        symptoms: buildClinicalNarrative(
+        payload: buildConsultationPayload(
+          patientId: patient!.id,
           firstName: firstName,
           lastName: lastName,
           phone: phone,
@@ -346,7 +381,6 @@ class NurseConsultationViewModel extends ChangeNotifier {
           notes: notes,
         ),
         image: selectedImage,
-        requestSpecialistReview: requestSpecialistReview,
       );
     } catch (error) {
       errorMessage = error.toString();
@@ -356,12 +390,20 @@ class NurseConsultationViewModel extends ChangeNotifier {
     }
   }
 
-  Future<void> diagnose({required String symptoms}) async {
-    final selectedPatient = patient;
+  Future<void> diagnose({
+    required String patientId,
+    required String firstName,
+    required String lastName,
+    required String phone,
+    required String address,
+    required String age,
+    required String sex,
+    required String notes,
+  }) async {
     final selectedImage = image;
 
-    if (selectedPatient == null || selectedImage == null) {
-      errorMessage = 'Creer un patient et ajouter une image avant l analyse IA.';
+    if (selectedImage == null) {
+      errorMessage = 'Ajouter une image ORL avant l analyse IA.';
       notifyListeners();
       return;
     }
@@ -369,12 +411,53 @@ class NurseConsultationViewModel extends ChangeNotifier {
     await _run(() async {
       aiCase = null;
       aiCase = await _repository.diagnose(
-        patientId: selectedPatient.id,
-        symptoms: symptoms,
+        payload: buildConsultationPayload(
+          patientId: patientId,
+          firstName: firstName,
+          lastName: lastName,
+          phone: phone,
+          address: address,
+          age: age,
+          sex: sex,
+          notes: notes,
+        ),
         image: selectedImage,
-        requestSpecialistReview: requestSpecialistReview,
       );
     });
+  }
+
+  ConsultationCreatePayload buildConsultationPayload({
+    required String patientId,
+    required String firstName,
+    required String lastName,
+    required String phone,
+    required String address,
+    required String age,
+    required String sex,
+    required String notes,
+  }) {
+    return ConsultationCreatePayload(
+      patientId: patientId,
+      symptoms: buildClinicalNarrative(
+        firstName: firstName,
+        lastName: lastName,
+        phone: phone,
+        address: address,
+        age: age,
+        sex: sex,
+        notes: notes,
+      ),
+      clinicalNotes: notes.isEmpty ? null : notes,
+      earSide: earSide,
+      requestSpecialistReview: requestSpecialistReview,
+      symptomIds: ClinicalSnapshot.ids(selectedSymptomIds),
+      symptomLabels: ClinicalSnapshot.labels(symptoms, selectedSymptomIds),
+      medicalHistoryIds: ClinicalSnapshot.ids(selectedMedicalHistoryIds),
+      medicalHistoryLabels: ClinicalSnapshot.labels(medicalHistories, selectedMedicalHistoryIds),
+      touchCheckIds: ClinicalSnapshot.ids(selectedTouchCheckIds),
+      touchCheckLabels: ClinicalSnapshot.labels(touchChecks, selectedTouchCheckIds),
+      touchObservations: Map<String, String>.from(touchCheckObservations),
+    );
   }
 
   void setRequestSpecialistReview(bool value) {

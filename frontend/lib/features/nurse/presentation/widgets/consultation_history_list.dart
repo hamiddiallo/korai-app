@@ -189,11 +189,12 @@ void showConsultationDetailSheet(BuildContext context, AiCase consultation, {Str
                 ],
                 const Divider(height: 24),
                 _DetailRow('Statut', ConsultationFormat.statusLabel(consultation.status)),
+                _DetailRow('Oreille', ConsultationFormat.earSideLabel(consultation.earSide)),
                 _DetailRow('Dernière mise à jour', ConsultationFormat.formatDateTime(consultation.updatedAt)),
                 _DetailRow('Diagnostic probable', summary.likelyDiagnosis ?? 'Non déterminé'),
                 _DetailRow('Avis image', summary.imageOpinion ?? 'Non disponible'),
                 _DetailRow('Avis symptômes', summary.ragOpinion ?? 'Non disponible'),
-                _DetailRow('Confiance', summary.confidenceLabel),
+                _DetailRow('Confiance', summary.confidenceLabel.value),
                 if (summary.warnings.isNotEmpty) ...[
                   const SizedBox(height: 16),
                   const Text('Alertes', style: TextStyle(fontWeight: FontWeight.bold)),

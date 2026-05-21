@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/auth/session_controller.dart';
+import '../../../core/domain/korai_enums.dart';
+import '../../../core/utils/consultation_format.dart';
+import '../../../core/widgets/ear_side_selector.dart';
 import '../../chatbot/presentation/korai_chatbot_screen.dart';
 import '../../nurse/presentation/widgets/consultation_history_list.dart';
 import '../data/patient_repository.dart';
@@ -557,6 +560,8 @@ class _PatientHomePageState extends State<PatientHomePage> {
           address: addressController.text,
           age: ageController.text,
           sex: sex,
+          earSide: viewModel.earSide,
+          onEarSideChanged: readOnly ? null : viewModel.setEarSide,
           notesController: notesController,
           readOnly: readOnly,
           selectedSymptoms: viewModel.labelsFor(viewModel.symptoms, viewModel.selectedSymptomIds),
@@ -1065,6 +1070,8 @@ class PatientRecapStep extends StatelessWidget {
     required this.address,
     required this.age,
     required this.sex,
+    required this.earSide,
+    this.onEarSideChanged,
     required this.notesController,
     required this.selectedSymptoms,
     required this.selectedHistories,
@@ -1079,6 +1086,8 @@ class PatientRecapStep extends StatelessWidget {
   final String address;
   final String age;
   final String sex;
+  final EarSide earSide;
+  final ValueChanged<EarSide>? onEarSideChanged;
   final TextEditingController notesController;
   final List<String> selectedSymptoms;
   final List<String> selectedHistories;
@@ -1094,6 +1103,12 @@ class PatientRecapStep extends StatelessWidget {
         _RecapRow(label: 'Patient', value: '$firstName $lastName'.trim()),
         _RecapRow(label: 'Âge', value: age.isEmpty ? 'Non renseigné' : '$age ans'),
         _RecapRow(label: 'Sexe', value: sex == 'M' ? 'Masculin' : 'Féminin'),
+        if (readOnly)
+          _RecapRow(label: 'Oreille', value: ConsultationFormat.earSideLabel(earSide))
+        else if (onEarSideChanged != null) ...[
+          EarSideSelector(value: earSide, onChanged: onEarSideChanged!),
+          const SizedBox(height: 12),
+        ],
         _RecapRow(label: 'Téléphone', value: phone.isEmpty ? 'Non renseigné' : phone),
         _RecapRow(label: 'Adresse', value: address.isEmpty ? 'Non renseignée' : address),
         const Divider(height: 20),
@@ -1300,10 +1315,10 @@ class PatientAiResultCard extends StatelessWidget {
             _RecapRow(label: 'Avis symptômes', value: summary.ragOpinion ?? 'Non disponible'),
             _RecapRow(
               label: 'Niveau de confiance',
-              value: summary.confidenceLabel,
-              valueColor: summary.confidenceLabel == 'HIGH'
+              value: summary.confidenceLabel.value,
+              valueColor: summary.confidenceLabel == AiConfidenceLabel.high
                   ? Colors.green
-                  : summary.confidenceLabel == 'MEDIUM'
+                  : summary.confidenceLabel == AiConfidenceLabel.medium
                       ? Colors.orange
                       : Colors.red,
             ),

@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import '../../../core/api/api_client.dart';
+import '../../../core/domain/consultation_create_payload.dart';
 import '../domain/ai_case.dart';
 import '../domain/clinical_reference_item.dart';
 import '../domain/patient.dart';
@@ -53,22 +54,14 @@ class NurseRepository {
   }
 
   Future<AiCase> diagnose({
-    required String patientId,
-    required String symptoms,
+    required ConsultationCreatePayload payload,
     required File image,
-    bool requestSpecialistReview = false,
   }) async {
     final response = await apiClient.postMultipart(
       path: '/cases/diagnose',
       fileField: 'file',
       file: image,
-      fields: {
-        'patientId': patientId,
-        'symptoms': symptoms,
-        'urgency': 'MEDIUM',
-        'showSources': 'true',
-        'requestSpecialistReview': requestSpecialistReview.toString(),
-      },
+      fields: payload.toMultipartFields(),
     );
     return AiCase.fromJson(response['case'] as Map<String, dynamic>);
   }

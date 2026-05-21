@@ -1,8 +1,8 @@
 import { createApp } from './app.js';
-import { store } from './common/data-store.js';
+import { runSeed } from './common/seed.js';
 import { env } from './config/env.js';
 
-await store.seed();
+await runSeed();
 
 const app = createApp();
 

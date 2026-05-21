@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import '../../../core/api/api_client.dart';
+import '../../../core/domain/consultation_create_payload.dart';
 import '../../nurse/domain/ai_case.dart';
 import '../../nurse/domain/clinical_reference_item.dart';
 import '../../nurse/domain/patient.dart';
@@ -35,8 +36,7 @@ class PatientRepository {
   }
 
   Future<AiCase> diagnose({
-    required String patientId,
-    required String symptoms,
+    required ConsultationCreatePayload payload,
     File? image,
   }) async {
     if (image != null) {
@@ -44,24 +44,12 @@ class PatientRepository {
         path: '/cases/diagnose',
         fileField: 'file',
         file: image,
-        fields: {
-          'patientId': patientId,
-          'symptoms': symptoms,
-          'urgency': 'MEDIUM',
-          'showSources': 'true',
-          'requestSpecialistReview': 'false',
-        },
+        fields: payload.toMultipartFields(),
       );
       return AiCase.fromJson(response['case'] as Map<String, dynamic>);
-    } else {
-      final response = await apiClient.postJson('/cases/diagnose', {
-        'patientId': patientId,
-        'symptoms': symptoms,
-        'urgency': 'MEDIUM',
-        'showSources': false,
-        'requestSpecialistReview': false,
-      });
-      return AiCase.fromJson(response['case'] as Map<String, dynamic>);
     }
+
+    final response = await apiClient.postJson('/cases/diagnose', payload.toJsonBody());
+    return AiCase.fromJson(response['case'] as Map<String, dynamic>);
   }
 }

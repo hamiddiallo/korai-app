@@ -1,14 +1,18 @@
+import '../domain/korai_enums.dart';
+
 class ConsultationFormat {
   static String statusLabel(String status) {
-    return switch (status) {
-      'DRAFT' => 'Brouillon',
-      'PENDING_AI' => 'IA en cours',
-      'AI_COMPLETED' => 'Diagnostic IA terminé',
-      'PENDING_SPECIALIST_REVIEW' => 'En attente ORL',
-      'SPECIALIST_COMPLETED' => 'Avis spécialiste reçu',
-      _ => status,
+    return switch (ConsultationStatus.tryFromApi(status)) {
+      ConsultationStatus.draft => 'Brouillon',
+      ConsultationStatus.pendingAi => 'IA en cours',
+      ConsultationStatus.aiCompleted => 'Diagnostic IA terminé',
+      ConsultationStatus.pendingSpecialistReview => 'En attente ORL',
+      ConsultationStatus.specialistCompleted => 'Avis spécialiste reçu',
+      null => status,
     };
   }
+
+  static String earSideLabel(EarSide earSide) => earSide.label;
 
   static String formatDateTime(String? iso) {
     if (iso == null || iso.isEmpty) return 'Date inconnue';

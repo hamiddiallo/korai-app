@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../../core/auth/session_controller.dart';
+import '../../../core/domain/korai_enums.dart';
 import '../../../core/utils/consultation_format.dart';
 import '../../../core/widgets/orl_image_capture_step.dart';
 import '../data/nurse_repository.dart';
@@ -379,7 +380,12 @@ class _NurseHomePageState extends State<NurseHomePage> {
       viewModel.selectedTouchCheckIds.clear();
       viewModel.touchCheckObservations.clear();
       notesController.text = viewModel.extractNotesFromNarrative(prefillNarrative) ?? '';
-      viewModel.applyClinicalPrefillFromNarrative(prefillNarrative);
+      final preCase = viewModel.findPatientPreconsultationCase(_cases, patient.id);
+      if (preCase != null) {
+        viewModel.applyClinicalPrefillFromCase(preCase);
+      } else {
+        viewModel.applyClinicalPrefillFromNarrative(prefillNarrative);
+      }
       _isSprintActive = true;
     });
   }
@@ -1321,6 +1327,8 @@ class _NurseHomePageState extends State<NurseHomePage> {
       4 => OrlImageCaptureStep(
           image: viewModel.image,
           isEditing: viewModel.isEditingImage,
+          earSide: viewModel.earSide,
+          onEarSideChanged: viewModel.setEarSide,
           onCamera: () => viewModel.pickImage(ImageSource.camera),
           onGallery: () => viewModel.pickImage(ImageSource.gallery),
           onRotateLeft: () => viewModel.rotateImage(clockwise: false),
@@ -1337,6 +1345,7 @@ class _NurseHomePageState extends State<NurseHomePage> {
           address: addressController.text,
           age: ageController.text,
           sex: sex,
+          earSide: viewModel.earSide,
           notesController: notesController,
           selectedSymptoms: viewModel.labelsFor(viewModel.symptoms, viewModel.selectedSymptomIds),
           selectedHistories: viewModel.labelsFor(viewModel.medicalHistories, viewModel.selectedMedicalHistoryIds),
@@ -2177,6 +2186,7 @@ class RecapStep extends StatelessWidget {
     required this.address,
     required this.age,
     required this.sex,
+    required this.earSide,
     required this.notesController,
     required this.selectedSymptoms,
     required this.selectedHistories,
@@ -2192,6 +2202,7 @@ class RecapStep extends StatelessWidget {
   final String address;
   final String age;
   final String sex;
+  final EarSide earSide;
   final TextEditingController notesController;
   final List<String> selectedSymptoms;
   final List<String> selectedHistories;
@@ -2210,6 +2221,7 @@ class RecapStep extends StatelessWidget {
         SummaryLine(label: 'Patient', value: '$firstName $lastName'.trim()),
         SummaryLine(label: 'Âge', value: age.isEmpty ? 'Non renseigné' : '$age ans'),
         SummaryLine(label: 'Sexe', value: sex == 'M' ? 'Masculin' : 'Féminin'),
+        SummaryLine(label: 'Oreille', value: ConsultationFormat.earSideLabel(earSide)),
         SummaryLine(label: 'Téléphone', value: phone.isEmpty ? 'Non renseigné' : phone),
         SummaryLine(label: 'Adresse', value: address.isEmpty ? 'Non renseignée' : address),
         const Divider(height: 20),
@@ -2400,10 +2412,10 @@ class AiResultCard extends StatelessWidget {
             SummaryLine(label: 'Avis symptômes', value: summary.ragOpinion ?? 'Non disponible'),
             SummaryLine(
               label: 'Niveau de confiance',
-              value: summary.confidenceLabel,
-              valueColor: summary.confidenceLabel == 'HIGH'
+              value: summary.confidenceLabel.value,
+              valueColor: summary.confidenceLabel == AiConfidenceLabel.high
                   ? Colors.green
-                  : summary.confidenceLabel == 'MEDIUM'
+                  : summary.confidenceLabel == AiConfidenceLabel.medium
                       ? Colors.orange
                       : Colors.red,
             ),

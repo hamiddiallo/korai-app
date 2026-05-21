@@ -1,3 +1,5 @@
+import '../../../core/domain/korai_enums.dart';
+
 class AiCase {
   const AiCase({
     required this.id,
@@ -7,7 +9,16 @@ class AiCase {
     required this.updatedAt,
     this.patientId,
     this.symptoms,
-    this.urgency = 'MEDIUM',
+    this.urgency = UrgencyLevel.medium,
+    this.earSide = EarSide.both,
+    this.clinicalNotes,
+    this.symptomIds = const [],
+    this.symptomLabels = const [],
+    this.medicalHistoryIds = const [],
+    this.medicalHistoryLabels = const [],
+    this.touchCheckIds = const [],
+    this.touchCheckLabels = const [],
+    this.touchObservations = const {},
   });
 
   final String id;
@@ -17,10 +28,21 @@ class AiCase {
   final String updatedAt;
   final String? patientId;
   final String? symptoms;
-  final String urgency;
+  final UrgencyLevel urgency;
+  final EarSide earSide;
+  final String? clinicalNotes;
+  final List<String> symptomIds;
+  final List<String> symptomLabels;
+  final List<String> medicalHistoryIds;
+  final List<String> medicalHistoryLabels;
+  final List<String> touchCheckIds;
+  final List<String> touchCheckLabels;
+  final Map<String, String> touchObservations;
 
-  bool get isDraft => status == 'DRAFT';
-  bool get isCompleted => status == 'AI_COMPLETED' || status == 'SPECIALIST_COMPLETED';
+  bool get isDraft => status == ConsultationStatus.draft.value;
+  bool get isCompleted =>
+      status == ConsultationStatus.aiCompleted.value ||
+      status == ConsultationStatus.specialistCompleted.value;
 
   factory AiCase.fromJson(Map<String, dynamic> json) {
     return AiCase(
@@ -28,13 +50,37 @@ class AiCase {
       status: json['status'].toString(),
       patientId: json['patientId']?.toString(),
       symptoms: json['symptoms']?.toString(),
+      clinicalNotes: json['clinicalNotes']?.toString(),
       createdAt: json['createdAt']?.toString() ?? '',
       updatedAt: json['updatedAt']?.toString() ?? '',
-      urgency: json['urgency']?.toString() ?? 'MEDIUM',
+      urgency: UrgencyLevel.values.firstWhere(
+        (u) => u.value == (json['urgency']?.toString() ?? UrgencyLevel.medium.value),
+        orElse: () => UrgencyLevel.medium,
+      ),
+      earSide: EarSide.fromApi(json['earSide']?.toString()),
+      symptomIds: _parseStringList(json['symptomIds']),
+      symptomLabels: _parseStringList(json['symptomLabels']),
+      medicalHistoryIds: _parseStringList(json['medicalHistoryIds']),
+      medicalHistoryLabels: _parseStringList(json['medicalHistoryLabels']),
+      touchCheckIds: _parseStringList(json['touchCheckIds']),
+      touchCheckLabels: _parseStringList(json['touchCheckLabels']),
+      touchObservations: _parseStringMap(json['touchObservations']),
       summary: AiSummary.fromJson(
         (json['organizedAiSummary'] ?? <String, dynamic>{}) as Map<String, dynamic>,
       ),
     );
+  }
+
+  static List<String> _parseStringList(dynamic value) {
+    if (value is List) return value.map((e) => e.toString()).toList();
+    return const [];
+  }
+
+  static Map<String, String> _parseStringMap(dynamic value) {
+    if (value is Map) {
+      return value.map((key, val) => MapEntry(key.toString(), val.toString()));
+    }
+    return const {};
   }
 }
 
@@ -67,7 +113,7 @@ class AiSummary {
   final String? imageOpinion;
   final String? ragOpinion;
   final String? likelyDiagnosis;
-  final String confidenceLabel;
+  final AiConfidenceLabel confidenceLabel;
   final List<String> warnings;
   final List<String> sources;
 
@@ -76,7 +122,7 @@ class AiSummary {
       imageOpinion: json['imageOpinion']?.toString(),
       ragOpinion: json['ragOpinion']?.toString(),
       likelyDiagnosis: json['likelyDiagnosis']?.toString(),
-      confidenceLabel: json['confidenceLabel']?.toString() ?? 'UNKNOWN',
+      confidenceLabel: AiConfidenceLabel.fromApi(json['confidenceLabel']?.toString()),
       warnings: (json['warnings'] as List<dynamic>? ?? const []).map((item) => item.toString()).toList(),
       sources: (json['sources'] as List<dynamic>? ?? const []).map((item) => item.toString()).toList(),
     );

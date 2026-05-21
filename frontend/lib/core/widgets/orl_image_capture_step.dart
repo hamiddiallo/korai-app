@@ -2,11 +2,16 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 
+import '../domain/korai_enums.dart';
+import 'ear_side_selector.dart';
+
 class OrlImageCaptureStep extends StatelessWidget {
   const OrlImageCaptureStep({
     super.key,
     required this.image,
     required this.isEditing,
+    required this.earSide,
+    required this.onEarSideChanged,
     required this.onCamera,
     required this.onGallery,
     required this.onRotateLeft,
@@ -19,6 +24,8 @@ class OrlImageCaptureStep extends StatelessWidget {
 
   final File? image;
   final bool isEditing;
+  final EarSide earSide;
+  final ValueChanged<EarSide> onEarSideChanged;
   final VoidCallback onCamera;
   final VoidCallback onGallery;
   final VoidCallback onRotateLeft;
@@ -37,6 +44,8 @@ class OrlImageCaptureStep extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        EarSideSelector(value: earSide, onChanged: onEarSideChanged),
+        const SizedBox(height: 16),
         if (!hasImage) ...[
           Container(
             padding: const EdgeInsets.symmetric(vertical: 28, horizontal: 16),

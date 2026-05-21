@@ -1,0 +1,73 @@
+import type { Request, Response } from 'express';
+import { HttpError } from '../../common/errors/http-error.js';
+import { consultationService } from './consultation.service.js';
+import { patientService } from '../patients/patient.service.js';
+
+export class ConsultationController {
+  async list(req: Request, res: Response) {
+    res.json({ cases: await consultationService.listForUser(req.user!) });
+  }
+
+  async diagnose(req: Request, res: Response) {
+    const body = req.body;
+    const baseInput = {
+      createdByUserId: req.user!.id,
+      patientId: body.patientId,
+      clinicalNarrative: body.symptoms,
+      clinicalNotes: body.clinicalNotes,
+      urgency: body.urgency,
+      earSide: body.earSide,
+      symptomIds: body.symptomIds,
+      symptomLabels: body.symptomLabels,
+      medicalHistoryIds: body.medicalHistoryIds,
+      medicalHistoryLabels: body.medicalHistoryLabels,
+      touchCheckIds: body.touchCheckIds,
+      touchCheckLabels: body.touchCheckLabels,
+      touchObservations: body.touchObservations
+    };
+
+    if (req.user!.role === 'PATIENT') {
+      const patient = await patientService.findById(body.patientId);
+      if (!patient) throw new HttpError(404, 'NOT_FOUND', 'Patient introuvable');
+      if (patient.isValidated) {
+        throw new HttpError(
+          403,
+          'DOSSIER_VALIDATED',
+          'Dossier validé : la pré-consultation ne peut plus être modifiée.'
+        );
+      }
+    }
+
+    if (!req.file) {
+      const orlCase = await consultationService.createDraft(baseInput);
+      return res.status(201).json({ case: orlCase });
+    }
+
+    const orlCase = await consultationService.createWithAi({
+      ...baseInput,
+      image: req.file,
+      showSources: body.showSources,
+      requestSpecialistReview: body.requestSpecialistReview
+    });
+
+    res.status(201).json({ case: orlCase });
+  }
+
+  async requestSpecialistReview(req: Request, res: Response) {
+    res.json({
+      case: await consultationService.requestSpecialistReview(String(req.params.id), req.user!.id)
+    });
+  }
+
+  async completeSpecialistReview(req: Request, res: Response) {
+    res.json({
+      case: await consultationService.completeSpecialistReview(
+        String(req.params.id),
+        req.user!.id,
+        req.body
+      )
+    });
+  }
+}
+
+export const consultationController = new ConsultationController();
