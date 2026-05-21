@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/auth/session_controller.dart';
 import '../../chatbot/presentation/korai_chatbot_screen.dart';
+import '../../nurse/presentation/widgets/consultation_history_list.dart';
 import '../data/patient_repository.dart';
 import 'patient_consultation_view_model.dart';
 
@@ -46,8 +47,10 @@ class _PatientHomePageState extends State<PatientHomePage> {
   }
 
   void _onViewModelChanged() {
-    if (viewModel.patient != null && !_isProfilePopulated) {
-      setState(() {
+    if (viewModel.patient == null) return;
+
+    setState(() {
+      if (!_isProfilePopulated) {
         firstNameController.text = viewModel.patient!.firstName;
         lastNameController.text = viewModel.patient!.lastName;
         phoneController.text = viewModel.patient!.phone ?? widget.session.user?.phone ?? '';
@@ -56,11 +59,14 @@ class _PatientHomePageState extends State<PatientHomePage> {
           ageController.text = viewModel.patient!.birthDate!.replaceAll('Age: ', '').replaceAll(' ans', '');
         }
         if (viewModel.patient!.sex != null) {
-          sex = viewModel.patient!.sex!;
+          sex = viewModel.patient!.sex == 'M' ? 'M' : 'F';
         }
         _isProfilePopulated = true;
-      });
-    }
+      }
+      if (viewModel.isReadOnly && viewModel.readOnlyNotes != null) {
+        notesController.text = viewModel.readOnlyNotes!;
+      }
+    });
   }
 
   @override
@@ -126,14 +132,15 @@ class _PatientHomePageState extends State<PatientHomePage> {
               ? KoraiChatbotScreen(userName: widget.session.user?.fullName)
               : _currentTab == 2
                   ? _buildProfileTab()
-                  : SafeArea(
+                  : viewModel.isReadOnly
+                      ? _buildReadOnlyConsultationTab()
+                      : SafeArea(
                       child: Column(
                         children: [
-                          // Premium visual indicator of the steps
                           PatientSprintProgress(
                             steps: steps,
                             currentStep: viewModel.currentStep,
-                            onTap: viewModel.goToStep,
+                            onTap: viewModel.isReadOnly ? (_) {} : viewModel.goToStep,
                           ),
                           Expanded(
                             child: ListView(
@@ -159,6 +166,7 @@ class _PatientHomePageState extends State<PatientHomePage> {
                             isFirst: viewModel.currentStep == 0,
                             isLast: viewModel.currentStep == steps.length - 1,
                             isBusy: viewModel.isSubmitting,
+                            isReadOnly: viewModel.isReadOnly,
                             onPrevious: viewModel.previousStep,
                             onNext: _handleNext,
                           ),
@@ -248,6 +256,53 @@ class _PatientHomePageState extends State<PatientHomePage> {
             ],
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildReadOnlyConsultationTab() {
+    final patient = viewModel.patient;
+
+    return SafeArea(
+      child: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(14),
+            margin: const EdgeInsets.only(bottom: 16),
+            decoration: BoxDecoration(
+              color: const Color(0xFFE8F5E9),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.green.shade200),
+            ),
+            child: const Row(
+              children: [
+                Icon(Icons.lock_outline, color: Colors.green, size: 22),
+                SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'Dossier validé. Consultez l\'historique de vos consultations.',
+                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          ConsultationHistoryList(
+            consultations: viewModel.consultations,
+            patient: patient,
+            emptyMessage: 'Aucune consultation enregistrée sur votre dossier.',
+            showStartButton: false,
+            onOpenConsultation: (consultation) {
+              showConsultationDetailSheet(
+                context,
+                consultation,
+                patientName: patient?.fullName,
+              );
+            },
+          ),
+        ],
       ),
     );
   }
@@ -344,7 +399,7 @@ class _PatientHomePageState extends State<PatientHomePage> {
                         ),
                         SizedBox(height: 4),
                         Text(
-                          'Votre dossier patient est validé et entièrement opérationnel.',
+                          'Votre dossier est validé. Vous pouvez le consulter mais plus le modifier.',
                           style: TextStyle(color: Colors.black87, fontSize: 12),
                         ),
                       ],
@@ -363,6 +418,7 @@ class _PatientHomePageState extends State<PatientHomePage> {
 
           TextFormField(
             controller: firstNameController,
+            readOnly: patient.isValidated,
             decoration: const InputDecoration(
               labelText: 'Prénom',
               prefixIcon: Icon(Icons.person_outline),
@@ -372,6 +428,7 @@ class _PatientHomePageState extends State<PatientHomePage> {
           const SizedBox(height: 16),
           TextFormField(
             controller: lastNameController,
+            readOnly: patient.isValidated,
             decoration: const InputDecoration(
               labelText: 'Nom',
               prefixIcon: Icon(Icons.person_outline),
@@ -381,6 +438,7 @@ class _PatientHomePageState extends State<PatientHomePage> {
           const SizedBox(height: 16),
           TextFormField(
             controller: phoneController,
+            readOnly: patient.isValidated,
             decoration: const InputDecoration(
               labelText: 'Téléphone',
               prefixIcon: Icon(Icons.phone_outlined),
@@ -390,6 +448,7 @@ class _PatientHomePageState extends State<PatientHomePage> {
           const SizedBox(height: 16),
           TextFormField(
             controller: ageController,
+            readOnly: patient.isValidated,
             decoration: const InputDecoration(
               labelText: 'Âge (ans)',
               prefixIcon: Icon(Icons.calendar_today_outlined),
@@ -400,57 +459,62 @@ class _PatientHomePageState extends State<PatientHomePage> {
           const SizedBox(height: 16),
           TextFormField(
             controller: addressController,
+            readOnly: patient.isValidated,
             decoration: const InputDecoration(
               labelText: 'Adresse',
               prefixIcon: Icon(Icons.location_on_outlined),
               border: OutlineInputBorder(),
             ),
           ),
-          const SizedBox(height: 24),
-
-          SizedBox(
-            width: double.infinity,
-            height: 50,
-            child: ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF006D77),
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          if (!patient.isValidated) ...[
+            const SizedBox(height: 24),
+            SizedBox(
+              width: double.infinity,
+              height: 50,
+              child: ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF006D77),
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+                onPressed: () async {
+                  try {
+                    await viewModel.updatePatientProfile(
+                      firstName: firstNameController.text.trim(),
+                      lastName: lastNameController.text.trim(),
+                      phone: phoneController.text.trim(),
+                      address: addressController.text.trim(),
+                      birthDate: ageController.text.isEmpty ? null : 'Age: ${ageController.text.trim()} ans',
+                      sex: sex,
+                    );
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Profil mis à jour avec succès !'),
+                        backgroundColor: Colors.green,
+                      ),
+                    );
+                  } catch (e) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Erreur lors de la mise à jour : $e'),
+                        backgroundColor: Colors.red,
+                      ),
+                    );
+                  }
+                },
+                child: const Text('Enregistrer les modifications', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
               ),
-              onPressed: () async {
-                try {
-                  await viewModel.updatePatientProfile(
-                    firstName: firstNameController.text.trim(),
-                    lastName: lastNameController.text.trim(),
-                    phone: phoneController.text.trim(),
-                    address: addressController.text.trim(),
-                    birthDate: ageController.text.isEmpty ? null : 'Age: ${ageController.text.trim()} ans',
-                    sex: sex,
-                  );
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Profil mis à jour avec succès !'),
-                      backgroundColor: Colors.green,
-                    ),
-                  );
-                } catch (e) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('Erreur lors de la mise à jour : $e'),
-                      backgroundColor: Colors.red,
-                    ),
-                  );
-                }
-              },
-              child: const Text('Enregistrer les modifications', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
             ),
-          ),
+          ],
         ],
       ),
     );
   }
 
   String _getStepSubtitle(int step) {
+    if (viewModel.isReadOnly) {
+      return 'Consultation validée — affichage en lecture seule.';
+    }
     return switch (step) {
       0 => 'Vérifiez et complétez vos coordonnées personnelles.',
       1 => 'Sélectionnez les signes et douleurs que vous ressentez actuellement.',
@@ -460,6 +524,7 @@ class _PatientHomePageState extends State<PatientHomePage> {
   }
 
   Widget _currentStepBody() {
+    final readOnly = viewModel.isReadOnly;
     return switch (viewModel.currentStep) {
       0 => PatientInfoStep(
           firstNameController: firstNameController,
@@ -468,18 +533,21 @@ class _PatientHomePageState extends State<PatientHomePage> {
           addressController: addressController,
           ageController: ageController,
           sex: sex,
+          readOnly: readOnly,
           onSexChanged: (value) => setState(() => sex = value),
         ),
       1 => PatientClinicalSelectionStep(
           items: viewModel.symptoms,
           selectedIds: viewModel.selectedSymptomIds,
           emptyText: 'Aucun symptôme configuré',
+          readOnly: readOnly,
           onChanged: (id, selected) => viewModel.toggleSelection('SYMPTOM', id, selected),
         ),
       2 => PatientClinicalSelectionStep(
           items: viewModel.medicalHistories,
           selectedIds: viewModel.selectedMedicalHistoryIds,
           emptyText: 'Aucun antécédent configuré',
+          readOnly: readOnly,
           onChanged: (id, selected) => viewModel.toggleSelection('MEDICAL_HISTORY', id, selected),
         ),
       _ => PatientRecapStep(
@@ -490,6 +558,7 @@ class _PatientHomePageState extends State<PatientHomePage> {
           age: ageController.text,
           sex: sex,
           notesController: notesController,
+          readOnly: readOnly,
           selectedSymptoms: viewModel.labelsFor(viewModel.symptoms, viewModel.selectedSymptomIds),
           selectedHistories: viewModel.labelsFor(viewModel.medicalHistories, viewModel.selectedMedicalHistoryIds),
           selectedTouchChecks: const [],
@@ -499,6 +568,13 @@ class _PatientHomePageState extends State<PatientHomePage> {
   }
 
   Future<void> _handleNext() async {
+    if (viewModel.isReadOnly) {
+      if (viewModel.currentStep < steps.length - 1) {
+        viewModel.nextStep();
+      }
+      return;
+    }
+
     if (viewModel.currentStep < steps.length - 1) {
       viewModel.nextStep();
       return;
@@ -777,12 +853,14 @@ class PatientClinicalSelectionStep extends StatelessWidget {
     required this.selectedIds,
     required this.emptyText,
     required this.onChanged,
+    this.readOnly = false,
   });
 
   final List<dynamic> items;
   final Set<String> selectedIds;
   final String emptyText;
   final void Function(String id, bool selected) onChanged;
+  final bool readOnly;
 
   @override
   Widget build(BuildContext context) {
@@ -823,7 +901,7 @@ class PatientClinicalSelectionStep extends StatelessWidget {
             subtitle: item.description == null ? null : Text(item.description!),
             value: isSelected,
             activeColor: Theme.of(context).colorScheme.primary,
-            onChanged: (value) => onChanged(item.id, value ?? false),
+            onChanged: readOnly ? null : (value) => onChanged(item.id, value ?? false),
           ),
         );
       }).toList(),
@@ -841,6 +919,7 @@ class PatientInfoStep extends StatelessWidget {
     required this.ageController,
     required this.sex,
     required this.onSexChanged,
+    this.readOnly = false,
   });
 
   final TextEditingController firstNameController;
@@ -850,6 +929,7 @@ class PatientInfoStep extends StatelessWidget {
   final TextEditingController ageController;
   final String sex;
   final ValueChanged<String> onSexChanged;
+  final bool readOnly;
 
   @override
   Widget build(BuildContext context) {
@@ -866,6 +946,7 @@ class PatientInfoStep extends StatelessWidget {
                   const SizedBox(height: 6),
                   TextField(
                     controller: lastNameController,
+                    readOnly: readOnly,
                     decoration: InputDecoration(
                       hintText: 'ex: Diallo',
                       contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -884,6 +965,7 @@ class PatientInfoStep extends StatelessWidget {
                   const SizedBox(height: 6),
                   TextField(
                     controller: firstNameController,
+                    readOnly: readOnly,
                     decoration: InputDecoration(
                       hintText: 'ex: Aïssatou',
                       contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -900,6 +982,7 @@ class PatientInfoStep extends StatelessWidget {
         const SizedBox(height: 6),
         TextField(
           controller: phoneController,
+          readOnly: readOnly,
           keyboardType: TextInputType.phone,
           decoration: InputDecoration(
             hintText: 'ex: +221 77 ...',
@@ -912,6 +995,7 @@ class PatientInfoStep extends StatelessWidget {
         const SizedBox(height: 6),
         TextField(
           controller: addressController,
+          readOnly: readOnly,
           decoration: InputDecoration(
             hintText: 'ex: Sacré-Cœur 3, Dakar',
             contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -930,6 +1014,7 @@ class PatientInfoStep extends StatelessWidget {
                   const SizedBox(height: 6),
                   TextField(
                     controller: ageController,
+                    readOnly: readOnly,
                     keyboardType: TextInputType.number,
                     decoration: InputDecoration(
                       hintText: 'ex: 28',
@@ -957,88 +1042,14 @@ class PatientInfoStep extends StatelessWidget {
                     segments: const [
                       ButtonSegment(value: 'M', label: Text('M')),
                       ButtonSegment(value: 'F', label: Text('F')),
-                      ButtonSegment(value: 'OTHER', label: Text('Autre')),
                     ],
                     selected: {sex},
-                    onSelectionChanged: (value) => onSexChanged(value.first),
+                    onSelectionChanged: readOnly ? null : (value) => onSexChanged(value.first),
                   ),
                 ],
               ),
             ),
           ],
-        ),
-      ],
-    );
-  }
-}
-
-class PatientImageStep extends StatelessWidget {
-  const PatientImageStep({
-    super.key,
-    required this.hasImage,
-    required this.onCamera,
-    required this.onGallery,
-  });
-
-  final bool hasImage;
-  final VoidCallback onCamera;
-  final VoidCallback onGallery;
-
-  @override
-  Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        const SizedBox(height: 12),
-        AnimatedContainer(
-          duration: const Duration(milliseconds: 300),
-          padding: const EdgeInsets.symmetric(vertical: 32),
-          decoration: BoxDecoration(
-            color: hasImage ? colorScheme.primary.withOpacity(0.04) : Colors.grey.shade50,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: hasImage ? colorScheme.primary : Colors.grey.shade200,
-              width: 1.5,
-              style: BorderStyle.solid,
-            ),
-          ),
-          child: Column(
-            children: [
-              Icon(
-                hasImage ? Icons.check_circle : Icons.camera_alt_outlined,
-                size: 64,
-                color: hasImage ? colorScheme.primary : Colors.grey.shade400,
-              ),
-              const SizedBox(height: 16),
-              Text(
-                hasImage ? 'Image ORL ajoutée avec succès !' : 'Aucune photo ajoutée',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                  color: hasImage ? colorScheme.primary : Colors.grey.shade700,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                hasImage ? 'Vous pouvez capturer une nouvelle photo si besoin.' : 'Prenez une photo claire avec votre otoscope mobile.',
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 24),
-        FilledButton.icon(
-          onPressed: onCamera,
-          icon: const Icon(Icons.camera),
-          label: const Text('Prendre une photo'),
-        ),
-        const SizedBox(height: 12),
-        OutlinedButton.icon(
-          onPressed: onGallery,
-          icon: const Icon(Icons.photo_library_outlined),
-          label: const Text('Choisir dans la galerie'),
         ),
       ],
     );
@@ -1059,6 +1070,7 @@ class PatientRecapStep extends StatelessWidget {
     required this.selectedHistories,
     required this.selectedTouchChecks,
     required this.hasImage,
+    this.readOnly = false,
   });
 
   final String firstName;
@@ -1072,6 +1084,7 @@ class PatientRecapStep extends StatelessWidget {
   final List<String> selectedHistories;
   final List<String> selectedTouchChecks;
   final bool hasImage;
+  final bool readOnly;
 
   @override
   Widget build(BuildContext context) {
@@ -1080,7 +1093,7 @@ class PatientRecapStep extends StatelessWidget {
       children: [
         _RecapRow(label: 'Patient', value: '$firstName $lastName'.trim()),
         _RecapRow(label: 'Âge', value: age.isEmpty ? 'Non renseigné' : '$age ans'),
-        _RecapRow(label: 'Sexe', value: sex == 'M' ? 'Masculin' : sex == 'F' ? 'Féminin' : 'Autre'),
+        _RecapRow(label: 'Sexe', value: sex == 'M' ? 'Masculin' : 'Féminin'),
         _RecapRow(label: 'Téléphone', value: phone.isEmpty ? 'Non renseigné' : phone),
         _RecapRow(label: 'Adresse', value: address.isEmpty ? 'Non renseignée' : address),
         const Divider(height: 20),
@@ -1100,10 +1113,13 @@ class PatientRecapStep extends StatelessWidget {
         const SizedBox(height: 6),
         TextField(
           controller: notesController,
+          readOnly: readOnly,
           minLines: 3,
           maxLines: 5,
           decoration: InputDecoration(
-            hintText: 'Décrivez précisément vos douleurs ou d\'autres symptômes...',
+            hintText: readOnly
+                ? 'Aucune note complémentaire'
+                : 'Décrivez précisément vos douleurs ou d\'autres symptômes...',
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
           ),
         ),
@@ -1160,11 +1176,13 @@ class PatientSprintNavigationBar extends StatelessWidget {
     required this.isBusy,
     required this.onPrevious,
     required this.onNext,
+    this.isReadOnly = false,
   });
 
   final bool isFirst;
   final bool isLast;
   final bool isBusy;
+  final bool isReadOnly;
   final VoidCallback onPrevious;
   final VoidCallback onNext;
 
@@ -1193,15 +1211,15 @@ class PatientSprintNavigationBar extends StatelessWidget {
             const SizedBox(width: 12),
             Expanded(
               child: FilledButton.icon(
-                onPressed: isBusy ? null : onNext,
+                onPressed: isBusy || (isReadOnly && isLast) ? null : onNext,
                 style: FilledButton.styleFrom(
                   minimumSize: const Size.fromHeight(48),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                 ),
                 icon: isBusy
                     ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                    : Icon(isLast ? Icons.save : Icons.arrow_forward),
-                label: Text(isLast ? 'Enregistrer' : 'Suivant'),
+                    : Icon(isReadOnly || !isLast ? Icons.arrow_forward : Icons.save),
+                label: Text(isReadOnly ? 'Suivant' : (isLast ? 'Enregistrer' : 'Suivant')),
               ),
             ),
           ],

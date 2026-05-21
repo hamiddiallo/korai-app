@@ -44,20 +44,20 @@ patientRouter.get(
 patientRouter.patch(
   '/:id',
   asyncHandler(async (req, res) => {
+    const patient = await patientService.findById(String(req.params.id));
+    if (!patient) throw notFound('Patient introuvable');
+
     if (req.user!.role === 'PATIENT') {
       if (req.user!.linkedPatientId !== req.params.id) {
         throw forbidden('Vous pouvez uniquement modifier votre propre fiche.');
       }
-      // Strip isValidated only if trying to set it to true (patients can set it to false)
-      if (req.body.isValidated === true) {
-        delete req.body.isValidated;
+      if (patient.isValidated) {
+        throw forbidden('Dossier validé : modification réservée au professionnel de santé.');
       }
+      delete req.body.isValidated;
     } else if (req.user!.role !== 'NURSE' && req.user!.role !== 'ADMIN') {
       throw forbidden('Accès refusé.');
     }
-
-    const patient = await patientService.findById(String(req.params.id));
-    if (!patient) throw notFound('Patient introuvable');
 
     const updated = await patientService.update(String(req.params.id), req.body);
     res.json({ patient: updated });

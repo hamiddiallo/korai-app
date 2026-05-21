@@ -13,7 +13,7 @@ Voir [PROJET_REPERE.md](/Users/hamid/Downloads/Korai-app/PROJET_REPERE.md) pour 
 
 - Authentification backend avec JWT.
 - Gestion des roles.
-- Persistance backend avec Prisma + SQLite local.
+- Persistance backend avec Prisma + PostgreSQL (ou SQLite en dev minimal).
 - Creation de compte patient et infirmier via routes dediees.
 - Profil admin avec gestion des comptes, patients et referentiels cliniques.
 - Creation de patient cote infirmier.

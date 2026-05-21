@@ -3,15 +3,24 @@ class AiCase {
     required this.id,
     required this.status,
     required this.summary,
+    required this.createdAt,
+    required this.updatedAt,
     this.patientId,
     this.symptoms,
+    this.urgency = 'MEDIUM',
   });
 
   final String id;
   final String status;
   final AiSummary summary;
+  final String createdAt;
+  final String updatedAt;
   final String? patientId;
   final String? symptoms;
+  final String urgency;
+
+  bool get isDraft => status == 'DRAFT';
+  bool get isCompleted => status == 'AI_COMPLETED' || status == 'SPECIALIST_COMPLETED';
 
   factory AiCase.fromJson(Map<String, dynamic> json) {
     return AiCase(
@@ -19,10 +28,29 @@ class AiCase {
       status: json['status'].toString(),
       patientId: json['patientId']?.toString(),
       symptoms: json['symptoms']?.toString(),
+      createdAt: json['createdAt']?.toString() ?? '',
+      updatedAt: json['updatedAt']?.toString() ?? '',
+      urgency: json['urgency']?.toString() ?? 'MEDIUM',
       summary: AiSummary.fromJson(
         (json['organizedAiSummary'] ?? <String, dynamic>{}) as Map<String, dynamic>,
       ),
     );
+  }
+}
+
+extension AiCaseListX on List<AiCase> {
+  List<AiCase> forPatient(String patientId) {
+    return where((c) => c.patientId == patientId).toList();
+  }
+
+  List<AiCase> sortedByNewest() {
+    final copy = [...this];
+    copy.sort((a, b) {
+      final aDate = DateTime.tryParse(a.createdAt) ?? DateTime.fromMillisecondsSinceEpoch(0);
+      final bDate = DateTime.tryParse(b.createdAt) ?? DateTime.fromMillisecondsSinceEpoch(0);
+      return bDate.compareTo(aDate);
+    });
+    return copy;
   }
 }
 

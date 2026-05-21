@@ -1,6 +1,7 @@
 import bcrypt from 'bcryptjs';
 import { prisma } from './prisma.js';
 import type { AiSummary, OrlCase, Patient, Role, User } from '../types.js';
+import { normalizeRole } from '../types.js';
 
 type DbUser = NonNullable<Awaited<ReturnType<typeof prisma.user.findUnique>>>;
 type DbPatient = NonNullable<Awaited<ReturnType<typeof prisma.patient.findUnique>>>;
@@ -22,7 +23,7 @@ const mapUser = (user: DbUser): User => ({
   fullName: user.fullName,
   email: user.email,
   passwordHash: user.passwordHash,
-  role: user.role as Role,
+  role: normalizeRole(String(user.role)),
   phone: nullable(user.phone),
   healthFacility: nullable(user.healthFacility),
   professionalId: nullable(user.professionalId),

@@ -20,12 +20,19 @@ class SessionUser {
   final String? linkedPatientId;
   final String? phone;
 
+  static String _normalizeRole(String raw) {
+    final role = raw.trim().toUpperCase();
+    // Compatibilite ancienne base PostgreSQL (enum PROFESSIONAL).
+    if (role == 'PROFESSIONAL') return 'NURSE';
+    return role;
+  }
+
   factory SessionUser.fromJson(Map<String, dynamic> json) {
     return SessionUser(
       id: json['id'].toString(),
       fullName: json['fullName'].toString(),
       email: json['email'].toString(),
-      role: json['role'].toString().trim().toUpperCase(),
+      role: _normalizeRole(json['role'].toString()),
       linkedPatientId: json['linkedPatientId']?.toString(),
       phone: json['phone']?.toString(),
     );

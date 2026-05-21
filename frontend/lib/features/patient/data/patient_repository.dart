@@ -20,6 +20,13 @@ class PatientRepository {
     return Patient.fromJson(response['patient'] as Map<String, dynamic>);
   }
 
+  Future<List<AiCase>> listCases() async {
+    final response = await apiClient.getJson('/cases');
+    return (response['cases'] as List<dynamic>)
+        .map((item) => AiCase.fromJson(item as Map<String, dynamic>))
+        .toList();
+  }
+
   Future<List<ClinicalReferenceItem>> listClinicalItems(String type) async {
     final response = await apiClient.getJson('/clinical-items?type=$type');
     return (response['items'] as List<dynamic>)

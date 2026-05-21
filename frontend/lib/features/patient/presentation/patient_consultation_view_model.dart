@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../../core/auth/session_controller.dart';
+import '../../../core/utils/orl_image_editor.dart';
 import '../data/patient_repository.dart';
 import '../../nurse/domain/ai_case.dart';
 import '../../nurse/domain/clinical_reference_item.dart';
@@ -29,6 +30,7 @@ class PatientConsultationViewModel extends ChangeNotifier {
   int currentStep = 0;
   bool isLoading = false;
   bool isSubmitting = false;
+  bool isEditingImage = false;
   String? errorMessage;
 
   List<ClinicalReferenceItem> symptoms = [];
@@ -38,8 +40,12 @@ class PatientConsultationViewModel extends ChangeNotifier {
   final selectedSymptomIds = <String>{};
   final selectedMedicalHistoryIds = <String>{};
   final selectedTouchCheckIds = <String>{};
+  String? readOnlyNotes;
+  List<AiCase> consultations = [];
 
   static const totalSteps = 4;
+
+  bool get isReadOnly => patient?.isValidated == true;
 
   Future<void> initialize() async {
     isLoading = true;
@@ -58,6 +64,9 @@ class PatientConsultationViewModel extends ChangeNotifier {
       if (linkedPatientId.isNotEmpty) {
         try {
           patient = await _repository.getPatient(linkedPatientId);
+          if (isReadOnly) {
+            await _loadValidatedDossierData();
+          }
         } catch (e) {
           debugPrint('Erreur de chargement du patient: $e');
         }
@@ -70,6 +79,64 @@ class PatientConsultationViewModel extends ChangeNotifier {
     }
   }
 
+  Future<void> _loadValidatedDossierData() async {
+    try {
+      consultations = (await _repository.listCases()).sortedByNewest();
+      final preCase = _findPreconsultationCase(consultations, linkedPatientId);
+      applyClinicalPrefillFromNarrative(preCase?.symptoms);
+      readOnlyNotes = _extractNotesFromNarrative(preCase?.symptoms);
+    } catch (e) {
+      debugPrint('Erreur chargement dossier validé: $e');
+    }
+  }
+
+  AiCase? _findPreconsultationCase(List<AiCase> cases, String patientId) {
+    final matching = cases
+        .where((c) => c.patientId == patientId && (c.symptoms?.trim().isNotEmpty ?? false))
+        .toList();
+    if (matching.isEmpty) return null;
+    final drafts = matching.where((c) => c.status == 'DRAFT').toList();
+    if (drafts.isNotEmpty) return drafts.first;
+    return matching.last;
+  }
+
+  void applyClinicalPrefillFromNarrative(String? narrative) {
+    if (narrative == null || narrative.trim().isEmpty) return;
+
+    selectedSymptomIds.clear();
+    selectedMedicalHistoryIds.clear();
+    selectedTouchCheckIds.clear();
+
+    final lower = narrative.toLowerCase();
+    for (final symptom in symptoms) {
+      if (lower.contains(symptom.label.toLowerCase())) {
+        selectedSymptomIds.add(symptom.id);
+      }
+    }
+    for (final history in medicalHistories) {
+      if (lower.contains(history.label.toLowerCase())) {
+        selectedMedicalHistoryIds.add(history.id);
+      }
+    }
+    for (final touchCheck in touchChecks) {
+      if (lower.contains(touchCheck.label.toLowerCase())) {
+        selectedTouchCheckIds.add(touchCheck.id);
+      }
+    }
+  }
+
+  String? _extractNotesFromNarrative(String? narrative) {
+    if (narrative == null || narrative.isEmpty) return null;
+    const markers = ['Notes libres:', 'Notes:'];
+    for (final marker in markers) {
+      final index = narrative.indexOf(marker);
+      if (index != -1) {
+        return narrative.substring(index + marker.length).trim();
+      }
+    }
+    return null;
+  }
+
   Future<void> updatePatientProfile({
     required String firstName,
     required String lastName,
@@ -78,6 +145,12 @@ class PatientConsultationViewModel extends ChangeNotifier {
     String? birthDate,
     String? sex,
   }) async {
+    if (isReadOnly) {
+      errorMessage = 'Dossier validé : modification réservée au professionnel de santé.';
+      notifyListeners();
+      return;
+    }
+
     isLoading = true;
     errorMessage = null;
     notifyListeners();
@@ -110,6 +183,8 @@ class PatientConsultationViewModel extends ChangeNotifier {
   void previousStep() => goToStep(currentStep - 1);
 
   void toggleSelection(String type, String id, bool selected) {
+    if (isReadOnly) return;
+
     final target = switch (type) {
       'SYMPTOM' => selectedSymptomIds,
       'MEDICAL_HISTORY' => selectedMedicalHistoryIds,
@@ -136,6 +211,51 @@ class PatientConsultationViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
+  void clearImage() {
+    image = null;
+    errorMessage = null;
+    notifyListeners();
+  }
+
+  Future<void> rotateImage({required bool clockwise}) async {
+    await _editImage(() async {
+      final current = image;
+      if (current == null) return;
+      image = await OrlImageEditor.rotate(current, clockwise: clockwise);
+    });
+  }
+
+  Future<void> flipImageHorizontal() async {
+    await _editImage(() async {
+      final current = image;
+      if (current == null) return;
+      image = await OrlImageEditor.flipHorizontal(current);
+    });
+  }
+
+  Future<void> adjustImageBrightness({required bool brighter}) async {
+    await _editImage(() async {
+      final current = image;
+      if (current == null) return;
+      image = await OrlImageEditor.adjustBrightness(current, brighter: brighter);
+    });
+  }
+
+  Future<void> _editImage(Future<void> Function() action) async {
+    if (image == null) return;
+    isEditingImage = true;
+    errorMessage = null;
+    notifyListeners();
+    try {
+      await action();
+    } catch (error) {
+      errorMessage = error.toString();
+    } finally {
+      isEditingImage = false;
+      notifyListeners();
+    }
+  }
+
   Future<void> submitSprint({
     required String firstName,
     required String lastName,
@@ -145,6 +265,12 @@ class PatientConsultationViewModel extends ChangeNotifier {
     required String sex,
     required String notes,
   }) async {
+    if (isReadOnly) {
+      errorMessage = 'Dossier validé : la pré-consultation ne peut plus être modifiée.';
+      notifyListeners();
+      return;
+    }
+
     isSubmitting = true;
     errorMessage = null;
     aiCase = null;

@@ -62,7 +62,7 @@ export const authService = {
     email: string;
     password: string;
     birthDate?: string;
-    sex?: 'F' | 'M' | 'OTHER';
+    sex?: 'F' | 'M';
     phone?: string;
     address?: string;
     consentForAi: boolean;

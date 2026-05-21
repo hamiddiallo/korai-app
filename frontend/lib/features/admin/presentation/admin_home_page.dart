@@ -1203,7 +1203,7 @@ class _PatientFormDialogState extends State<PatientFormDialog> {
   late final birthDate = TextEditingController(text: widget.patient?.birthDate);
   late final phone = TextEditingController(text: widget.patient?.phone);
   late final address = TextEditingController(text: widget.patient?.address);
-  late String sex = widget.patient?.sex ?? 'F';
+  late String sex = widget.patient?.sex == 'M' ? 'M' : 'F';
   late bool consentForAi = widget.patient?.consentForAi ?? true;
   late bool consentForTeleExpertise = widget.patient?.consentForTeleExpertise ?? true;
 
@@ -1256,7 +1256,6 @@ class _PatientFormDialogState extends State<PatientFormDialog> {
                 items: const [
                   DropdownMenuItem(value: 'F', child: Text('Féminin (F)')),
                   DropdownMenuItem(value: 'M', child: Text('Masculin (M)')),
-                  DropdownMenuItem(value: 'OTHER', child: Text('Autre')),
                 ],
                 onChanged: (value) => setState(() => sex = value ?? sex),
               ),

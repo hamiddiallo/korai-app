@@ -1,12 +1,17 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../../core/auth/session_controller.dart';
+import '../../../core/utils/consultation_format.dart';
+import '../../../core/widgets/orl_image_capture_step.dart';
 import '../data/nurse_repository.dart';
 import '../domain/ai_case.dart';
 import '../domain/clinical_reference_item.dart';
 import '../domain/patient.dart';
 import 'nurse_consultation_view_model.dart';
+import 'widgets/consultation_history_list.dart';
 import '../../chatbot/presentation/korai_chatbot_screen.dart';
 
 class NurseHomePage extends StatefulWidget {
@@ -215,32 +220,11 @@ class _NurseHomePageState extends State<NurseHomePage> {
                                 ),
                                 elevation: 0,
                               ),
-                              onPressed: () async {
+                              onPressed: () {
                                 Navigator.pop(context);
-                                try {
-                                  setState(() => _isLoadingStats = true);
-                                  await repository.validatePatient(patient.id);
-                                  if (!mounted) return;
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(
-                                      content: Text('Le compte de ${patient.fullName} a été validé !'),
-                                      backgroundColor: Colors.green,
-                                    ),
-                                  );
-                                  await _loadDashboardData();
-                                } catch (e) {
-                                  if (!mounted) return;
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(
-                                      content: Text('Erreur lors de la validation: $e'),
-                                      backgroundColor: Colors.red,
-                                    ),
-                                  );
-                                } finally {
-                                  setState(() => _isLoadingStats = false);
-                                }
+                                _showPatientValidationSheet(patient);
                               },
-                              child: const Text('Valider', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                              child: const Text('Voir', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
                             ),
                           ],
                         ),
@@ -283,63 +267,331 @@ class _NurseHomePageState extends State<NurseHomePage> {
       viewModel.selectedSymptomIds.clear();
       viewModel.selectedMedicalHistoryIds.clear();
       viewModel.selectedTouchCheckIds.clear();
+      viewModel.touchCheckObservations.clear();
       _isSprintActive = true;
     });
   }
 
-  void _startExistingPatientConsultation(Patient patient) {
+  List<AiCase> _consultationsForPatient(String patientId) {
+    return _cases.forPatient(patientId).sortedByNewest();
+  }
+
+  String? _patientNameForCase(AiCase consultation) {
+    if (consultation.patientId == null) return null;
+    for (final patient in _patients) {
+      if (patient.id == consultation.patientId) return patient.fullName;
+    }
+    return null;
+  }
+
+  void _showPatientDossierSheet(Patient patient) {
+    final consultations = _consultationsForPatient(patient.id);
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (context) {
+        return DraggableScrollableSheet(
+          expand: false,
+          initialChildSize: 0.82,
+          minChildSize: 0.5,
+          maxChildSize: 0.92,
+          builder: (context, scrollController) {
+            return Padding(
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+              child: ListView(
+                controller: scrollController,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 40,
+                      height: 4,
+                      margin: const EdgeInsets.only(bottom: 16),
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade300,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+                  Text(
+                    'Dossier patient',
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+                  ),
+                  Text(
+                    patient.fullName,
+                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    patient.phone ?? 'Pas de téléphone',
+                    style: TextStyle(color: Colors.grey.shade600),
+                  ),
+                  const SizedBox(height: 20),
+                  ConsultationHistoryList(
+                    consultations: consultations,
+                    patient: patient,
+                    onStartNew: () {
+                      Navigator.pop(context);
+                      _startNewConsultationForPatient(patient);
+                    },
+                    onResumeDraft: (draft) {
+                      Navigator.pop(context);
+                      _startExistingPatientConsultation(patient, prefillNarrative: draft.symptoms);
+                    },
+                    onOpenConsultation: (consultation) {
+                      showConsultationDetailSheet(
+                        context,
+                        consultation,
+                        patientName: patient.fullName,
+                      );
+                    },
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void _startNewConsultationForPatient(Patient patient) {
+    _startExistingPatientConsultation(patient);
+  }
+
+  void _startExistingPatientConsultation(Patient patient, {String? prefillNarrative}) {
     setState(() {
       viewModel.patient = patient;
       lastNameController.text = patient.lastName;
       firstNameController.text = patient.firstName;
       phoneController.text = patient.phone ?? '';
       addressController.text = patient.address ?? '';
-      ageController.text = patient.birthDate?.replaceAll('Age: ', '') ?? '';
-      sex = patient.sex ?? 'F';
+      ageController.text = patient.birthDate?.replaceAll('Age: ', '').replaceAll(' ans', '') ?? '';
+      sex = patient.sex == 'M' ? 'M' : 'F';
       viewModel.image = null;
       viewModel.aiCase = null;
       viewModel.currentStep = 0;
       viewModel.selectedSymptomIds.clear();
       viewModel.selectedMedicalHistoryIds.clear();
       viewModel.selectedTouchCheckIds.clear();
-      notesController.clear();
-
-      // Try to find a draft case for this patient to pre-populate clinical data
-      final draftCases = _cases.where((c) => c.patientId == patient.id && c.status == 'DRAFT').toList();
-      if (draftCases.isNotEmpty) {
-        final draftCase = draftCases.first;
-        final narrative = draftCase.symptoms;
-
-        if (narrative != null && narrative.isNotEmpty) {
-          // Parse symptoms
-          for (final symptom in viewModel.symptoms) {
-            if (narrative.toLowerCase().contains(symptom.label.toLowerCase())) {
-              viewModel.selectedSymptomIds.add(symptom.id);
-            }
-          }
-
-          // Parse histories
-          for (final history in viewModel.medicalHistories) {
-            if (narrative.toLowerCase().contains(history.label.toLowerCase())) {
-              viewModel.selectedMedicalHistoryIds.add(history.id);
-            }
-          }
-
-          // Parse notes
-          final notesIndex = narrative.indexOf('Notes libres:');
-          if (notesIndex != -1) {
-            notesController.text = narrative.substring(notesIndex + 13).trim();
-          } else {
-            final altNotesIndex = narrative.indexOf('Notes:');
-            if (altNotesIndex != -1) {
-              notesController.text = narrative.substring(altNotesIndex + 6).trim();
-            }
-          }
-        }
-      }
-
+      viewModel.touchCheckObservations.clear();
+      notesController.text = viewModel.extractNotesFromNarrative(prefillNarrative) ?? '';
+      viewModel.applyClinicalPrefillFromNarrative(prefillNarrative);
       _isSprintActive = true;
     });
+  }
+
+  Future<void> _validateAndOpenConsultation(Patient patient, {String? prefillNarrative}) async {
+    try {
+      setState(() => _isLoadingStats = true);
+      final validated = await repository.validatePatient(patient.id);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Le compte de ${validated.fullName} a été validé.'),
+          backgroundColor: Colors.green,
+        ),
+      );
+      await _loadDashboardData();
+      if (!mounted) return;
+      setState(() => _currentTab = 2);
+      _startExistingPatientConsultation(validated, prefillNarrative: prefillNarrative);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Erreur lors de la validation: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _isLoadingStats = false);
+    }
+  }
+
+  void _showPatientValidationSheet(Patient patient) {
+    final preCase = viewModel.findPatientPreconsultationCase(_cases, patient.id);
+    final narrative = preCase?.symptoms;
+    final preview = viewModel.buildPreconsultationPreview(narrative);
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return DraggableScrollableSheet(
+          initialChildSize: 0.75,
+          minChildSize: 0.45,
+          maxChildSize: 0.92,
+          builder: (context, scrollController) {
+            return Container(
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+              ),
+              child: ListView(
+                controller: scrollController,
+                padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+                children: [
+                  Center(
+                    child: Container(
+                      width: 40,
+                      height: 4,
+                      margin: const EdgeInsets.only(bottom: 16),
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade300,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+                  Text(
+                    'Dossier patient à valider',
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                          fontWeight: FontWeight.bold,
+                          color: const Color(0xFF006D77),
+                        ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    patient.fullName,
+                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(height: 20),
+                  _validationSectionTitle('Identité'),
+                  _validationInfoRow('Téléphone', patient.phone ?? 'Non renseigné'),
+                  _validationInfoRow('Adresse', patient.address ?? 'Non renseignée'),
+                  _validationInfoRow(
+                    'Âge',
+                    patient.birthDate?.replaceAll('Age: ', '').replaceAll(' ans', '') ?? 'Non renseigné',
+                  ),
+                  _validationInfoRow(
+                    'Sexe',
+                    patient.sex == 'M' ? 'Masculin' : patient.sex == 'F' ? 'Féminin' : 'Non renseigné',
+                  ),
+                  const SizedBox(height: 16),
+                  _validationSectionTitle('Pré-consultation du patient'),
+                  if (!preview.hasClinicalData)
+                    const Text(
+                      'Le patient n\'a pas encore transmis de symptômes ou antécédents.',
+                      style: TextStyle(color: Colors.grey),
+                    )
+                  else ...[
+                    _validationChipGroup('Symptômes déclarés', preview.symptomLabels),
+                    const SizedBox(height: 12),
+                    _validationChipGroup('Antécédents déclarés', preview.historyLabels),
+                    if (preview.touchCheckLabels.isNotEmpty) ...[
+                      const SizedBox(height: 12),
+                      _validationChipGroup('Vérifications au toucher', preview.touchCheckLabels),
+                    ],
+                    if (preview.notes != null && preview.notes!.isNotEmpty) ...[
+                      const SizedBox(height: 12),
+                      _validationInfoRow('Notes du patient', preview.notes!),
+                    ],
+                  ],
+                  const SizedBox(height: 24),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: () => Navigator.pop(context),
+                          child: const Text('Annuler'),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        flex: 2,
+                        child: FilledButton.icon(
+                          style: FilledButton.styleFrom(
+                            backgroundColor: const Color(0xFF006D77),
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                          ),
+                          onPressed: _isLoadingStats
+                              ? null
+                              : () {
+                                  Navigator.pop(context);
+                                  _validateAndOpenConsultation(
+                                    patient,
+                                    prefillNarrative: narrative,
+                                  );
+                                },
+                          icon: const Icon(Icons.check_circle_outline),
+                          label: const Text('Valider et ouvrir'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _validationSectionTitle(String title) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Text(
+        title,
+        style: const TextStyle(
+          fontSize: 14,
+          fontWeight: FontWeight.bold,
+          color: Color(0xFF006D77),
+        ),
+      ),
+    );
+  }
+
+  Widget _validationInfoRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 110,
+            child: Text(
+              label,
+              style: TextStyle(fontSize: 13, color: Colors.grey.shade700, fontWeight: FontWeight.w600),
+            ),
+          ),
+          Expanded(
+            child: Text(value, style: const TextStyle(fontSize: 13)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _validationChipGroup(String title, List<String> labels) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(title, style: TextStyle(fontSize: 12, color: Colors.grey.shade700, fontWeight: FontWeight.w600)),
+        const SizedBox(height: 6),
+        if (labels.isEmpty)
+          const Text('Aucun', style: TextStyle(fontSize: 13, color: Colors.grey))
+        else
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: labels
+                .map(
+                  (label) => Chip(
+                    label: Text(label, style: const TextStyle(fontSize: 12)),
+                    backgroundColor: const Color(0xFFE8F1F2),
+                    side: BorderSide(color: Colors.teal.shade100),
+                    visualDensity: VisualDensity.compact,
+                  ),
+                )
+                .toList(),
+          ),
+      ],
+    );
   }
 
   @override
@@ -803,33 +1055,9 @@ class _NurseHomePageState extends State<NurseHomePage> {
                         ),
                         elevation: 0,
                       ),
-                      icon: const Icon(Icons.check_circle_outline, size: 16),
-                      label: const Text('Valider & Ouvrir', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                      onPressed: () async {
-                        try {
-                          setState(() => _isLoadingStats = true);
-                          await repository.validatePatient(patient.id);
-                          if (!mounted) return;
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text('Le compte de ${patient.fullName} a été validé !'),
-                              backgroundColor: Colors.green,
-                            ),
-                          );
-                          await _loadDashboardData();
-                          _startExistingPatientConsultation(patient);
-                        } catch (e) {
-                          if (!mounted) return;
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text('Erreur lors de la validation: $e'),
-                              backgroundColor: Colors.red,
-                            ),
-                          );
-                        } finally {
-                          setState(() => _isLoadingStats = false);
-                        }
-                      },
+                      icon: const Icon(Icons.visibility_outlined, size: 16),
+                      label: const Text('Voir le dossier', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                      onPressed: () => _showPatientValidationSheet(patient),
                     ),
                   ],
                 ),
@@ -954,11 +1182,13 @@ class _NurseHomePageState extends State<NurseHomePage> {
                                     '${p.firstName} ${p.lastName}',
                                     style: const TextStyle(fontWeight: FontWeight.bold),
                                   ),
-                                  subtitle: Text(p.phone ?? 'Pas de numéro de téléphone'),
+                                  subtitle: Text(
+                                    '${p.phone ?? 'Pas de numéro'} · ${_consultationsForPatient(p.id).length} consultation(s)',
+                                  ),
                                   trailing: const Icon(Icons.chevron_right),
                                   onTap: () {
                                     Navigator.pop(context);
-                                    _startExistingPatientConsultation(p);
+                                    _showPatientDossierSheet(p);
                                   },
                                 ),
                               );
@@ -1079,16 +1309,26 @@ class _NurseHomePageState extends State<NurseHomePage> {
           emptyText: 'Aucun antécédent configuré',
           onChanged: (id, selected) => viewModel.toggleSelection('MEDICAL_HISTORY', id, selected),
         ),
-      3 => ClinicalSelectionStep(
+      3 => TouchCheckSelectionStep(
           items: viewModel.touchChecks,
           selectedIds: viewModel.selectedTouchCheckIds,
+          observations: viewModel.touchCheckObservations,
+          observationOptions: NurseConsultationViewModel.touchObservationOptions,
           emptyText: 'Aucune vérification configurée',
-          onChanged: (id, selected) => viewModel.toggleSelection('TOUCH_CHECK', id, selected),
+          onSelectionChanged: viewModel.toggleTouchCheck,
+          onObservationChanged: viewModel.setTouchCheckObservation,
         ),
-      4 => ImageStep(
-          hasImage: viewModel.image != null,
+      4 => OrlImageCaptureStep(
+          image: viewModel.image,
+          isEditing: viewModel.isEditingImage,
           onCamera: () => viewModel.pickImage(ImageSource.camera),
           onGallery: () => viewModel.pickImage(ImageSource.gallery),
+          onRotateLeft: () => viewModel.rotateImage(clockwise: false),
+          onRotateRight: () => viewModel.rotateImage(clockwise: true),
+          onFlipHorizontal: viewModel.flipImageHorizontal,
+          onBrighten: () => viewModel.adjustImageBrightness(brighter: true),
+          onDarken: () => viewModel.adjustImageBrightness(brighter: false),
+          onRemove: viewModel.clearImage,
         ),
       _ => RecapStep(
           firstName: firstNameController.text,
@@ -1100,8 +1340,8 @@ class _NurseHomePageState extends State<NurseHomePage> {
           notesController: notesController,
           selectedSymptoms: viewModel.labelsFor(viewModel.symptoms, viewModel.selectedSymptomIds),
           selectedHistories: viewModel.labelsFor(viewModel.medicalHistories, viewModel.selectedMedicalHistoryIds),
-          selectedTouchChecks: viewModel.labelsFor(viewModel.touchChecks, viewModel.selectedTouchCheckIds),
-          hasImage: viewModel.image != null,
+          selectedTouchChecks: viewModel.touchCheckSummaries(),
+          image: viewModel.image,
           requestSpecialistReview: viewModel.requestSpecialistReview,
           onReviewChanged: viewModel.setRequestSpecialistReview,
         ),
@@ -1109,6 +1349,18 @@ class _NurseHomePageState extends State<NurseHomePage> {
   }
 
   void _handleNext() {
+    if (viewModel.currentStep == 3) {
+      final validationError = viewModel.validateTouchCheckStep();
+      if (validationError != null) {
+        viewModel.errorMessage = validationError;
+        viewModel.notifyListeners();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(validationError), backgroundColor: Colors.orange),
+        );
+        return;
+      }
+    }
+
     if (viewModel.currentStep < steps.length - 1) {
       viewModel.nextStep();
       return;
@@ -1147,11 +1399,12 @@ class _NurseHomePageState extends State<NurseHomePage> {
             child: _cases.isEmpty
                 ? const Center(child: Text('Aucun diagnostic enregistré.'))
                 : ListView.builder(
-                    itemCount: _cases.length,
+                    itemCount: _cases.sortedByNewest().length,
                     itemBuilder: (context, index) {
-                      final c = _cases[index];
+                      final c = _cases.sortedByNewest()[index];
                       final summary = c.summary;
-                      final isCompleted = c.status == 'AI_COMPLETED' || c.status == 'SPECIALIST_COMPLETED';
+                      final patientName = _patientNameForCase(c);
+                      final isCompleted = c.isCompleted;
 
                       return Card(
                         margin: const EdgeInsets.only(bottom: 12),
@@ -1169,46 +1422,26 @@ class _NurseHomePageState extends State<NurseHomePage> {
                             ),
                           ),
                           title: Text(
-                            summary.likelyDiagnosis ?? 'Diagnostic en attente',
+                            ConsultationFormat.formatDateTime(c.createdAt),
                             style: const TextStyle(fontWeight: FontWeight.bold),
                           ),
-                          subtitle: Text('Statut: ${c.status}'),
+                          subtitle: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              if (patientName != null)
+                                Text(patientName, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                              Text(
+                                '${ConsultationFormat.statusLabel(c.status)} · ${summary.likelyDiagnosis ?? 'En attente'}',
+                                style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
+                              ),
+                            ],
+                          ),
                           trailing: const Icon(Icons.chevron_right),
-                          onTap: () {
-                            showModalBottomSheet(
-                              context: context,
-                              isScrollControlled: true,
-                              shape: const RoundedRectangleBorder(
-                                borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-                              ),
-                              builder: (context) => Container(
-                                padding: const EdgeInsets.all(24),
-                                height: MediaQuery.of(context).size.height * 0.75,
-                                child: SingleChildScrollView(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        'Détails du Diagnostic',
-                                        style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
-                                      ),
-                                      const Divider(height: 24),
-                                      SummaryLine(label: 'Statut', value: c.status),
-                                      SummaryLine(label: 'Diagnostic probable', value: summary.likelyDiagnosis ?? 'Non déterminé'),
-                                      SummaryLine(label: 'Avis image', value: summary.imageOpinion ?? 'Non disponible'),
-                                      SummaryLine(label: 'Avis symptômes', value: summary.ragOpinion ?? 'Non disponible'),
-                                      SummaryLine(label: 'Confiance', value: summary.confidenceLabel),
-                                      if (summary.warnings.isNotEmpty) ...[
-                                        const SizedBox(height: 16),
-                                        const Text('Alertes', style: TextStyle(fontWeight: FontWeight.bold)),
-                                        ...summary.warnings.map((w) => Text('- $w', style: const TextStyle(fontSize: 12))),
-                                      ],
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            );
-                          },
+                          onTap: () => showConsultationDetailSheet(
+                            context,
+                            c,
+                            patientName: patientName,
+                          ),
                         ),
                       );
                     },
@@ -1615,6 +1848,125 @@ class SprintCard extends StatelessWidget {
   }
 }
 
+class TouchCheckSelectionStep extends StatelessWidget {
+  const TouchCheckSelectionStep({
+    super.key,
+    required this.items,
+    required this.selectedIds,
+    required this.observations,
+    required this.observationOptions,
+    required this.emptyText,
+    required this.onSelectionChanged,
+    required this.onObservationChanged,
+  });
+
+  final List<ClinicalReferenceItem> items;
+  final Set<String> selectedIds;
+  final Map<String, String> observations;
+  final List<String> observationOptions;
+  final String emptyText;
+  final void Function(String id, bool selected) onSelectionChanged;
+  final void Function(String id, String value) onObservationChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    if (items.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 32),
+        child: Center(child: Text(emptyText, style: const TextStyle(color: Colors.grey))),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Cochez chaque vérification réalisée, puis indiquez ce que vous avez observé.',
+          style: TextStyle(fontSize: 13, color: Colors.grey.shade700, height: 1.4),
+        ),
+        const SizedBox(height: 12),
+        ...items.map((item) {
+          final isSelected = selectedIds.contains(item.id);
+          final observation = observations[item.id];
+
+          return AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            margin: const EdgeInsets.only(bottom: 12),
+            decoration: BoxDecoration(
+              color: isSelected
+                  ? Theme.of(context).colorScheme.primary.withOpacity(0.04)
+                  : Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: isSelected
+                    ? Theme.of(context).colorScheme.primary
+                    : Colors.grey.shade200,
+                width: isSelected ? 1.5 : 1,
+              ),
+            ),
+            child: Column(
+              children: [
+                CheckboxListTile(
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  title: Text(
+                    item.label,
+                    style: TextStyle(fontWeight: isSelected ? FontWeight.bold : FontWeight.normal),
+                  ),
+                  subtitle: item.description == null ? null : Text(item.description!),
+                  value: isSelected,
+                  activeColor: Theme.of(context).colorScheme.primary,
+                  onChanged: (value) => onSelectionChanged(item.id, value ?? false),
+                ),
+                if (isSelected)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Observation',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.grey.shade700,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        DropdownButtonFormField<String>(
+                          value: observationOptions.contains(observation)
+                              ? observation
+                              : observationOptions.first,
+                          decoration: InputDecoration(
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                            filled: true,
+                            fillColor: Colors.white,
+                          ),
+                          items: observationOptions
+                              .map(
+                                (option) => DropdownMenuItem(
+                                  value: option,
+                                  child: Text(option, style: const TextStyle(fontSize: 14)),
+                                ),
+                              )
+                              .toList(),
+                          onChanged: (value) {
+                            if (value != null) onObservationChanged(item.id, value);
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+              ],
+            ),
+          );
+        }),
+      ],
+    );
+  }
+}
+
 class ClinicalSelectionStep extends StatelessWidget {
   const ClinicalSelectionStep({
     super.key,
@@ -1802,7 +2154,6 @@ class PatientInfoStep extends StatelessWidget {
                     segments: const [
                       ButtonSegment(value: 'M', label: Text('M')),
                       ButtonSegment(value: 'F', label: Text('F')),
-                      ButtonSegment(value: 'OTHER', label: Text('Autre')),
                     ],
                     selected: {sex},
                     onSelectionChanged: (value) => onSexChanged(value.first),
@@ -1811,78 +2162,6 @@ class PatientInfoStep extends StatelessWidget {
               ),
             ),
           ],
-        ),
-      ],
-    );
-  }
-}
-
-class ImageStep extends StatelessWidget {
-  const ImageStep({
-    super.key,
-    required this.hasImage,
-    required this.onCamera,
-    required this.onGallery,
-  });
-
-  final bool hasImage;
-  final VoidCallback onCamera;
-  final VoidCallback onGallery;
-
-  @override
-  Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        const SizedBox(height: 12),
-        AnimatedContainer(
-          duration: const Duration(milliseconds: 300),
-          padding: const EdgeInsets.symmetric(vertical: 32),
-          decoration: BoxDecoration(
-            color: hasImage ? colorScheme.primary.withOpacity(0.04) : Colors.grey.shade50,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: hasImage ? colorScheme.primary : Colors.grey.shade200,
-              width: 1.5,
-            ),
-          ),
-          child: Column(
-            children: [
-              Icon(
-                hasImage ? Icons.check_circle : Icons.camera_alt_outlined,
-                size: 64,
-                color: hasImage ? colorScheme.primary : Colors.grey.shade400,
-              ),
-              const SizedBox(height: 16),
-              Text(
-                hasImage ? 'Image ORL ajoutée avec succès !' : 'Aucune photo ajoutée',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                  color: hasImage ? colorScheme.primary : Colors.grey.shade700,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                hasImage ? 'Vous pouvez capturer une nouvelle photo si besoin.' : 'Prenez une photo claire avec votre otoscope mobile.',
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 24),
-        FilledButton.icon(
-          onPressed: onCamera,
-          icon: const Icon(Icons.camera),
-          label: const Text('Prendre une photo'),
-        ),
-        const SizedBox(height: 12),
-        OutlinedButton.icon(
-          onPressed: onGallery,
-          icon: const Icon(Icons.photo_library_outlined),
-          label: const Text('Choisir dans la galerie'),
         ),
       ],
     );
@@ -1902,7 +2181,7 @@ class RecapStep extends StatelessWidget {
     required this.selectedSymptoms,
     required this.selectedHistories,
     required this.selectedTouchChecks,
-    required this.hasImage,
+    required this.image,
     required this.requestSpecialistReview,
     required this.onReviewChanged,
   });
@@ -1917,9 +2196,11 @@ class RecapStep extends StatelessWidget {
   final List<String> selectedSymptoms;
   final List<String> selectedHistories;
   final List<String> selectedTouchChecks;
-  final bool hasImage;
+  final File? image;
   final bool requestSpecialistReview;
   final ValueChanged<bool> onReviewChanged;
+
+  bool get hasImage => image != null;
 
   @override
   Widget build(BuildContext context) {
@@ -1928,7 +2209,7 @@ class RecapStep extends StatelessWidget {
       children: [
         SummaryLine(label: 'Patient', value: '$firstName $lastName'.trim()),
         SummaryLine(label: 'Âge', value: age.isEmpty ? 'Non renseigné' : '$age ans'),
-        SummaryLine(label: 'Sexe', value: sex == 'M' ? 'Masculin' : sex == 'F' ? 'Féminin' : 'Autre'),
+        SummaryLine(label: 'Sexe', value: sex == 'M' ? 'Masculin' : 'Féminin'),
         SummaryLine(label: 'Téléphone', value: phone.isEmpty ? 'Non renseigné' : phone),
         SummaryLine(label: 'Adresse', value: address.isEmpty ? 'Non renseignée' : address),
         const Divider(height: 20),
@@ -1942,13 +2223,25 @@ class RecapStep extends StatelessWidget {
         ),
         SummaryLine(
           label: 'Toucher',
-          value: selectedTouchChecks.isEmpty ? 'Aucun sélectionné' : selectedTouchChecks.join(', '),
+          value: selectedTouchChecks.isEmpty ? 'Aucun sélectionné' : selectedTouchChecks.join('\n'),
         ),
         SummaryLine(
           label: 'Image ORL',
           value: hasImage ? 'Photo prête' : 'Manquante',
           valueColor: hasImage ? Colors.green : Colors.red,
         ),
+        if (hasImage) ...[
+          const SizedBox(height: 8),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: Image.file(
+              image!,
+              height: 140,
+              width: double.infinity,
+              fit: BoxFit.cover,
+            ),
+          ),
+        ],
         const Divider(height: 24),
         SwitchListTile(
           title: const Text('Demander un avis spécialiste', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),

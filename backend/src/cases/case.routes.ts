@@ -5,6 +5,7 @@ import { asyncHandler } from '../common/async-handler.js';
 import { HttpError } from '../common/http-error.js';
 import { createAiCaseFieldsSchema, specialistReviewSchema } from './case.schemas.js';
 import { caseService } from './case.service.js';
+import { patientService } from '../patients/patient.service.js';
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -40,6 +41,18 @@ caseRouter.post(
     const parsed = createAiCaseFieldsSchema.safeParse(req.body);
     if (!parsed.success) {
       throw new HttpError(400, 'VALIDATION_ERROR', 'Donnees invalides', parsed.error.flatten());
+    }
+
+    if (req.user!.role === 'PATIENT') {
+      const patient = await patientService.findById(parsed.data.patientId);
+      if (!patient) throw new HttpError(404, 'NOT_FOUND', 'Patient introuvable');
+      if (patient.isValidated) {
+        throw new HttpError(
+          403,
+          'DOSSIER_VALIDATED',
+          'Dossier validé : la pré-consultation ne peut plus être modifiée.'
+        );
+      }
     }
 
     if (!req.file) {

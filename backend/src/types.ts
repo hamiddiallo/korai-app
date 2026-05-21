@@ -1,5 +1,15 @@
 export type Role = 'NURSE' | 'SPECIALIST' | 'PATIENT' | 'ADMIN';
 
+/** Ancien libelle Prisma/PostgreSQL encore present en base. */
+export const normalizeRole = (role: string): Role => {
+  const upper = role.trim().toUpperCase();
+  if (upper === 'PROFESSIONAL') return 'NURSE';
+  if (upper === 'NURSE' || upper === 'SPECIALIST' || upper === 'PATIENT' || upper === 'ADMIN') {
+    return upper;
+  }
+  return upper as Role;
+};
+
 export type User = {
   id: string;
   fullName: string;
@@ -20,7 +30,7 @@ export type Patient = {
   firstName: string;
   lastName: string;
   birthDate?: string;
-  sex?: 'F' | 'M' | 'OTHER';
+  sex?: 'F' | 'M';
   phone?: string;
   address?: string;
   consentForAi: boolean;

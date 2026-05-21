@@ -61,6 +61,7 @@ class _KoraiAppState extends State<KoraiApp> {
       case 'ADMIN':
         return AdminHomePage(session: session);
       case 'NURSE':
+      case 'PROFESSIONAL':
         return NurseHomePage(session: session);
       case 'PATIENT':
         return PatientHomePage(session: session);

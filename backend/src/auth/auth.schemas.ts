@@ -27,7 +27,7 @@ export const registerPatientSchema = z.object({
   email: z.string().email(),
   password: z.string().min(8),
   birthDate: z.string().optional(),
-  sex: z.enum(['F', 'M', 'OTHER']).optional(),
+  sex: z.enum(['F', 'M']).optional(),
   phone: z.string().min(5).optional(),
   address: z.string().optional(),
   consentForAi: z.boolean().default(false),

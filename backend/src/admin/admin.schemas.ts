@@ -35,7 +35,7 @@ export const updateAdminPatientSchema = z.object({
   firstName: z.string().min(1).optional(),
   lastName: z.string().min(1).optional(),
   birthDate: z.string().optional(),
-  sex: z.enum(['F', 'M', 'OTHER']).optional(),
+  sex: z.enum(['F', 'M']).optional(),
   phone: z.string().optional(),
   address: z.string().optional(),
   consentForAi: z.boolean().optional(),

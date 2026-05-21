@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:image_picker/image_picker.dart';
 
+import '../../../core/utils/orl_image_editor.dart';
 import '../data/nurse_repository.dart';
 import '../domain/ai_case.dart';
 import '../domain/clinical_reference_item.dart';
@@ -24,6 +25,7 @@ class NurseConsultationViewModel extends ChangeNotifier {
   int currentStep = 0;
   bool isLoading = false;
   bool isSubmitting = false;
+  bool isEditingImage = false;
   bool requestSpecialistReview = false;
   String? errorMessage;
   List<ClinicalReferenceItem> symptoms = [];
@@ -32,8 +34,17 @@ class NurseConsultationViewModel extends ChangeNotifier {
   final selectedSymptomIds = <String>{};
   final selectedMedicalHistoryIds = <String>{};
   final selectedTouchCheckIds = <String>{};
+  final touchCheckObservations = <String, String>{};
 
   static const totalSteps = 6;
+
+  static const touchObservationOptions = [
+    'Non réalisé',
+    'Normal (négatif)',
+    'Anormal — léger',
+    'Anormal — modéré',
+    'Anormal — sévère',
+  ];
 
   Future<void> loadClinicalReferences() async {
     isLoading = true;
@@ -66,11 +77,110 @@ class NurseConsultationViewModel extends ChangeNotifier {
 
   void previousStep() => goToStep(currentStep - 1);
 
+  AiCase? findPatientPreconsultationCase(List<AiCase> cases, String patientId) {
+    final matching = cases
+        .where((c) => c.patientId == patientId && (c.symptoms?.trim().isNotEmpty ?? false))
+        .toList();
+    if (matching.isEmpty) return null;
+
+    final drafts = matching.where((c) => c.status == 'DRAFT').toList();
+    if (drafts.isNotEmpty) return drafts.first;
+
+    return matching.last;
+  }
+
+  void applyClinicalPrefillFromNarrative(String? narrative) {
+    if (narrative == null || narrative.trim().isEmpty) return;
+
+    selectedSymptomIds.clear();
+    selectedMedicalHistoryIds.clear();
+    selectedTouchCheckIds.clear();
+    touchCheckObservations.clear();
+
+    final lower = narrative.toLowerCase();
+    for (final symptom in symptoms) {
+      if (lower.contains(symptom.label.toLowerCase())) {
+        selectedSymptomIds.add(symptom.id);
+      }
+    }
+    for (final history in medicalHistories) {
+      if (lower.contains(history.label.toLowerCase())) {
+        selectedMedicalHistoryIds.add(history.id);
+      }
+    }
+    for (final touchCheck in touchChecks) {
+      final observation = _parseTouchObservationFromNarrative(narrative, touchCheck.label);
+      if (observation != null) {
+        selectedTouchCheckIds.add(touchCheck.id);
+        touchCheckObservations[touchCheck.id] = observation;
+      } else if (lower.contains(touchCheck.label.toLowerCase())) {
+        selectedTouchCheckIds.add(touchCheck.id);
+        touchCheckObservations[touchCheck.id] = touchObservationOptions[1];
+      }
+    }
+    notifyListeners();
+  }
+
+  String? _parseTouchObservationFromNarrative(String narrative, String label) {
+    final lines = narrative.split('\n');
+    for (final line in lines) {
+      final trimmed = line.trim();
+      final prefixes = ['- $label:', '$label:'];
+      for (final prefix in prefixes) {
+        if (trimmed.startsWith(prefix)) {
+          final value = trimmed.substring(prefix.length).trim();
+          if (value.isNotEmpty) return value;
+        }
+      }
+    }
+    return null;
+  }
+
+  String? extractNotesFromNarrative(String? narrative) {
+    if (narrative == null || narrative.isEmpty) return null;
+
+    const markers = ['Notes libres:', 'Notes:'];
+    for (final marker in markers) {
+      final index = narrative.indexOf(marker);
+      if (index != -1) {
+        return narrative.substring(index + marker.length).trim();
+      }
+    }
+    return null;
+  }
+
+  PreconsultationPreview buildPreconsultationPreview(String? narrative) {
+    if (narrative == null || narrative.trim().isEmpty) {
+      return const PreconsultationPreview();
+    }
+
+    final lower = narrative.toLowerCase();
+    return PreconsultationPreview(
+      symptomLabels: symptoms
+          .where((item) => lower.contains(item.label.toLowerCase()))
+          .map((item) => item.label)
+          .toList(),
+      historyLabels: medicalHistories
+          .where((item) => lower.contains(item.label.toLowerCase()))
+          .map((item) => item.label)
+          .toList(),
+      touchCheckLabels: touchChecks
+          .where((item) => lower.contains(item.label.toLowerCase()))
+          .map((item) => item.label)
+          .toList(),
+      notes: extractNotesFromNarrative(narrative),
+    );
+  }
+
   void toggleSelection(String type, String id, bool selected) {
+    if (type == 'TOUCH_CHECK') {
+      toggleTouchCheck(id, selected);
+      return;
+    }
+
     final target = switch (type) {
       'SYMPTOM' => selectedSymptomIds,
       'MEDICAL_HISTORY' => selectedMedicalHistoryIds,
-      'TOUCH_CHECK' => selectedTouchCheckIds,
       _ => selectedSymptomIds,
     };
     if (selected) {
@@ -80,6 +190,41 @@ class NurseConsultationViewModel extends ChangeNotifier {
     }
     errorMessage = null;
     notifyListeners();
+  }
+
+  void toggleTouchCheck(String id, bool selected) {
+    if (selected) {
+      selectedTouchCheckIds.add(id);
+      touchCheckObservations.putIfAbsent(id, () => touchObservationOptions[1]);
+    } else {
+      selectedTouchCheckIds.remove(id);
+      touchCheckObservations.remove(id);
+    }
+    errorMessage = null;
+    notifyListeners();
+  }
+
+  void setTouchCheckObservation(String id, String value) {
+    touchCheckObservations[id] = value;
+    errorMessage = null;
+    notifyListeners();
+  }
+
+  String? validateTouchCheckStep() {
+    for (final id in selectedTouchCheckIds) {
+      final observation = touchCheckObservations[id]?.trim();
+      if (observation == null || observation.isEmpty) {
+        return 'Sélectionnez une observation pour chaque vérification au toucher cochée.';
+      }
+    }
+    return null;
+  }
+
+  List<String> touchCheckSummaries() {
+    return touchChecks
+        .where((item) => selectedTouchCheckIds.contains(item.id))
+        .map((item) => '${item.label}: ${touchCheckObservations[item.id] ?? "—"}')
+        .toList();
   }
 
   Future<void> createPatient({
@@ -111,6 +256,51 @@ class NurseConsultationViewModel extends ChangeNotifier {
     image = File(picked.path);
     errorMessage = null;
     notifyListeners();
+  }
+
+  void clearImage() {
+    image = null;
+    errorMessage = null;
+    notifyListeners();
+  }
+
+  Future<void> rotateImage({required bool clockwise}) async {
+    await _editImage(() async {
+      final current = image;
+      if (current == null) return;
+      image = await OrlImageEditor.rotate(current, clockwise: clockwise);
+    });
+  }
+
+  Future<void> flipImageHorizontal() async {
+    await _editImage(() async {
+      final current = image;
+      if (current == null) return;
+      image = await OrlImageEditor.flipHorizontal(current);
+    });
+  }
+
+  Future<void> adjustImageBrightness({required bool brighter}) async {
+    await _editImage(() async {
+      final current = image;
+      if (current == null) return;
+      image = await OrlImageEditor.adjustBrightness(current, brighter: brighter);
+    });
+  }
+
+  Future<void> _editImage(Future<void> Function() action) async {
+    if (image == null) return;
+    isEditingImage = true;
+    errorMessage = null;
+    notifyListeners();
+    try {
+      await action();
+    } catch (error) {
+      errorMessage = error.toString();
+    } finally {
+      isEditingImage = false;
+      notifyListeners();
+    }
   }
 
   Future<void> submitSprint({
@@ -209,9 +399,19 @@ class NurseConsultationViewModel extends ChangeNotifier {
       if (address.isNotEmpty) 'Adresse: $address',
       'Symptomes: ${labelsFor(symptoms, selectedSymptomIds).join(', ')}',
       'Antecedents: ${labelsFor(medicalHistories, selectedMedicalHistoryIds).join(', ')}',
-      'Verifications au toucher: ${labelsFor(touchChecks, selectedTouchCheckIds).join(', ')}',
+      ..._touchCheckNarrativeLines(),
       if (notes.isNotEmpty) 'Notes libres: $notes',
     ].join('\n');
+  }
+
+  List<String> _touchCheckNarrativeLines() {
+    if (selectedTouchCheckIds.isEmpty) {
+      return ['Verifications au toucher: Aucune'];
+    }
+    return [
+      'Verifications au toucher:',
+      ...touchCheckSummaries().map((line) => '- $line'),
+    ];
   }
 
   List<String> labelsFor(List<ClinicalReferenceItem> items, Set<String> selectedIds) {
@@ -231,4 +431,21 @@ class NurseConsultationViewModel extends ChangeNotifier {
       notifyListeners();
     }
   }
+}
+
+class PreconsultationPreview {
+  const PreconsultationPreview({
+    this.symptomLabels = const [],
+    this.historyLabels = const [],
+    this.touchCheckLabels = const [],
+    this.notes,
+  });
+
+  final List<String> symptomLabels;
+  final List<String> historyLabels;
+  final List<String> touchCheckLabels;
+  final String? notes;
+
+  bool get hasClinicalData =>
+      symptomLabels.isNotEmpty || historyLabels.isNotEmpty || touchCheckLabels.isNotEmpty || (notes?.isNotEmpty ?? false);
 }
