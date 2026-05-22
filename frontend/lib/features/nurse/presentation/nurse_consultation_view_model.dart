@@ -29,7 +29,6 @@ class NurseConsultationViewModel extends ChangeNotifier {
   bool isLoading = false;
   bool isSubmitting = false;
   bool isEditingImage = false;
-  bool requestSpecialistReview = false;
   EarSide earSide = EarSide.both;
   String? errorMessage;
   List<ClinicalReferenceItem> symptoms = [];
@@ -435,7 +434,7 @@ class NurseConsultationViewModel extends ChangeNotifier {
       ),
       clinicalNotes: notes.isEmpty ? null : notes,
       earSide: earSide,
-      requestSpecialistReview: requestSpecialistReview,
+      requestSpecialistReview: false,
       symptomIds: ClinicalSnapshot.ids(selectedSymptomIds),
       symptomLabels: ClinicalSnapshot.labels(symptoms, selectedSymptomIds),
       medicalHistoryIds: ClinicalSnapshot.ids(selectedMedicalHistoryIds),
@@ -446,9 +445,16 @@ class NurseConsultationViewModel extends ChangeNotifier {
     );
   }
 
-  void setRequestSpecialistReview(bool value) {
-    requestSpecialistReview = value;
-    notifyListeners();
+  Future<AiCase?> requestExpertiseForCurrentCase({String? summaryNote}) async {
+    final current = aiCase;
+    if (current == null || !current.canRequestExpertise) return null;
+
+    AiCase? updated;
+    await _run(() async {
+      updated = await _repository.requestExpertise(current.id, summaryNote: summaryNote);
+      aiCase = updated;
+    });
+    return updated;
   }
 
   String buildClinicalNarrative({

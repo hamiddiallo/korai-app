@@ -8,6 +8,7 @@ import 'features/admin/presentation/admin_home_page.dart';
 import 'features/auth/presentation/login_page.dart';
 import 'features/nurse/presentation/nurse_home_page.dart';
 import 'features/patient/presentation/patient_home_page.dart';
+import 'features/specialist/presentation/specialist_home_page.dart';
 
 void main() {
   runApp(const KoraiApp());
@@ -65,6 +66,8 @@ class _KoraiAppState extends State<KoraiApp> {
         return NurseHomePage(session: session);
       case 'PATIENT':
         return PatientHomePage(session: session);
+      case 'SPECIALIST':
+        return SpecialistHomePage(session: session);
       default:
         return RoleNotReadyPage(session: session);
     }

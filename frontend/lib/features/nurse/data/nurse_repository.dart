@@ -78,4 +78,12 @@ class NurseRepository {
         .map((c) => AiCase.fromJson(c as Map<String, dynamic>))
         .toList();
   }
+
+  Future<AiCase> requestExpertise(String consultationId, {String? summaryNote}) async {
+    final response = await apiClient.postJson(
+      '/cases/$consultationId/expertise/request',
+      {if (summaryNote != null && summaryNote.isNotEmpty) 'summaryNote': summaryNote},
+    );
+    return AiCase.fromJson(response['case'] as Map<String, dynamic>);
+  }
 }

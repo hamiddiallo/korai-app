@@ -34,6 +34,8 @@ export type AiSummary = {
   raw: unknown;
 };
 
+import type { EffectiveSummary, ExpertiseReviewApi } from '../modules/expertise/expertise.types.js';
+
 /** Format API legacy `/cases` pour compatibilite frontend. */
 export type LegacyOrlCase = {
   id: string;
@@ -53,6 +55,8 @@ export type LegacyOrlCase = {
   touchObservations?: Record<string, string>;
   aiResponse?: unknown;
   organizedAiSummary?: AiSummary;
+  expertiseReview?: ExpertiseReviewApi;
+  effectiveSummary?: EffectiveSummary;
   status: string;
   urgency: string;
   createdAt: string;

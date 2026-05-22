@@ -1,5 +1,6 @@
 import type { ConsultationStatus, EarSide, UrgencyLevel } from '@prisma/client';
-import type { AiSummary, LegacyOrlCase } from '../../common/types.js';
+import type { AiSummary, LegacyOrlCase, Role } from '../../common/types.js';
+import { toLegacyOrlCaseFromRecord, type ConsultationWithExpertise } from './consultation.mapper.js';
 
 export type ConsultationRecord = {
   id: string;
@@ -32,41 +33,7 @@ export type ConsultationRecord = {
   };
 };
 
-export const toLegacyOrlCase = (consultation: ConsultationRecord): LegacyOrlCase => {
-  const organizedAiSummary: AiSummary | undefined = consultation.aiResponse
-    ? {
-        imageOpinion: consultation.aiResponse.imageOpinion ?? undefined,
-        ragOpinion: consultation.aiResponse.ragOpinion ?? undefined,
-        likelyDiagnosis: consultation.aiResponse.likelyDiagnosis ?? undefined,
-        confidenceLabel:
-          (consultation.aiResponse.confidenceLabel as AiSummary['confidenceLabel']) ?? 'UNKNOWN',
-        warnings: consultation.aiResponse.warnings,
-        sources: consultation.aiResponse.sources,
-        raw: consultation.aiResponse.rawJson
-      }
-    : undefined;
-
-  return {
-    id: consultation.id,
-    externalAiCaseId: consultation.externalAiCaseId,
-    patientId: consultation.patientId,
-    createdByUserId: consultation.createdByUserId,
-    assignedSpecialistId: consultation.assignedSpecialistId,
-    earSide: consultation.earSide,
-    symptoms: consultation.clinicalNarrative,
-    clinicalNotes: consultation.clinicalNotes,
-    symptomIds: consultation.symptomIds,
-    symptomLabels: consultation.symptomLabels,
-    medicalHistoryIds: consultation.medicalHistoryIds,
-    medicalHistoryLabels: consultation.medicalHistoryLabels,
-    touchCheckIds: consultation.touchCheckIds,
-    touchCheckLabels: consultation.touchCheckLabels,
-    touchObservations: consultation.touchObservations,
-    aiResponse: consultation.aiResponse?.rawJson,
-    organizedAiSummary,
-    status: consultation.status,
-    urgency: consultation.urgency,
-    createdAt: consultation.createdAt,
-    updatedAt: consultation.updatedAt
-  };
-};
+export const toLegacyOrlCase = (
+  consultation: ConsultationRecord & { expertiseRequest?: ConsultationWithExpertise['expertiseRequest'] },
+  viewerRole: Role = 'NURSE'
+): LegacyOrlCase => toLegacyOrlCaseFromRecord(consultation, viewerRole);

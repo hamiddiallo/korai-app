@@ -54,8 +54,3 @@ export const createConsultationSchema = z.object({
   touchObservations: multipartTouchObservations
 });
 
-export const specialistReviewSchema = z.object({
-  diagnosis: z.string().min(2),
-  recommendation: z.string().min(2),
-  specialistNotes: z.string().optional()
-});

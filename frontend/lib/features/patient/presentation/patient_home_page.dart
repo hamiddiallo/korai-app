@@ -300,6 +300,7 @@ class _PatientHomePageState extends State<PatientHomePage> {
             patient: patient,
             emptyMessage: 'Aucune consultation enregistrée sur votre dossier.',
             showStartButton: false,
+            forPatient: true,
           ),
         ],
       ),

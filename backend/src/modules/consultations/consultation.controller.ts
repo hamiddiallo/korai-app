@@ -42,7 +42,8 @@ export class ConsultationController {
       ...baseInput,
       image: req.file,
       showSources: body.showSources,
-      requestSpecialistReview: body.requestSpecialistReview
+      requestSpecialistReview: body.requestSpecialistReview,
+      viewerRole: req.user!.role
     });
 
     res.status(201).json({ case: orlCase });
@@ -50,7 +51,12 @@ export class ConsultationController {
 
   async requestSpecialistReview(req: Request, res: Response) {
     res.json({
-      case: await consultationService.requestSpecialistReview(String(req.params.id), req.user!.id)
+      case: await consultationService.requestSpecialistReview(
+        String(req.params.id),
+        req.user!.id,
+        req.body,
+        req.user!.role
+      )
     });
   }
 
@@ -59,7 +65,8 @@ export class ConsultationController {
       case: await consultationService.completeSpecialistReview(
         String(req.params.id),
         req.user!.id,
-        req.body
+        req.body,
+        req.user!.role
       )
     });
   }

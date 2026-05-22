@@ -29,6 +29,7 @@ const persistAiAndFinalize = async (
     createdByUserId: string;
     requestSpecialistReview: boolean;
     hadOtoscopicImage: boolean;
+    viewerRole: AuthenticatedUser['role'];
   },
   rawJson: unknown
 ) => {
@@ -50,15 +51,15 @@ const persistAiAndFinalize = async (
   });
 
   if (input.requestSpecialistReview && updated) {
-    await expertiseService.requestReview(updated.id, input.createdByUserId);
+    await expertiseService.createRequest(updated.id, input.createdByUserId);
   }
 
   const withAi = await consultationDao.findById(consultationId);
-  return toLegacyOrlCase(withAi!);
+  return toLegacyOrlCase(withAi!, input.viewerRole);
 };
 
 export const consultationService = {
-  async createDraft(input: CreateInput) {
+  async createDraft(input: CreateInput, viewerRole: AuthenticatedUser['role'] = 'NURSE') {
     const patient = await patientDao.findById(input.patientId);
     if (!patient) throw notFound('Patient introuvable');
 
@@ -66,7 +67,7 @@ export const consultationService = {
       ...input,
       status: ConsultationStatus.DRAFT
     });
-    return toLegacyOrlCase(consultation);
+    return toLegacyOrlCase(consultation, viewerRole);
   },
 
   /**
@@ -77,6 +78,7 @@ export const consultationService = {
       image?: Express.Multer.File;
       showSources: boolean;
       requestSpecialistReview: boolean;
+      viewerRole: AuthenticatedUser['role'];
     }
   ) {
     const patient = await patientDao.findById(input.patientId);
@@ -102,11 +104,16 @@ export const consultationService = {
         showSources: input.showSources
       });
 
-      return persistAiAndFinalize(consultation.id, {
-        createdByUserId: input.createdByUserId,
-        requestSpecialistReview: input.requestSpecialistReview,
-        hadOtoscopicImage: true
-      }, rawJson);
+      return persistAiAndFinalize(
+        consultation.id,
+        {
+          createdByUserId: input.createdByUserId,
+          requestSpecialistReview: input.requestSpecialistReview,
+          hadOtoscopicImage: true,
+          viewerRole: input.viewerRole
+        },
+        rawJson
+      );
     }
 
     const rawJson = await aiService.ragAnalyze({
@@ -114,7 +121,16 @@ export const consultationService = {
       showSources: input.showSources
     });
 
-    return persistAiAndFinalize(consultation.id, { ...input, hadOtoscopicImage: false }, rawJson);
+    return persistAiAndFinalize(
+      consultation.id,
+      {
+        createdByUserId: input.createdByUserId,
+        requestSpecialistReview: input.requestSpecialistReview,
+        hadOtoscopicImage: false,
+        viewerRole: input.viewerRole
+      },
+      rawJson
+    );
   },
 
   async listForUser(user: AuthenticatedUser) {
@@ -126,7 +142,8 @@ export const consultationService = {
           ? consultations.filter(
               (c) =>
                 c.status === ConsultationStatus.PENDING_SPECIALIST_REVIEW ||
-                c.assignedSpecialistId === user.id
+                c.assignedSpecialistId === user.id ||
+                c.expertiseRequest?.assignedToUserId === user.id
             )
           : user.role === 'PATIENT'
             ? consultations.filter(
@@ -136,33 +153,36 @@ export const consultationService = {
               )
             : consultations;
 
-    return filtered.map(toLegacyOrlCase);
+    return filtered.map((c) => toLegacyOrlCase(c, user.role));
   },
 
-  async requestSpecialistReview(id: string, requestedByUserId: string) {
-    const current = await consultationDao.findById(id);
-    if (!current) throw notFound('Cas introuvable');
-
-    await expertiseService.requestReview(id, requestedByUserId);
-    const updated = await consultationDao.update(id, {
-      status: ConsultationStatus.PENDING_SPECIALIST_REVIEW
-    });
-    return toLegacyOrlCase(updated!);
+  async requestSpecialistReview(
+    id: string,
+    requestedByUserId: string,
+    input?: { summaryNote?: string; noteAudio?: string },
+    viewerRole: AuthenticatedUser['role'] = 'NURSE'
+  ) {
+    await expertiseService.createRequest(id, requestedByUserId, input);
+    const updated = await consultationDao.findById(id);
+    if (!updated) throw notFound('Cas introuvable');
+    return toLegacyOrlCase(updated, viewerRole);
   },
 
   async completeSpecialistReview(
     id: string,
     specialistId: string,
-    review: { diagnosis: string; recommendation: string; specialistNotes?: string }
+    review: {
+      decision: import('@prisma/client').ExpertDecision;
+      comment?: string;
+      correctedLikelyDiagnosis?: string;
+      correctedRecommendation?: string;
+      correctedClinicalSummary?: string;
+    },
+    viewerRole: AuthenticatedUser['role'] = 'SPECIALIST'
   ) {
-    const current = await consultationDao.findById(id);
-    if (!current) throw notFound('Cas introuvable');
-
-    await expertiseService.completeReview(id, specialistId, review);
-    const updated = await consultationDao.update(id, {
-      assignedSpecialistId: specialistId,
-      status: ConsultationStatus.SPECIALIST_COMPLETED
-    });
-    return toLegacyOrlCase(updated!);
+    await expertiseService.submitReview(id, specialistId, review);
+    const updated = await consultationDao.findById(id);
+    if (!updated) throw notFound('Cas introuvable');
+    return toLegacyOrlCase(updated, viewerRole);
   }
 };

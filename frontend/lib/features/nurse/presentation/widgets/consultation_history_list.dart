@@ -4,6 +4,7 @@ import '../../../../core/domain/korai_enums.dart';
 import '../../../../core/utils/consultation_format.dart';
 import '../../domain/ai_case.dart';
 import '../../domain/patient.dart';
+import 'expertise_request_panel.dart';
 
 typedef ConsultationPatientNameResolver = String? Function(AiCase consultation);
 
@@ -17,6 +18,9 @@ class ConsultationHistoryList extends StatelessWidget {
     this.onResumeDraft,
     this.onStartNew,
     this.showStartButton = true,
+    this.forPatient = false,
+    this.onRequestExpertise,
+    this.onConsultationUpdated,
   });
 
   final List<AiCase> consultations;
@@ -26,6 +30,9 @@ class ConsultationHistoryList extends StatelessWidget {
   final void Function(AiCase draft)? onResumeDraft;
   final VoidCallback? onStartNew;
   final bool showStartButton;
+  final bool forPatient;
+  final ExpertiseRequestCallback? onRequestExpertise;
+  final void Function(AiCase updated)? onConsultationUpdated;
 
   @override
   Widget build(BuildContext context) {
@@ -79,6 +86,9 @@ class ConsultationHistoryList extends StatelessWidget {
             consultation: consultation,
             patientName: patientName,
             onResumeDraft: onResumeDraft,
+            forPatient: forPatient,
+            onRequestExpertise: onRequestExpertise,
+            onConsultationUpdated: onConsultationUpdated,
           );
         }),
         if (showStartButton && onStartNew != null) ...[
@@ -100,11 +110,17 @@ class ConsultationHistoryEntry extends StatelessWidget {
     required this.consultation,
     this.patientName,
     this.onResumeDraft,
+    this.forPatient = false,
+    this.onRequestExpertise,
+    this.onConsultationUpdated,
   });
 
   final AiCase consultation;
   final String? patientName;
   final void Function(AiCase draft)? onResumeDraft;
+  final bool forPatient;
+  final ExpertiseRequestCallback? onRequestExpertise;
+  final void Function(AiCase updated)? onConsultationUpdated;
 
   @override
   Widget build(BuildContext context) {
@@ -195,7 +211,12 @@ class ConsultationHistoryEntry extends StatelessWidget {
           ),
           children: hasAiDetails
               ? [
-                  ConsultationDiagnosticDetails(consultation: consultation),
+                  ConsultationDiagnosticDetails(
+                    consultation: consultation,
+                    forPatient: forPatient,
+                    onRequestExpertise: onRequestExpertise,
+                    onConsultationUpdated: onConsultationUpdated,
+                  ),
                 ]
               : [
                   Padding(
@@ -220,12 +241,35 @@ class ConsultationHistoryEntry extends StatelessWidget {
 
 /// Sections repliables du compte-rendu (évite d'afficher tout le texte d'un coup).
 class ConsultationDiagnosticDetails extends StatelessWidget {
-  const ConsultationDiagnosticDetails({super.key, required this.consultation});
+  const ConsultationDiagnosticDetails({
+    super.key,
+    required this.consultation,
+    this.forPatient = false,
+    this.onRequestExpertise,
+    this.onConsultationUpdated,
+  });
 
   final AiCase consultation;
+  final bool forPatient;
+  final ExpertiseRequestCallback? onRequestExpertise;
+  final void Function(AiCase updated)? onConsultationUpdated;
 
   @override
   Widget build(BuildContext context) {
+    final effective = consultation.effectiveSummary;
+    final hideForPatient = forPatient && !consultation.patientCanSeeClinicalDetails;
+
+    if (hideForPatient) {
+      return Padding(
+        padding: const EdgeInsets.all(12),
+        child: Text(
+          effective?.patientStatusLabel ??
+              'Votre consultation est en cours d\'analyse par un spécialiste.',
+          style: TextStyle(fontSize: 13, color: Colors.grey.shade700),
+        ),
+      );
+    }
+
     final summary = consultation.summary;
     final sections = <Widget>[
       _ExpandableDetailSection(
@@ -235,29 +279,48 @@ class ConsultationDiagnosticDetails extends StatelessWidget {
           _DetailRow('Statut', ConsultationFormat.statusLabel(consultation.status)),
           _DetailRow('Oreille', ConsultationFormat.earSideLabel(consultation.earSide)),
           _DetailRow('Mise à jour', ConsultationFormat.formatDateTime(consultation.updatedAt)),
+          if (effective != null)
+            _DetailRow('Source', effective.source.badgeLabel),
         ],
       ),
-      if (_hasText(summary.likelyDiagnosis) || summary.confidenceLabel != AiConfidenceLabel.unknown)
+      if (_hasText(consultation.displayDiagnosis) ||
+          consultation.displayConfidence != AiConfidenceLabel.unknown)
         _ExpandableDetailSection(
           title: 'Synthèse diagnostique',
           icon: Icons.medical_information_outlined,
           children: [
-            if (_hasText(summary.likelyDiagnosis))
-              _DetailRow('Diagnostic probable', summary.likelyDiagnosis!),
-            _DetailRow('Confiance', summary.confidenceLabel.value),
+            _DetailRow('Diagnostic', consultation.displayDiagnosis),
+            _DetailRow('Confiance', consultation.displayConfidence.value),
+            if (_hasText(consultation.displayRecommendation))
+              _DetailRow('Recommandation', consultation.displayRecommendation!),
+            if (_hasText(consultation.displayClinicalSummary))
+              _DetailParagraph(consultation.displayClinicalSummary!),
           ],
         ),
-      if (_hasText(summary.imageOpinion))
+      if (effective == null || effective.source == EffectiveSummarySource.ai) ...[
+        if (_hasText(summary.imageOpinion))
+          _ExpandableDetailSection(
+            title: 'Avis image (IA)',
+            icon: Icons.image_outlined,
+            children: [_DetailParagraph(summary.imageOpinion!)],
+          ),
+        if (_hasText(summary.ragOpinion))
+          _ExpandableDetailSection(
+            title: 'Avis symptômes RAG (IA)',
+            icon: Icons.article_outlined,
+            children: [_DetailParagraph(summary.ragOpinion!)],
+          ),
+      ],
+      if (consultation.expertiseReview != null)
         _ExpandableDetailSection(
-          title: 'Avis image',
-          icon: Icons.image_outlined,
-          children: [_DetailParagraph(summary.imageOpinion!)],
-        ),
-      if (_hasText(summary.ragOpinion))
-        _ExpandableDetailSection(
-          title: 'Avis symptômes (RAG)',
-          icon: Icons.article_outlined,
-          children: [_DetailParagraph(summary.ragOpinion!)],
+          title: 'Expertise',
+          icon: Icons.verified_user_outlined,
+          children: [
+            if (consultation.expertiseReview!.decision != null)
+              _DetailRow('Décision', consultation.expertiseReview!.decision!.label),
+            if (_hasText(consultation.expertiseReview!.comment))
+              _DetailParagraph(consultation.expertiseReview!.comment!),
+          ],
         ),
       if (consultation.symptomLabels.isNotEmpty ||
           consultation.medicalHistoryLabels.isNotEmpty ||
@@ -286,6 +349,12 @@ class ConsultationDiagnosticDetails extends StatelessWidget {
           title: 'Sources (${summary.sources.length})',
           icon: Icons.menu_book_outlined,
           children: summary.sources.map((s) => _DetailBullet(s)).toList(),
+        ),
+      if (!forPatient && onRequestExpertise != null)
+        ExpertiseRequestPanel(
+          consultation: consultation,
+          onRequest: onRequestExpertise!,
+          onUpdated: onConsultationUpdated,
         ),
     ];
 

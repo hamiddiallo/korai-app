@@ -4,8 +4,10 @@ import { requireAuth, requireRoles } from '../../common/middleware/auth.middlewa
 import { asyncHandler } from '../../common/utils/async-handler.js';
 import { HttpError } from '../../common/errors/http-error.js';
 import { validateBody } from '../../common/middleware/validate.middleware.js';
-import { createConsultationSchema, specialistReviewSchema } from './consultation.schemas.js';
+import { createConsultationSchema } from './consultation.schemas.js';
 import { consultationController } from './consultation.controller.js';
+import { caseExpertiseRouter } from '../expertise/expertise.routes.js';
+import { requestExpertiseSchema, submitExpertiseReviewSchema } from '../expertise/expertise.schemas.js';
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -39,15 +41,20 @@ consultationRouter.post(
   asyncHandler((req, res) => consultationController.diagnose(req, res))
 );
 
+consultationRouter.use('/:id/expertise', caseExpertiseRouter);
+
+/** @deprecated Utiliser POST /:id/expertise/request */
 consultationRouter.post(
   '/:id/request-specialist-review',
   requireRoles('NURSE', 'ADMIN'),
+  validateBody(requestExpertiseSchema),
   asyncHandler((req, res) => consultationController.requestSpecialistReview(req, res))
 );
 
+/** @deprecated Utiliser POST /:id/expertise/assign puis /:id/expertise/review */
 consultationRouter.post(
   '/:id/specialist-review',
   requireRoles('SPECIALIST', 'ADMIN'),
-  validateBody(specialistReviewSchema),
+  validateBody(submitExpertiseReviewSchema),
   asyncHandler((req, res) => consultationController.completeSpecialistReview(req, res))
 );

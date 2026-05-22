@@ -13,6 +13,7 @@ import '../domain/clinical_reference_item.dart';
 import '../domain/patient.dart';
 import 'nurse_consultation_view_model.dart';
 import 'widgets/consultation_history_list.dart';
+import 'widgets/expertise_request_panel.dart';
 import '../../chatbot/presentation/korai_chatbot_screen.dart';
 
 class NurseHomePage extends StatefulWidget {
@@ -285,6 +286,29 @@ class _NurseHomePageState extends State<NurseHomePage> {
     return null;
   }
 
+  Future<AiCase> _requestExpertise(AiCase consultation, {String? summaryNote}) async {
+    final updated = await repository.requestExpertise(
+      consultation.id,
+      summaryNote: summaryNote ?? consultation.clinicalNotes,
+    );
+    _onConsultationUpdated(updated);
+    return updated;
+  }
+
+  void _onConsultationUpdated(AiCase updated) {
+    setState(() {
+      final index = _cases.indexWhere((c) => c.id == updated.id);
+      if (index >= 0) {
+        _cases[index] = updated;
+      } else {
+        _cases = [updated, ..._cases];
+      }
+      if (viewModel.aiCase?.id == updated.id) {
+        viewModel.aiCase = updated;
+      }
+    });
+  }
+
   void _showPatientDossierSheet(Patient patient) {
     final consultations = _consultationsForPatient(patient.id);
 
@@ -342,6 +366,8 @@ class _NurseHomePageState extends State<NurseHomePage> {
                       Navigator.pop(context);
                       _startExistingPatientConsultation(patient, prefillNarrative: draft.symptoms);
                     },
+                    onRequestExpertise: _requestExpertise,
+                    onConsultationUpdated: _onConsultationUpdated,
                   ),
                 ],
               ),
@@ -1272,7 +1298,12 @@ class _NurseHomePageState extends State<NurseHomePage> {
               ),
               if (viewModel.aiCase != null) ...[
                 const SizedBox(height: 16),
-                AiResultCard(aiCase: viewModel.aiCase!),
+                AiResultCard(
+                  aiCase: viewModel.aiCase!,
+                  onRequestExpertise: _requestExpertise,
+                  onUpdated: _onConsultationUpdated,
+                  summaryNote: notesController.text.trim(),
+                ),
               ],
             ],
           ),
@@ -1347,8 +1378,6 @@ class _NurseHomePageState extends State<NurseHomePage> {
           selectedHistories: viewModel.labelsFor(viewModel.medicalHistories, viewModel.selectedMedicalHistoryIds),
           selectedTouchChecks: viewModel.touchCheckSummaries(),
           image: viewModel.image,
-          requestSpecialistReview: viewModel.requestSpecialistReview,
-          onReviewChanged: viewModel.setRequestSpecialistReview,
         ),
     };
   }
@@ -1408,6 +1437,8 @@ class _NurseHomePageState extends State<NurseHomePage> {
                       consultations: _cases.sortedByNewest(),
                       showStartButton: false,
                       patientNameFor: _patientNameForCase,
+                      onRequestExpertise: _requestExpertise,
+                      onConsultationUpdated: _onConsultationUpdated,
                     ),
                   ),
           ),
@@ -2147,8 +2178,6 @@ class RecapStep extends StatelessWidget {
     required this.selectedHistories,
     required this.selectedTouchChecks,
     required this.image,
-    required this.requestSpecialistReview,
-    required this.onReviewChanged,
   });
 
   final String firstName;
@@ -2163,8 +2192,6 @@ class RecapStep extends StatelessWidget {
   final List<String> selectedHistories;
   final List<String> selectedTouchChecks;
   final File? image;
-  final bool requestSpecialistReview;
-  final ValueChanged<bool> onReviewChanged;
 
   bool get hasImage => image != null;
 
@@ -2209,14 +2236,6 @@ class RecapStep extends StatelessWidget {
             ),
           ),
         ],
-        const Divider(height: 24),
-        SwitchListTile(
-          title: const Text('Demander un avis spécialiste', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-          subtitle: const Text('Soumettre le diagnostic pour validation experte.', style: TextStyle(fontSize: 11)),
-          value: requestSpecialistReview,
-          onChanged: onReviewChanged,
-          contentPadding: EdgeInsets.zero,
-        ),
         const Divider(height: 24),
         const Text(
           'Notes ou commentaires complémentaires',
@@ -2327,9 +2346,18 @@ class ErrorBanner extends StatelessWidget {
 }
 
 class AiResultCard extends StatelessWidget {
-  const AiResultCard({super.key, required this.aiCase});
+  const AiResultCard({
+    super.key,
+    required this.aiCase,
+    this.onRequestExpertise,
+    this.onUpdated,
+    this.summaryNote,
+  });
 
-  final dynamic aiCase;
+  final AiCase aiCase;
+  final ExpertiseRequestCallback? onRequestExpertise;
+  final ValueChanged<AiCase>? onUpdated;
+  final String? summaryNote;
 
   @override
   Widget build(BuildContext context) {
@@ -2397,6 +2425,13 @@ class AiResultCard extends StatelessWidget {
                 ),
               ),
             ],
+            if (onRequestExpertise != null)
+              ExpertiseRequestPanel(
+                consultation: aiCase,
+                onRequest: onRequestExpertise!,
+                onUpdated: onUpdated,
+                summaryNote: summaryNote,
+              ),
           ],
         ),
       ),

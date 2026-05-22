@@ -7,6 +7,8 @@ import type {
 import { prisma } from '../../common/prisma.js';
 import type { ConsultationRecord } from './consultation.types.js';
 import type { AiResponseExtract } from '../ai/ai.service.js';
+import { mapExpertiseFromRow } from './consultation.mapper.js';
+import type { ExpertiseRecord } from '../expertise/expertise.types.js';
 
 const nullable = <T>(value: T | null): T | undefined => value ?? undefined;
 
@@ -39,7 +41,8 @@ const mapConsultation = (row: {
     warnings: string[];
     sources: string[];
   } | null;
-}): ConsultationRecord => ({
+  expertiseRequest?: Parameters<typeof mapExpertiseFromRow>[0] | null;
+}): ConsultationRecord & { expertiseRequest?: ExpertiseRecord } => ({
   id: row.id,
   externalAiCaseId: nullable(row.externalAiCaseId),
   patientId: row.patientId,
@@ -72,10 +75,14 @@ const mapConsultation = (row: {
         warnings: row.aiResponse.warnings,
         sources: row.aiResponse.sources
       }
-    : undefined
+    : undefined,
+  expertiseRequest: row.expertiseRequest ? mapExpertiseFromRow(row.expertiseRequest) : undefined
 });
 
-const includeAi = { aiResponse: true } as const;
+const includeRelations = {
+  aiResponse: true,
+  expertiseRequest: true
+} as const;
 
 export const consultationDao = {
   async create(input: {
@@ -111,7 +118,7 @@ export const consultationDao = {
         touchCheckLabels: input.touchCheckLabels ?? [],
         touchObservations: input.touchObservations ?? undefined
       },
-      include: includeAi
+      include: includeRelations
     });
     return mapConsultation(row);
   },
@@ -119,15 +126,19 @@ export const consultationDao = {
   async findById(id: string) {
     const row = await prisma.consultation.findUnique({
       where: { id },
-      include: includeAi
+      include: includeRelations
     });
     return row ? mapConsultation(row) : undefined;
+  },
+
+  async findByIdWithExpertise(id: string) {
+    return this.findById(id);
   },
 
   async list() {
     const rows = await prisma.consultation.findMany({
       orderBy: { updatedAt: 'desc' },
-      include: includeAi
+      include: includeRelations
     });
     return rows.map(mapConsultation);
   },
@@ -144,7 +155,7 @@ export const consultationDao = {
     const row = await prisma.consultation.update({
       where: { id },
       data: patch,
-      include: includeAi
+      include: includeRelations
     });
     return mapConsultation(row);
   },

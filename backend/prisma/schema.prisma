@@ -51,6 +51,12 @@ enum ExpertiseStatus {
   COMPLETED
 }
 
+enum ExpertDecision {
+  VALIDATED
+  CORRECTED
+  INSUFFICIENT
+}
+
 model User {
   id              String   @id @default(uuid())
   fullName        String
@@ -68,6 +74,7 @@ model User {
   consultationsCreated  Consultation[] @relation("ConsultationCreator")
   consultationsAssigned Consultation[] @relation("ConsultationSpecialist")
   expertiseRequested    ExpertiseRequest[] @relation("ExpertiseRequester")
+  expertiseAssigned     ExpertiseRequest[] @relation("ExpertiseAssignee")
 }
 
 model Patient {
@@ -148,19 +155,28 @@ model AiResponse {
 }
 
 model ExpertiseRequest {
-  id                String          @id @default(uuid())
-  consultationId    String          @unique
-  requestedByUserId String
-  assignedToUserId  String?
-  status            ExpertiseStatus @default(PENDING)
-  diagnosis         String?
-  recommendation    String?
-  specialistNotes   String?
-  createdAt         DateTime        @default(now())
-  updatedAt         DateTime        @updatedAt
+  id                        String           @id @default(uuid())
+  consultationId            String           @unique
+  requestedByUserId         String
+  assignedToUserId          String?
+  status                    ExpertiseStatus  @default(PENDING)
+  decision                  ExpertDecision?
+  comment                   String?
+  correctedLikelyDiagnosis  String?
+  correctedRecommendation   String?
+  correctedClinicalSummary  String?
+  aiLikelyDiagnosisSnapshot String?
+  aiConfidenceLabelSnapshot String?
+  aiSummarySnapshot         Json?
+  summaryNote               String?
+  noteAudio                 String?
+  reviewedAt                DateTime?
+  createdAt                 DateTime         @default(now())
+  updatedAt                 DateTime         @updatedAt
 
-  consultation Consultation @relation(fields: [consultationId], references: [id], onDelete: Cascade)
-  requester    User         @relation("ExpertiseRequester", fields: [requestedByUserId], references: [id])
+  consultation     Consultation @relation(fields: [consultationId], references: [id], onDelete: Cascade)
+  requester        User         @relation("ExpertiseRequester", fields: [requestedByUserId], references: [id])
+  assignedSpecialist User?      @relation("ExpertiseAssignee", fields: [assignedToUserId], references: [id])
 }
 
 model ClinicalReferenceItem {
