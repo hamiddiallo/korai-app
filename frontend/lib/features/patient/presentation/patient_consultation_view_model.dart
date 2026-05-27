@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../../core/auth/session_controller.dart';
@@ -13,16 +14,26 @@ import '../../nurse/domain/ai_case.dart';
 import '../../nurse/domain/clinical_reference_item.dart';
 import '../../nurse/domain/patient.dart';
 
-class PatientConsultationViewModel extends ChangeNotifier {
+class PatientConsultationState {
+  const PatientConsultationState({this.version = 0});
+
+  final int version;
+
+  PatientConsultationState next() =>
+      PatientConsultationState(version: version + 1);
+}
+
+class PatientConsultationViewModel extends Cubit<PatientConsultationState> {
   PatientConsultationViewModel({
     required PatientRepository repository,
     required this.session,
     ImagePicker? imagePicker,
   })  : _repository = repository,
-        _imagePicker = imagePicker ?? ImagePicker();
+        _imagePicker = imagePicker ?? ImagePicker(),
+        super(const PatientConsultationState());
 
   final PatientRepository _repository;
-  final SessionController session;
+  final AuthCubit session;
   final ImagePicker _imagePicker;
 
   String get linkedPatientId => session.user?.linkedPatientId ?? '';
@@ -51,10 +62,14 @@ class PatientConsultationViewModel extends ChangeNotifier {
 
   bool get isReadOnly => patient?.isValidated == true;
 
+  void _emitState() {
+    if (!isClosed) emit(state.next());
+  }
+
   Future<void> initialize() async {
     isLoading = true;
     errorMessage = null;
-    notifyListeners();
+    _emitState();
     try {
       final results = await Future.wait([
         _repository.listClinicalItems('SYMPTOM'),
@@ -79,7 +94,7 @@ class PatientConsultationViewModel extends ChangeNotifier {
       errorMessage = error.toString();
     } finally {
       isLoading = false;
-      notifyListeners();
+      _emitState();
     }
   }
 
@@ -96,7 +111,9 @@ class PatientConsultationViewModel extends ChangeNotifier {
 
   AiCase? _findPreconsultationCase(List<AiCase> cases, String patientId) {
     final matching = cases
-        .where((c) => c.patientId == patientId && (c.symptoms?.trim().isNotEmpty ?? false))
+        .where((c) =>
+            c.patientId == patientId &&
+            (c.symptoms?.trim().isNotEmpty ?? false))
         .toList();
     if (matching.isEmpty) return null;
     final drafts = matching.where((c) => c.isDraft).toList();
@@ -120,7 +137,7 @@ class PatientConsultationViewModel extends ChangeNotifier {
       selectedTouchCheckIds
         ..clear()
         ..addAll(consultation.touchCheckIds);
-      notifyListeners();
+      _emitState();
       return;
     }
 
@@ -129,7 +146,7 @@ class PatientConsultationViewModel extends ChangeNotifier {
 
   void setEarSide(EarSide value) {
     earSide = value;
-    notifyListeners();
+    _emitState();
   }
 
   void applyClinicalPrefillFromNarrative(String? narrative) {
@@ -155,6 +172,7 @@ class PatientConsultationViewModel extends ChangeNotifier {
         selectedTouchCheckIds.add(touchCheck.id);
       }
     }
+    _emitState();
   }
 
   String? _extractNotesFromNarrative(String? narrative) {
@@ -178,14 +196,15 @@ class PatientConsultationViewModel extends ChangeNotifier {
     String? sex,
   }) async {
     if (isReadOnly) {
-      errorMessage = 'Dossier validé : modification réservée au professionnel de santé.';
-      notifyListeners();
+      errorMessage =
+          'Dossier validé : modification réservée au professionnel de santé.';
+      _emitState();
       return;
     }
 
     isLoading = true;
     errorMessage = null;
-    notifyListeners();
+    _emitState();
     try {
       final updated = await _repository.updatePatient(linkedPatientId, {
         'firstName': firstName,
@@ -200,14 +219,14 @@ class PatientConsultationViewModel extends ChangeNotifier {
       errorMessage = error.toString();
     } finally {
       isLoading = false;
-      notifyListeners();
+      _emitState();
     }
   }
 
   void goToStep(int step) {
     currentStep = step.clamp(0, totalSteps - 1);
     errorMessage = null;
-    notifyListeners();
+    _emitState();
   }
 
   void nextStep() => goToStep(currentStep + 1);
@@ -229,7 +248,7 @@ class PatientConsultationViewModel extends ChangeNotifier {
       target.remove(id);
     }
     errorMessage = null;
-    notifyListeners();
+    _emitState();
   }
 
   Future<void> pickImage(ImageSource source) async {
@@ -240,13 +259,13 @@ class PatientConsultationViewModel extends ChangeNotifier {
     if (picked == null) return;
     image = File(picked.path);
     errorMessage = null;
-    notifyListeners();
+    _emitState();
   }
 
   void clearImage() {
     image = null;
     errorMessage = null;
-    notifyListeners();
+    _emitState();
   }
 
   Future<void> rotateImage({required bool clockwise}) async {
@@ -269,7 +288,8 @@ class PatientConsultationViewModel extends ChangeNotifier {
     await _editImage(() async {
       final current = image;
       if (current == null) return;
-      image = await OrlImageEditor.adjustBrightness(current, brighter: brighter);
+      image =
+          await OrlImageEditor.adjustBrightness(current, brighter: brighter);
     });
   }
 
@@ -277,14 +297,14 @@ class PatientConsultationViewModel extends ChangeNotifier {
     if (image == null) return;
     isEditingImage = true;
     errorMessage = null;
-    notifyListeners();
+    _emitState();
     try {
       await action();
     } catch (error) {
       errorMessage = error.toString();
     } finally {
       isEditingImage = false;
-      notifyListeners();
+      _emitState();
     }
   }
 
@@ -298,15 +318,16 @@ class PatientConsultationViewModel extends ChangeNotifier {
     required String notes,
   }) async {
     if (isReadOnly) {
-      errorMessage = 'Dossier validé : la pré-consultation ne peut plus être modifiée.';
-      notifyListeners();
+      errorMessage =
+          'Dossier validé : la pré-consultation ne peut plus être modifiée.';
+      _emitState();
       return;
     }
 
     isSubmitting = true;
     errorMessage = null;
     aiCase = null;
-    notifyListeners();
+    _emitState();
     try {
       final updatedPatient = await _repository.updatePatient(linkedPatientId, {
         'firstName': firstName,
@@ -335,7 +356,7 @@ class PatientConsultationViewModel extends ChangeNotifier {
       errorMessage = error.toString();
     } finally {
       isSubmitting = false;
-      notifyListeners();
+      _emitState();
     }
   }
 
@@ -361,8 +382,12 @@ class PatientConsultationViewModel extends ChangeNotifier {
     ].join('\n');
   }
 
-  List<String> labelsFor(List<ClinicalReferenceItem> items, Set<String> selectedIds) {
-    return items.where((item) => selectedIds.contains(item.id)).map((item) => item.label).toList();
+  List<String> labelsFor(
+      List<ClinicalReferenceItem> items, Set<String> selectedIds) {
+    return items
+        .where((item) => selectedIds.contains(item.id))
+        .map((item) => item.label)
+        .toList();
   }
 
   ConsultationCreatePayload buildConsultationPayload({
@@ -391,9 +416,11 @@ class PatientConsultationViewModel extends ChangeNotifier {
       symptomIds: ClinicalSnapshot.ids(selectedSymptomIds),
       symptomLabels: ClinicalSnapshot.labels(symptoms, selectedSymptomIds),
       medicalHistoryIds: ClinicalSnapshot.ids(selectedMedicalHistoryIds),
-      medicalHistoryLabels: ClinicalSnapshot.labels(medicalHistories, selectedMedicalHistoryIds),
+      medicalHistoryLabels:
+          ClinicalSnapshot.labels(medicalHistories, selectedMedicalHistoryIds),
       touchCheckIds: ClinicalSnapshot.ids(selectedTouchCheckIds),
-      touchCheckLabels: ClinicalSnapshot.labels(touchChecks, selectedTouchCheckIds),
+      touchCheckLabels:
+          ClinicalSnapshot.labels(touchChecks, selectedTouchCheckIds),
     );
   }
 }

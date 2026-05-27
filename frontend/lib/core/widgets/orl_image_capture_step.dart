@@ -56,7 +56,8 @@ class OrlImageCaptureStep extends StatelessWidget {
             ),
             child: Column(
               children: [
-                Icon(Icons.camera_alt_outlined, size: 56, color: Colors.grey.shade400),
+                Icon(Icons.camera_alt_outlined,
+                    size: 56, color: Colors.grey.shade400),
                 const SizedBox(height: 12),
                 const Text(
                   'Aucune photo otoscopique',
@@ -103,7 +104,9 @@ class OrlImageCaptureStep extends StatelessWidget {
                   constraints: const BoxConstraints(maxHeight: 320),
                   decoration: BoxDecoration(
                     color: Colors.black,
-                    border: Border.all(color: colorScheme.primary.withOpacity(0.35), width: 1.5),
+                    border: Border.all(
+                        color: colorScheme.primary.withValues(alpha: 0.35),
+                        width: 1.5),
                     borderRadius: BorderRadius.circular(16),
                   ),
                   child: InteractiveViewer(
@@ -134,7 +137,10 @@ class OrlImageCaptureStep extends StatelessWidget {
           const SizedBox(height: 12),
           Text(
             'Retouches',
-            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.grey.shade700),
+            style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: Colors.grey.shade700),
           ),
           const SizedBox(height: 8),
           Wrap(
@@ -229,7 +235,8 @@ class _RetouchButton extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(icon, size: 20, color: onPressed == null ? Colors.grey : color),
+              Icon(icon,
+                  size: 20, color: onPressed == null ? Colors.grey : color),
               const SizedBox(height: 4),
               Text(
                 label,

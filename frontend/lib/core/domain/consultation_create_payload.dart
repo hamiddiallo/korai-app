@@ -39,35 +39,46 @@ class ConsultationCreatePayload {
   Map<String, dynamic> toJsonBody() => {
         'patientId': patientId,
         'symptoms': symptoms,
-        if (clinicalNotes != null && clinicalNotes!.isNotEmpty) 'clinicalNotes': clinicalNotes,
+        if (clinicalNotes != null && clinicalNotes!.isNotEmpty)
+          'clinicalNotes': clinicalNotes,
         'urgency': urgency.value,
         'earSide': earSide.value,
         'showSources': showSources,
         'requestSpecialistReview': requestSpecialistReview,
         if (symptomIds.isNotEmpty) 'symptomIds': symptomIds,
         if (symptomLabels.isNotEmpty) 'symptomLabels': symptomLabels,
-        if (medicalHistoryIds.isNotEmpty) 'medicalHistoryIds': medicalHistoryIds,
-        if (medicalHistoryLabels.isNotEmpty) 'medicalHistoryLabels': medicalHistoryLabels,
+        if (medicalHistoryIds.isNotEmpty)
+          'medicalHistoryIds': medicalHistoryIds,
+        if (medicalHistoryLabels.isNotEmpty)
+          'medicalHistoryLabels': medicalHistoryLabels,
         if (touchCheckIds.isNotEmpty) 'touchCheckIds': touchCheckIds,
         if (touchCheckLabels.isNotEmpty) 'touchCheckLabels': touchCheckLabels,
-        if (touchObservations.isNotEmpty) 'touchObservations': touchObservations,
+        if (touchObservations.isNotEmpty)
+          'touchObservations': touchObservations,
       };
 
   /// Champs multipart : tableaux/objets encodés en JSON pour le parseur backend.
   Map<String, String> toMultipartFields() => {
         'patientId': patientId,
         'symptoms': symptoms,
-        if (clinicalNotes != null && clinicalNotes!.isNotEmpty) 'clinicalNotes': clinicalNotes!,
+        if (clinicalNotes != null && clinicalNotes!.isNotEmpty)
+          'clinicalNotes': clinicalNotes!,
         'urgency': urgency.value,
         'earSide': earSide.value,
         'showSources': showSources.toString(),
         'requestSpecialistReview': requestSpecialistReview.toString(),
         if (symptomIds.isNotEmpty) 'symptomIds': jsonEncode(symptomIds),
-        if (symptomLabels.isNotEmpty) 'symptomLabels': jsonEncode(symptomLabels),
-        if (medicalHistoryIds.isNotEmpty) 'medicalHistoryIds': jsonEncode(medicalHistoryIds),
-        if (medicalHistoryLabels.isNotEmpty) 'medicalHistoryLabels': jsonEncode(medicalHistoryLabels),
-        if (touchCheckIds.isNotEmpty) 'touchCheckIds': jsonEncode(touchCheckIds),
-        if (touchCheckLabels.isNotEmpty) 'touchCheckLabels': jsonEncode(touchCheckLabels),
-        if (touchObservations.isNotEmpty) 'touchObservations': jsonEncode(touchObservations),
+        if (symptomLabels.isNotEmpty)
+          'symptomLabels': jsonEncode(symptomLabels),
+        if (medicalHistoryIds.isNotEmpty)
+          'medicalHistoryIds': jsonEncode(medicalHistoryIds),
+        if (medicalHistoryLabels.isNotEmpty)
+          'medicalHistoryLabels': jsonEncode(medicalHistoryLabels),
+        if (touchCheckIds.isNotEmpty)
+          'touchCheckIds': jsonEncode(touchCheckIds),
+        if (touchCheckLabels.isNotEmpty)
+          'touchCheckLabels': jsonEncode(touchCheckLabels),
+        if (touchObservations.isNotEmpty)
+          'touchObservations': jsonEncode(touchObservations),
       };
 }

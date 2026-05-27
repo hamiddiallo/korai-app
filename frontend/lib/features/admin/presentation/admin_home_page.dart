@@ -7,7 +7,7 @@ import '../domain/admin_models.dart';
 class AdminHomePage extends StatefulWidget {
   const AdminHomePage({super.key, required this.session});
 
-  final SessionController session;
+  final AuthCubit session;
 
   @override
   State<AdminHomePage> createState() => _AdminHomePageState();
@@ -15,9 +15,10 @@ class AdminHomePage extends StatefulWidget {
 
 class _AdminHomePageState extends State<AdminHomePage> {
   late final AdminRepository repository;
-  
-  String? _subView; // null = Dashboard, 'USERS', 'PATIENTS', 'SYMPTOMS', 'HISTORIES', 'TOUCHES'
-  
+
+  String?
+      _subView; // null = Dashboard, 'USERS', 'PATIENTS', 'SYMPTOMS', 'HISTORIES', 'TOUCHES'
+
   bool _isLoadingStats = false;
   int _userCount = 0;
   int _patientCount = 0;
@@ -86,13 +87,12 @@ class _AdminHomePageState extends State<AdminHomePage> {
     final theme = Theme.of(context);
     final primaryColor = Colors.indigo.shade600;
 
-    return WillPopScope(
-      onWillPop: () async {
-        if (_subView != null) {
+    return PopScope(
+      canPop: _subView == null,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop && _subView != null) {
           _navigateTo(null);
-          return false;
         }
-        return true;
       },
       child: Scaffold(
         backgroundColor: Colors.grey.shade50,
@@ -106,7 +106,8 @@ class _AdminHomePageState extends State<AdminHomePage> {
   }
 
   // --- Gorgeous Dashboard Home Page ---
-  Widget _buildDashboard(BuildContext context, ThemeData theme, Color primaryColor) {
+  Widget _buildDashboard(
+      BuildContext context, ThemeData theme, Color primaryColor) {
     return RefreshIndicator(
       onRefresh: _loadStats,
       color: primaryColor,
@@ -148,7 +149,8 @@ class _AdminHomePageState extends State<AdminHomePage> {
                     color: Colors.red.shade50,
                     shape: BoxShape.circle,
                   ),
-                  child: Icon(Icons.logout_rounded, color: Colors.red.shade600, size: 20),
+                  child: Icon(Icons.logout_rounded,
+                      color: Colors.red.shade600, size: 20),
                 ),
               ),
             ],
@@ -167,7 +169,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
               borderRadius: BorderRadius.circular(20),
               boxShadow: [
                 BoxShadow(
-                  color: primaryColor.withOpacity(0.2),
+                  color: primaryColor.withValues(alpha: 0.2),
                   blurRadius: 15,
                   offset: const Offset(0, 8),
                 ),
@@ -178,23 +180,31 @@ class _AdminHomePageState extends State<AdminHomePage> {
               children: [
                 Row(
                   children: [
-                    Icon(Icons.admin_panel_settings_rounded, color: Colors.white, size: 24),
+                    Icon(Icons.admin_panel_settings_rounded,
+                        color: Colors.white, size: 24),
                     SizedBox(width: 8),
                     Text(
                       'Mode Administrateur',
-                      style: TextStyle(color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 14),
+                      style: TextStyle(
+                          color: Colors.white70,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14),
                     ),
                   ],
                 ),
                 SizedBox(height: 12),
                 Text(
                   'Bonjour, Administrateur 👋',
-                  style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
+                  style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold),
                 ),
                 SizedBox(height: 6),
                 Text(
                   'Supervisez en temps réel les accès cliniques, gérez les dossiers de patients et configurez les dictionnaires de diagnostics IA.',
-                  style: TextStyle(color: Colors.white70, fontSize: 13, height: 1.4),
+                  style: TextStyle(
+                      color: Colors.white70, fontSize: 13, height: 1.4),
                 ),
               ],
             ),
@@ -207,10 +217,16 @@ class _AdminHomePageState extends State<AdminHomePage> {
             children: [
               const Text(
                 'Vue d\'ensemble système',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF1E293B)),
+                style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF1E293B)),
               ),
               if (_isLoadingStats)
-                const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
+                const SizedBox(
+                    width: 14,
+                    height: 14,
+                    child: CircularProgressIndicator(strokeWidth: 2))
               else
                 IconButton(
                   icon: const Icon(Icons.refresh_rounded, size: 18),
@@ -223,7 +239,8 @@ class _AdminHomePageState extends State<AdminHomePage> {
           const SizedBox(height: 12),
 
           if (_statsError != null) ...[
-            Text(_statsError!, style: TextStyle(color: Colors.red.shade600, fontSize: 12)),
+            Text(_statsError!,
+                style: TextStyle(color: Colors.red.shade600, fontSize: 12)),
             const SizedBox(height: 8),
           ],
 
@@ -292,7 +309,10 @@ class _AdminHomePageState extends State<AdminHomePage> {
           // Modules Management Title
           const Text(
             'Modules de gestion',
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF1E293B)),
+            style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF1E293B)),
           ),
           const SizedBox(height: 12),
 
@@ -354,7 +374,8 @@ class _AdminHomePageState extends State<AdminHomePage> {
                     color: Colors.green.shade50,
                     shape: BoxShape.circle,
                   ),
-                  child: Icon(Icons.security_rounded, color: Colors.green.shade600, size: 20),
+                  child: Icon(Icons.security_rounded,
+                      color: Colors.green.shade600, size: 20),
                 ),
                 const SizedBox(width: 14),
                 const Expanded(
@@ -363,7 +384,10 @@ class _AdminHomePageState extends State<AdminHomePage> {
                     children: [
                       Text(
                         'Statut de l\'Infrastructure',
-                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Color(0xFF1E293B)),
+                        style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14,
+                            color: Color(0xFF1E293B)),
                       ),
                       SizedBox(height: 2),
                       Text(
@@ -374,7 +398,8 @@ class _AdminHomePageState extends State<AdminHomePage> {
                   ),
                 ),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
                     color: Colors.green.shade600,
                     borderRadius: BorderRadius.circular(20),
@@ -383,7 +408,11 @@ class _AdminHomePageState extends State<AdminHomePage> {
                     children: [
                       CircleAvatar(radius: 3, backgroundColor: Colors.white),
                       SizedBox(width: 4),
-                      Text('EN LIGNE', style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold)),
+                      Text('EN LIGNE',
+                          style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 9,
+                              fontWeight: FontWeight.bold)),
                     ],
                   ),
                 ),
@@ -427,12 +456,13 @@ class _AdminHomePageState extends State<AdminHomePage> {
                     Container(
                       padding: const EdgeInsets.all(6),
                       decoration: BoxDecoration(
-                        color: color.withOpacity(0.1),
+                        color: color.withValues(alpha: 0.1),
                         shape: BoxShape.circle,
                       ),
                       child: Icon(icon, color: color, size: 18),
                     ),
-                    const Icon(Icons.arrow_forward_ios_rounded, color: Colors.grey, size: 12),
+                    const Icon(Icons.arrow_forward_ios_rounded,
+                        color: Colors.grey, size: 12),
                   ],
                 ),
                 Column(
@@ -440,14 +470,20 @@ class _AdminHomePageState extends State<AdminHomePage> {
                   children: [
                     Text(
                       '$count',
-                      style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: Color(0xFF1E293B)),
+                      style: const TextStyle(
+                          fontSize: 22,
+                          fontWeight: FontWeight.w900,
+                          color: Color(0xFF1E293B)),
                     ),
                     const SizedBox(height: 2),
                     Text(
                       title,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontSize: 11, color: Colors.grey, fontWeight: FontWeight.w600),
+                      style: const TextStyle(
+                          fontSize: 11,
+                          color: Colors.grey,
+                          fontWeight: FontWeight.w600),
                     ),
                   ],
                 ),
@@ -483,7 +519,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: color.withOpacity(0.08),
+                  color: color.withValues(alpha: 0.08),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Icon(icon, color: color.shade600, size: 24),
@@ -495,17 +531,22 @@ class _AdminHomePageState extends State<AdminHomePage> {
                   children: [
                     Text(
                       title,
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Color(0xFF1E293B)),
+                      style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 15,
+                          color: Color(0xFF1E293B)),
                     ),
                     const SizedBox(height: 2),
                     Text(
                       subtitle,
-                      style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                      style:
+                          TextStyle(fontSize: 11, color: Colors.grey.shade600),
                     ),
                   ],
                 ),
               ),
-              const Icon(Icons.chevron_right_rounded, color: Colors.grey, size: 20),
+              const Icon(Icons.chevron_right_rounded,
+                  color: Colors.grey, size: 20),
             ],
           ),
         ),
@@ -514,7 +555,8 @@ class _AdminHomePageState extends State<AdminHomePage> {
   }
 
   // --- Unified Modern Sub-view builder ---
-  Widget _buildSubView(BuildContext context, ThemeData theme, Color primaryColor) {
+  Widget _buildSubView(
+      BuildContext context, ThemeData theme, Color primaryColor) {
     final title = switch (_subView) {
       'USERS' => 'Comptes Praticiens',
       'PATIENTS' => 'Dossiers Patients',
@@ -537,12 +579,16 @@ class _AdminHomePageState extends State<AdminHomePage> {
             children: [
               IconButton(
                 onPressed: () => _navigateTo(null),
-                icon: const Icon(Icons.arrow_back_rounded, color: Color(0xFF1E293B)),
+                icon: const Icon(Icons.arrow_back_rounded,
+                    color: Color(0xFF1E293B)),
               ),
               Expanded(
                 child: Text(
                   title,
-                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF1E293B)),
+                  style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF1E293B)),
                 ),
               ),
             ],
@@ -552,9 +598,16 @@ class _AdminHomePageState extends State<AdminHomePage> {
           child: switch (_subView) {
             'USERS' => AdminUsersTab(repository: repository),
             'PATIENTS' => AdminPatientsTab(repository: repository),
-            'SYMPTOMS' => ClinicalItemsTab(repository: repository, type: 'SYMPTOM', title: 'symptome'),
-            'HISTORIES' => ClinicalItemsTab(repository: repository, type: 'MEDICAL_HISTORY', title: 'antecedent'),
-            'TOUCHES' => ClinicalItemsTab(repository: repository, type: 'TOUCH_CHECK', title: 'verification au toucher'),
+            'SYMPTOMS' => ClinicalItemsTab(
+                repository: repository, type: 'SYMPTOM', title: 'symptome'),
+            'HISTORIES' => ClinicalItemsTab(
+                repository: repository,
+                type: 'MEDICAL_HISTORY',
+                title: 'antecedent'),
+            'TOUCHES' => ClinicalItemsTab(
+                repository: repository,
+                type: 'TOUCH_CHECK',
+                title: 'verification au toucher'),
             _ => const SizedBox(),
           },
         ),
@@ -598,6 +651,7 @@ class _AdminUsersTabState extends State<AdminUsersTab> {
       if (mounted) setState(() => isLoading = false);
     }
   }
+
   Future<void> openForm([AdminUser? user]) async {
     final result = await showDialog<Map<String, dynamic>>(
       context: context,
@@ -618,7 +672,8 @@ class _AdminUsersTabState extends State<AdminUsersTab> {
   }
 
   Future<void> delete(AdminUser user) async {
-    final confirmed = await confirmDelete(context, 'Supprimer ${user.fullName} ?');
+    final confirmed =
+        await confirmDelete(context, 'Supprimer ${user.fullName} ?');
     if (!confirmed) return;
     try {
       await widget.repository.deleteUser(user.id);
@@ -646,15 +701,19 @@ class _AdminUsersTabState extends State<AdminUsersTab> {
                 border: Border.all(color: Colors.grey.shade200),
               ),
               child: ListTile(
-                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                contentPadding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 leading: CircleAvatar(
-                  backgroundColor: _roleColor(user.role).withOpacity(0.1),
+                  backgroundColor: _roleColor(user.role).withValues(alpha: 0.1),
                   child: Text(
                     user.fullName.substring(0, 1).toUpperCase(),
-                    style: TextStyle(color: _roleColor(user.role), fontWeight: FontWeight.bold),
+                    style: TextStyle(
+                        color: _roleColor(user.role),
+                        fontWeight: FontWeight.bold),
                   ),
                 ),
-                title: Text(user.fullName, style: const TextStyle(fontWeight: FontWeight.bold)),
+                title: Text(user.fullName,
+                    style: const TextStyle(fontWeight: FontWeight.bold)),
                 subtitle: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -662,14 +721,18 @@ class _AdminUsersTabState extends State<AdminUsersTab> {
                     Text(user.email, style: const TextStyle(fontSize: 12)),
                     const SizedBox(height: 4),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 2),
                       decoration: BoxDecoration(
-                        color: _roleColor(user.role).withOpacity(0.08),
+                        color: _roleColor(user.role).withValues(alpha: 0.08),
                         borderRadius: BorderRadius.circular(6),
                       ),
                       child: Text(
                         user.role,
-                        style: TextStyle(color: _roleColor(user.role), fontSize: 10, fontWeight: FontWeight.bold),
+                        style: TextStyle(
+                            color: _roleColor(user.role),
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold),
                       ),
                     ),
                   ],
@@ -684,7 +747,8 @@ class _AdminUsersTabState extends State<AdminUsersTab> {
                     ),
                     IconButton(
                       tooltip: 'Supprimer',
-                      icon: Icon(Icons.delete_outline_rounded, color: Colors.red.shade400),
+                      icon: Icon(Icons.delete_outline_rounded,
+                          color: Colors.red.shade400),
                       onPressed: () => delete(user),
                     ),
                   ],
@@ -740,6 +804,7 @@ class _AdminPatientsTabState extends State<AdminPatientsTab> {
       if (mounted) setState(() => isLoading = false);
     }
   }
+
   Future<void> openForm([AdminPatient? patient]) async {
     final result = await showDialog<Map<String, dynamic>>(
       context: context,
@@ -760,7 +825,8 @@ class _AdminPatientsTabState extends State<AdminPatientsTab> {
   }
 
   Future<void> delete(AdminPatient patient) async {
-    final confirmed = await confirmDelete(context, 'Supprimer ${patient.fullName} ?');
+    final confirmed =
+        await confirmDelete(context, 'Supprimer ${patient.fullName} ?');
     if (!confirmed) return;
     try {
       await widget.repository.deletePatient(patient.id);
@@ -788,18 +854,23 @@ class _AdminPatientsTabState extends State<AdminPatientsTab> {
                 border: Border.all(color: Colors.grey.shade200),
               ),
               child: ListTile(
-                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                contentPadding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 leading: CircleAvatar(
                   backgroundColor: Colors.teal.shade50,
-                  child: Icon(Icons.personal_injury_rounded, color: Colors.teal.shade600),
+                  child: Icon(Icons.personal_injury_rounded,
+                      color: Colors.teal.shade600),
                 ),
-                title: Text(patient.fullName, style: const TextStyle(fontWeight: FontWeight.bold)),
+                title: Text(patient.fullName,
+                    style: const TextStyle(fontWeight: FontWeight.bold)),
                 subtitle: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const SizedBox(height: 4),
                     Text(
-                      [patient.phone, patient.address].where((e) => e != null && e.isNotEmpty).join(' • '),
+                      [patient.phone, patient.address]
+                          .where((e) => e != null && e.isNotEmpty)
+                          .join(' • '),
                       style: const TextStyle(fontSize: 12),
                     ),
                     const SizedBox(height: 6),
@@ -828,7 +899,8 @@ class _AdminPatientsTabState extends State<AdminPatientsTab> {
                     ),
                     IconButton(
                       tooltip: 'Supprimer',
-                      icon: Icon(Icons.delete_outline_rounded, color: Colors.red.shade400),
+                      icon: Icon(Icons.delete_outline_rounded,
+                          color: Colors.red.shade400),
                       onPressed: () => delete(patient),
                     ),
                   ],
@@ -844,12 +916,13 @@ class _AdminPatientsTabState extends State<AdminPatientsTab> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.08),
+        color: color.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(4),
       ),
       child: Text(
         label,
-        style: TextStyle(color: color, fontSize: 9, fontWeight: FontWeight.bold),
+        style:
+            TextStyle(color: color, fontSize: 9, fontWeight: FontWeight.bold),
       ),
     );
   }
@@ -895,10 +968,12 @@ class _ClinicalItemsTabState extends State<ClinicalItemsTab> {
       if (mounted) setState(() => isLoading = false);
     }
   }
+
   Future<void> openForm([ClinicalReferenceItem? item]) async {
     final result = await showDialog<Map<String, dynamic>>(
       context: context,
-      builder: (_) => ClinicalItemFormDialog(type: widget.type, title: widget.title, item: item),
+      builder: (_) => ClinicalItemFormDialog(
+          type: widget.type, title: widget.title, item: item),
     );
     if (result == null) return;
 
@@ -943,16 +1018,24 @@ class _ClinicalItemsTabState extends State<ClinicalItemsTab> {
                 border: Border.all(color: Colors.grey.shade200),
               ),
               child: ListTile(
-                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                contentPadding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
                 leading: CircleAvatar(
-                  backgroundColor: item.isActive ? Colors.teal.shade50 : Colors.grey.shade100,
+                  backgroundColor: item.isActive
+                      ? Colors.teal.shade50
+                      : Colors.grey.shade100,
                   child: Icon(
-                    item.isActive ? Icons.check_circle_outline_rounded : Icons.pause_circle_outline_rounded,
+                    item.isActive
+                        ? Icons.check_circle_outline_rounded
+                        : Icons.pause_circle_outline_rounded,
                     color: item.isActive ? Colors.teal : Colors.grey,
                   ),
                 ),
-                title: Text(item.label, style: const TextStyle(fontWeight: FontWeight.bold)),
-                subtitle: Text(item.description ?? 'Ordre d\'affichage: ${item.sortOrder}', style: const TextStyle(fontSize: 12)),
+                title: Text(item.label,
+                    style: const TextStyle(fontWeight: FontWeight.bold)),
+                subtitle: Text(
+                    item.description ?? 'Ordre d\'affichage: ${item.sortOrder}',
+                    style: const TextStyle(fontSize: 12)),
                 trailing: Wrap(
                   spacing: 4,
                   children: [
@@ -963,7 +1046,8 @@ class _ClinicalItemsTabState extends State<ClinicalItemsTab> {
                     ),
                     IconButton(
                       tooltip: 'Supprimer',
-                      icon: Icon(Icons.delete_outline_rounded, color: Colors.red.shade400),
+                      icon: Icon(Icons.delete_outline_rounded,
+                          color: Colors.red.shade400),
                       onPressed: () => delete(item),
                     ),
                   ],
@@ -1019,7 +1103,10 @@ class AdminListScaffold extends StatelessWidget {
                   children: [
                     Icon(Icons.error_outline, color: Colors.red.shade600),
                     const SizedBox(width: 10),
-                    Expanded(child: Text(message, style: TextStyle(color: Colors.red.shade800, fontSize: 13))),
+                    Expanded(
+                        child: Text(message,
+                            style: TextStyle(
+                                color: Colors.red.shade800, fontSize: 13))),
                   ],
                 ),
               ),
@@ -1035,9 +1122,13 @@ class AdminListScaffold extends StatelessWidget {
                   child: Center(
                     child: Column(
                       children: [
-                        Icon(Icons.inbox_rounded, size: 64, color: Colors.grey.shade400),
+                        Icon(Icons.inbox_rounded,
+                            size: 64, color: Colors.grey.shade400),
                         const SizedBox(height: 16),
-                        const Text('Aucun élément trouvé', style: TextStyle(color: Colors.grey, fontWeight: FontWeight.w600)),
+                        const Text('Aucun élément trouvé',
+                            style: TextStyle(
+                                color: Colors.grey,
+                                fontWeight: FontWeight.w600)),
                       ],
                     ),
                   ),
@@ -1051,7 +1142,8 @@ class AdminListScaffold extends StatelessWidget {
       floatingActionButton: FloatingActionButton.extended(
         onPressed: onCreate,
         icon: const Icon(Icons.add, color: Colors.white),
-        label: const Text('Créer', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        label: const Text('Créer',
+            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
         backgroundColor: Colors.indigo.shade600,
         elevation: 4,
       ),
@@ -1075,8 +1167,10 @@ class _UserFormDialogState extends State<UserFormDialog> {
   late final email = TextEditingController(text: widget.user?.email);
   late final password = TextEditingController();
   late final phone = TextEditingController(text: widget.user?.phone);
-  late final healthFacility = TextEditingController(text: widget.user?.healthFacility);
-  late final professionalId = TextEditingController(text: widget.user?.professionalId);
+  late final healthFacility =
+      TextEditingController(text: widget.user?.healthFacility);
+  late final professionalId =
+      TextEditingController(text: widget.user?.professionalId);
   late String role = widget.user?.role ?? 'NURSE';
 
   @override
@@ -1096,7 +1190,10 @@ class _UserFormDialogState extends State<UserFormDialog> {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       title: Text(
         widget.user == null ? 'Nouveau Praticien' : 'Modifier Compte',
-        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF1E293B)),
+        style: const TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+            color: Color(0xFF1E293B)),
         textAlign: TextAlign.center,
       ),
       content: SizedBox(
@@ -1108,33 +1205,57 @@ class _UserFormDialogState extends State<UserFormDialog> {
             children: [
               const Divider(height: 12),
               const SizedBox(height: 12),
-              _buildField(controller: fullName, label: 'Nom complet', icon: Icons.person_outline),
+              _buildField(
+                  controller: fullName,
+                  label: 'Nom complet',
+                  icon: Icons.person_outline),
               const SizedBox(height: 12),
-              _buildField(controller: email, label: 'Email', icon: Icons.mail_outline, keyboardType: TextInputType.emailAddress),
+              _buildField(
+                  controller: email,
+                  label: 'Email',
+                  icon: Icons.mail_outline,
+                  keyboardType: TextInputType.emailAddress),
               if (widget.user == null) ...[
                 const SizedBox(height: 12),
-                _buildField(controller: password, label: 'Mot de passe', icon: Icons.lock_outline, obscureText: true),
+                _buildField(
+                    controller: password,
+                    label: 'Mot de passe',
+                    icon: Icons.lock_outline,
+                    obscureText: true),
               ],
               const SizedBox(height: 16),
               DropdownButtonFormField<String>(
-                value: role,
+                initialValue: role,
                 decoration: InputDecoration(
                   labelText: 'Rôle',
                   prefixIcon: const Icon(Icons.badge_outlined),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12)),
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 ),
                 items: const ['NURSE', 'SPECIALIST', 'PATIENT', 'ADMIN']
-                    .map((item) => DropdownMenuItem(value: item, child: Text(item)))
+                    .map((item) =>
+                        DropdownMenuItem(value: item, child: Text(item)))
                     .toList(),
                 onChanged: (value) => setState(() => role = value ?? role),
               ),
               const SizedBox(height: 12),
-              _buildField(controller: phone, label: 'Téléphone', icon: Icons.phone_outlined, keyboardType: TextInputType.phone),
+              _buildField(
+                  controller: phone,
+                  label: 'Téléphone',
+                  icon: Icons.phone_outlined,
+                  keyboardType: TextInputType.phone),
               const SizedBox(height: 12),
-              _buildField(controller: healthFacility, label: 'Structure de Santé', icon: Icons.local_hospital_outlined),
+              _buildField(
+                  controller: healthFacility,
+                  label: 'Structure de Santé',
+                  icon: Icons.local_hospital_outlined),
               const SizedBox(height: 12),
-              _buildField(controller: professionalId, label: 'Identifiant Professionnel', icon: Icons.assignment_ind_outlined),
+              _buildField(
+                  controller: professionalId,
+                  label: 'Identifiant Professionnel',
+                  icon: Icons.assignment_ind_outlined),
             ],
           ),
         ),
@@ -1142,12 +1263,15 @@ class _UserFormDialogState extends State<UserFormDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('Annuler', style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold)),
+          child: const Text('Annuler',
+              style:
+                  TextStyle(color: Colors.grey, fontWeight: FontWeight.bold)),
         ),
         FilledButton(
           style: FilledButton.styleFrom(
             backgroundColor: Colors.indigo.shade600,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           ),
           onPressed: () {
             final data = <String, dynamic>{
@@ -1155,13 +1279,16 @@ class _UserFormDialogState extends State<UserFormDialog> {
               'email': email.text,
               'role': role,
               if (phone.text.isNotEmpty) 'phone': phone.text,
-              if (healthFacility.text.isNotEmpty) 'healthFacility': healthFacility.text,
-              if (professionalId.text.isNotEmpty) 'professionalId': professionalId.text,
+              if (healthFacility.text.isNotEmpty)
+                'healthFacility': healthFacility.text,
+              if (professionalId.text.isNotEmpty)
+                'professionalId': professionalId.text,
               if (widget.user == null) 'password': password.text,
             };
             Navigator.pop(context, data);
           },
-          child: const Text('Enregistrer', style: TextStyle(fontWeight: FontWeight.bold)),
+          child: const Text('Enregistrer',
+              style: TextStyle(fontWeight: FontWeight.bold)),
         ),
       ],
     );
@@ -1182,7 +1309,8 @@ class _UserFormDialogState extends State<UserFormDialog> {
         labelText: label,
         prefixIcon: Icon(icon, size: 20),
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       ),
     );
   }
@@ -1205,7 +1333,8 @@ class _PatientFormDialogState extends State<PatientFormDialog> {
   late final address = TextEditingController(text: widget.patient?.address);
   late String sex = widget.patient?.sex == 'M' ? 'M' : 'F';
   late bool consentForAi = widget.patient?.consentForAi ?? true;
-  late bool consentForTeleExpertise = widget.patient?.consentForTeleExpertise ?? true;
+  late bool consentForTeleExpertise =
+      widget.patient?.consentForTeleExpertise ?? true;
 
   @override
   void dispose() {
@@ -1223,7 +1352,10 @@ class _PatientFormDialogState extends State<PatientFormDialog> {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       title: Text(
         widget.patient == null ? 'Nouveau Patient' : 'Modifier Fiche Patient',
-        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF1E293B)),
+        style: const TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+            color: Color(0xFF1E293B)),
         textAlign: TextAlign.center,
       ),
       content: SizedBox(
@@ -1237,21 +1369,35 @@ class _PatientFormDialogState extends State<PatientFormDialog> {
               const SizedBox(height: 12),
               Row(
                 children: [
-                  Expanded(child: _buildField(controller: firstName, label: 'Prénom', icon: Icons.person_outline)),
+                  Expanded(
+                      child: _buildField(
+                          controller: firstName,
+                          label: 'Prénom',
+                          icon: Icons.person_outline)),
                   const SizedBox(width: 12),
-                  Expanded(child: _buildField(controller: lastName, label: 'Nom', icon: Icons.person_outline)),
+                  Expanded(
+                      child: _buildField(
+                          controller: lastName,
+                          label: 'Nom',
+                          icon: Icons.person_outline)),
                 ],
               ),
               const SizedBox(height: 12),
-              _buildField(controller: birthDate, label: 'Date Naissance', icon: Icons.cake_outlined, hint: 'AAAA-MM-JJ'),
+              _buildField(
+                  controller: birthDate,
+                  label: 'Date Naissance',
+                  icon: Icons.cake_outlined,
+                  hint: 'AAAA-MM-JJ'),
               const SizedBox(height: 16),
               DropdownButtonFormField<String>(
-                value: sex,
+                initialValue: sex,
                 decoration: InputDecoration(
                   labelText: 'Sexe',
                   prefixIcon: const Icon(Icons.transgender_rounded),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12)),
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 ),
                 items: const [
                   DropdownMenuItem(value: 'F', child: Text('Féminin (F)')),
@@ -1260,25 +1406,40 @@ class _PatientFormDialogState extends State<PatientFormDialog> {
                 onChanged: (value) => setState(() => sex = value ?? sex),
               ),
               const SizedBox(height: 12),
-              _buildField(controller: phone, label: 'Téléphone', icon: Icons.phone_outlined, keyboardType: TextInputType.phone),
+              _buildField(
+                  controller: phone,
+                  label: 'Téléphone',
+                  icon: Icons.phone_outlined,
+                  keyboardType: TextInputType.phone),
               const SizedBox(height: 12),
-              _buildField(controller: address, label: 'Adresse', icon: Icons.map_outlined),
+              _buildField(
+                  controller: address,
+                  label: 'Adresse',
+                  icon: Icons.map_outlined),
               const SizedBox(height: 8),
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
-                title: const Text('Consentement Diagnostic IA', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
-                subtitle: const Text('Autoriser l\'envoi des cas aux serveurs IA', style: TextStyle(fontSize: 10)),
+                title: const Text('Consentement Diagnostic IA',
+                    style:
+                        TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                subtitle: const Text(
+                    'Autoriser l\'envoi des cas aux serveurs IA',
+                    style: TextStyle(fontSize: 10)),
                 value: consentForAi,
-                activeColor: Colors.indigo.shade600,
+                activeThumbColor: Colors.indigo.shade600,
                 onChanged: (value) => setState(() => consentForAi = value),
               ),
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
-                title: const Text('Consentement Télé-Expertise', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
-                subtitle: const Text('Partager le cas aux spécialistes KORAI', style: TextStyle(fontSize: 10)),
+                title: const Text('Consentement Télé-Expertise',
+                    style:
+                        TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                subtitle: const Text('Partager le cas aux spécialistes KORAI',
+                    style: TextStyle(fontSize: 10)),
                 value: consentForTeleExpertise,
-                activeColor: Colors.indigo.shade600,
-                onChanged: (value) => setState(() => consentForTeleExpertise = value),
+                activeThumbColor: Colors.indigo.shade600,
+                onChanged: (value) =>
+                    setState(() => consentForTeleExpertise = value),
               ),
             ],
           ),
@@ -1287,12 +1448,15 @@ class _PatientFormDialogState extends State<PatientFormDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('Annuler', style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold)),
+          child: const Text('Annuler',
+              style:
+                  TextStyle(color: Colors.grey, fontWeight: FontWeight.bold)),
         ),
         FilledButton(
           style: FilledButton.styleFrom(
             backgroundColor: Colors.indigo.shade600,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           ),
           onPressed: () {
             Navigator.pop(context, {
@@ -1306,7 +1470,8 @@ class _PatientFormDialogState extends State<PatientFormDialog> {
               'consentForTeleExpertise': consentForTeleExpertise,
             });
           },
-          child: const Text('Enregistrer', style: TextStyle(fontWeight: FontWeight.bold)),
+          child: const Text('Enregistrer',
+              style: TextStyle(fontWeight: FontWeight.bold)),
         ),
       ],
     );
@@ -1327,7 +1492,8 @@ class _PatientFormDialogState extends State<PatientFormDialog> {
         hintText: hint,
         prefixIcon: Icon(icon, size: 20),
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       ),
     );
   }
@@ -1351,8 +1517,10 @@ class ClinicalItemFormDialog extends StatefulWidget {
 
 class _ClinicalItemFormDialogState extends State<ClinicalItemFormDialog> {
   late final label = TextEditingController(text: widget.item?.label);
-  late final description = TextEditingController(text: widget.item?.description);
-  late final sortOrder = TextEditingController(text: '${widget.item?.sortOrder ?? 0}');
+  late final description =
+      TextEditingController(text: widget.item?.description);
+  late final sortOrder =
+      TextEditingController(text: '${widget.item?.sortOrder ?? 0}');
   late bool isActive = widget.item?.isActive ?? true;
 
   @override
@@ -1368,8 +1536,13 @@ class _ClinicalItemFormDialogState extends State<ClinicalItemFormDialog> {
     return AlertDialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       title: Text(
-        widget.item == null ? 'Nouveau ${widget.title}' : 'Modifier ${widget.title}',
-        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF1E293B)),
+        widget.item == null
+            ? 'Nouveau ${widget.title}'
+            : 'Modifier ${widget.title}',
+        style: const TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+            color: Color(0xFF1E293B)),
         textAlign: TextAlign.center,
       ),
       content: SizedBox(
@@ -1386,8 +1559,10 @@ class _ClinicalItemFormDialogState extends State<ClinicalItemFormDialog> {
                 decoration: InputDecoration(
                   labelText: 'Libellé',
                   prefixIcon: const Icon(Icons.label_outline_rounded),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12)),
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 ),
               ),
               const SizedBox(height: 12),
@@ -1398,8 +1573,10 @@ class _ClinicalItemFormDialogState extends State<ClinicalItemFormDialog> {
                 decoration: InputDecoration(
                   labelText: 'Description optionnelle',
                   prefixIcon: const Icon(Icons.description_outlined),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12)),
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 ),
               ),
               const SizedBox(height: 12),
@@ -1409,17 +1586,23 @@ class _ClinicalItemFormDialogState extends State<ClinicalItemFormDialog> {
                 decoration: InputDecoration(
                   labelText: 'Ordre de tri / Affichage',
                   prefixIcon: const Icon(Icons.sort_rounded),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12)),
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 ),
               ),
               const SizedBox(height: 8),
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
-                title: const Text('Élément Actif', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
-                subtitle: const Text('Rendre visible dans les sprints praticiens et patients', style: TextStyle(fontSize: 10)),
+                title: const Text('Élément Actif',
+                    style:
+                        TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+                subtitle: const Text(
+                    'Rendre visible dans les sprints praticiens et patients',
+                    style: TextStyle(fontSize: 10)),
                 value: isActive,
-                activeColor: Colors.indigo.shade600,
+                activeThumbColor: Colors.indigo.shade600,
                 onChanged: (value) => setState(() => isActive = value),
               ),
             ],
@@ -1429,12 +1612,15 @@ class _ClinicalItemFormDialogState extends State<ClinicalItemFormDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('Annuler', style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold)),
+          child: const Text('Annuler',
+              style:
+                  TextStyle(color: Colors.grey, fontWeight: FontWeight.bold)),
         ),
         FilledButton(
           style: FilledButton.styleFrom(
             backgroundColor: Colors.indigo.shade600,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           ),
           onPressed: () {
             Navigator.pop(context, {
@@ -1445,7 +1631,8 @@ class _ClinicalItemFormDialogState extends State<ClinicalItemFormDialog> {
               'sortOrder': int.tryParse(sortOrder.text) ?? 0,
             });
           },
-          child: const Text('Enregistrer', style: TextStyle(fontWeight: FontWeight.bold)),
+          child: const Text('Enregistrer',
+              style: TextStyle(fontWeight: FontWeight.bold)),
         ),
       ],
     );
@@ -1456,24 +1643,30 @@ Future<bool> confirmDelete(BuildContext context, String message) async {
   return await showDialog<bool>(
         context: context,
         builder: (_) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           title: const Row(
             children: [
               Icon(Icons.warning_amber_rounded, color: Colors.red),
               SizedBox(width: 10),
-              Text('Suppression', style: TextStyle(fontWeight: FontWeight.bold)),
+              Text('Suppression',
+                  style: TextStyle(fontWeight: FontWeight.bold)),
             ],
           ),
           content: Text(message),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context, false),
-              child: const Text('Annuler', style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold)),
+              child: const Text('Annuler',
+                  style: TextStyle(
+                      color: Colors.grey, fontWeight: FontWeight.bold)),
             ),
             FilledButton(
-              style: FilledButton.styleFrom(backgroundColor: Colors.red.shade600),
+              style:
+                  FilledButton.styleFrom(backgroundColor: Colors.red.shade600),
               onPressed: () => Navigator.pop(context, true),
-              child: const Text('Supprimer', style: TextStyle(fontWeight: FontWeight.bold)),
+              child: const Text('Supprimer',
+                  style: TextStyle(fontWeight: FontWeight.bold)),
             ),
           ],
         ),

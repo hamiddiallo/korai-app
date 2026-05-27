@@ -17,7 +17,8 @@ class OrlImageEditor {
     );
   }
 
-  static Future<File> adjustBrightness(File file, {required bool brighter}) async {
+  static Future<File> adjustBrightness(File file,
+      {required bool brighter}) async {
     final decoded = await _decode(file);
     final adjusted = img.adjustColor(
       decoded,

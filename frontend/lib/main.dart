@@ -1,8 +1,12 @@
+import 'dart:async';
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 
 import 'core/api/api_client.dart';
 import 'core/auth/session_controller.dart';
+import 'core/sync/sync_cubit.dart';
+import 'core/sync/sync_service.dart';
 import 'core/theme/app_theme.dart';
 import 'features/admin/presentation/admin_home_page.dart';
 import 'features/auth/presentation/login_page.dart';
@@ -32,33 +36,65 @@ class KoraiApp extends StatefulWidget {
 }
 
 class _KoraiAppState extends State<KoraiApp> {
-  late final SessionController session;
+  late final ApiClient apiClient;
+  late final AuthCubit session;
+  late final SyncCubit syncCubit;
+  StreamSubscription<AuthState>? _authSubscription;
 
   @override
   void initState() {
     super.initState();
-    session = SessionController(apiClient: ApiClient());
+    apiClient = ApiClient();
+    session = AuthCubit(apiClient: apiClient);
+    syncCubit = SyncCubit(syncService: SyncService(apiClient: apiClient));
+    _authSubscription = session.stream.listen(_handleAuthState);
     session.restore();
   }
 
   @override
+  void dispose() {
+    _authSubscription?.cancel();
+    syncCubit.close();
+    session.close();
+    super.dispose();
+  }
+
+  void _handleAuthState(AuthState state) {
+    if (state.isAuthenticated && !state.isRestoring) {
+      syncCubit.start();
+    } else if (!state.isAuthenticated && !state.isRestoring) {
+      syncCubit.stop();
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: session,
-      builder: (context, _) {
-        return MaterialApp(
-          debugShowCheckedModeBanner: false,
-          title: 'Korai ORL',
-          theme: AppTheme.light(),
-          scrollBehavior: MyCustomScrollBehavior(),
-          home: session.isAuthenticated ? _homeForRole() : LoginPage(session: session),
-        );
-      },
+    return MultiBlocProvider(
+      providers: [
+        BlocProvider<AuthCubit>.value(value: session),
+        BlocProvider<SyncCubit>.value(value: syncCubit),
+      ],
+      child: BlocBuilder<AuthCubit, AuthState>(
+        bloc: session,
+        builder: (context, authState) {
+          return MaterialApp(
+            debugShowCheckedModeBanner: false,
+            title: 'Korai ORL',
+            theme: AppTheme.light(),
+            scrollBehavior: MyCustomScrollBehavior(),
+            home: authState.isRestoring
+                ? const SessionLoadingPage()
+                : authState.isAuthenticated
+                    ? _homeForRole(authState.user)
+                    : LoginPage(session: session),
+          );
+        },
+      ),
     );
   }
 
-  Widget _homeForRole() {
-    switch (session.user?.role.trim().toUpperCase()) {
+  Widget _homeForRole(SessionUser? user) {
+    switch (user?.role.trim().toUpperCase()) {
       case 'ADMIN':
         return AdminHomePage(session: session);
       case 'NURSE':
@@ -77,7 +113,7 @@ class _KoraiAppState extends State<KoraiApp> {
 class RoleNotReadyPage extends StatelessWidget {
   const RoleNotReadyPage({super.key, required this.session});
 
-  final SessionController session;
+  final AuthCubit session;
 
   @override
   Widget build(BuildContext context) {
@@ -114,6 +150,19 @@ class RoleNotReadyPage extends StatelessWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+class SessionLoadingPage extends StatelessWidget {
+  const SessionLoadingPage({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return const Scaffold(
+      body: Center(
+        child: CircularProgressIndicator(),
       ),
     );
   }

@@ -19,14 +19,26 @@ class EarSideSelector extends StatelessWidget {
       children: [
         Text(
           'Oreille concernée',
-          style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold),
+          style: Theme.of(context)
+              .textTheme
+              .titleSmall
+              ?.copyWith(fontWeight: FontWeight.bold),
         ),
         const SizedBox(height: 8),
         SegmentedButton<EarSide>(
           segments: const [
-            ButtonSegment(value: EarSide.left, label: Text('Gauche'), icon: Icon(Icons.hearing)),
-            ButtonSegment(value: EarSide.right, label: Text('Droite'), icon: Icon(Icons.hearing)),
-            ButtonSegment(value: EarSide.both, label: Text('Les deux'), icon: Icon(Icons.surround_sound)),
+            ButtonSegment(
+                value: EarSide.left,
+                label: Text('Gauche'),
+                icon: Icon(Icons.hearing)),
+            ButtonSegment(
+                value: EarSide.right,
+                label: Text('Droite'),
+                icon: Icon(Icons.hearing)),
+            ButtonSegment(
+                value: EarSide.both,
+                label: Text('Les deux'),
+                icon: Icon(Icons.surround_sound)),
           ],
           selected: {value},
           onSelectionChanged: (selection) {

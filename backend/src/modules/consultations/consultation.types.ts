@@ -20,6 +20,8 @@ export type ConsultationRecord = {
   clinicalNarrative: string;
   status: ConsultationStatus;
   urgency: UrgencyLevel;
+  clientLocalId?: string;
+  clientMutationId?: string;
   createdAt: string;
   updatedAt: string;
   aiResponse?: {

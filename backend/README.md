@@ -51,6 +51,11 @@ Comptes de demonstration crees au demarrage:
 - `POST /cases/diagnose` en `multipart/form-data`
 - `POST /cases/:id/request-specialist-review`
 - `POST /cases/:id/specialist-review`
+- `GET|POST /chat/conversations`
+- `GET|PATCH /chat/conversations/:id`
+- `GET|POST /chat/conversations/:id/messages`
+- `POST /chat/conversations/:id/messages/:messageId/retry`
+- `PATCH /chat/conversations/:id/read`
 
 ## Creation de compte
 
@@ -88,11 +93,11 @@ curl -X POST http://localhost:4000/auth/register/nurse \
 
 ## Persistence
 
-Le backend utilise maintenant Prisma avec SQLite en developpement local.
+Le backend utilise Prisma. L'environnement local courant pointe vers PostgreSQL via `DATABASE_URL`.
 
 - Schema: `prisma/schema.prisma`
-- Base locale par defaut: `prisma/dev.db`
-- Store applicatif: `src/common/data-store.ts`
+- Base locale: definie par `DATABASE_URL` dans `backend/.env`
+- Synchronisation schema local: `npm run db:push`
 
 Commandes utiles:
 
@@ -102,4 +107,4 @@ npm run db:status
 npm run db:studio
 ```
 
-Cette base SQLite permet de tester la persistance sans installer PostgreSQL. Pour la production, il faudra migrer le datasource Prisma vers PostgreSQL et rejouer les migrations.
+Pour un environnement de demonstration simple, il reste possible d'utiliser SQLite en adaptant le provider Prisma et `DATABASE_URL`, mais la cible projet recommandee reste PostgreSQL.

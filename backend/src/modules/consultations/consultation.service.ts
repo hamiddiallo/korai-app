@@ -21,6 +21,8 @@ type CreateInput = {
   touchCheckIds?: string[];
   touchCheckLabels?: string[];
   touchObservations?: Record<string, string>;
+  clientLocalId?: string;
+  clientMutationId?: string;
 };
 
 const persistAiAndFinalize = async (
@@ -58,10 +60,37 @@ const persistAiAndFinalize = async (
   return toLegacyOrlCase(withAi!, input.viewerRole);
 };
 
+const findExistingConsultationForClientKey = async (input: {
+  createdByUserId: string;
+  clientLocalId?: string;
+  clientMutationId?: string;
+}) => {
+  if (input.clientMutationId) {
+    const existing = await consultationDao.findByClientMutationId(
+      input.createdByUserId,
+      input.clientMutationId
+    );
+    if (existing) return existing;
+  }
+
+  if (input.clientLocalId) {
+    const existing = await consultationDao.findByClientLocalId(
+      input.createdByUserId,
+      input.clientLocalId
+    );
+    if (existing) return existing;
+  }
+
+  return undefined;
+};
+
 export const consultationService = {
   async createDraft(input: CreateInput, viewerRole: AuthenticatedUser['role'] = 'NURSE') {
     const patient = await patientDao.findById(input.patientId);
     if (!patient) throw notFound('Patient introuvable');
+
+    const existing = await findExistingConsultationForClientKey(input);
+    if (existing) return toLegacyOrlCase(existing, viewerRole);
 
     const consultation = await consultationDao.create({
       ...input,
@@ -84,10 +113,17 @@ export const consultationService = {
     const patient = await patientDao.findById(input.patientId);
     if (!patient) throw notFound('Patient introuvable');
 
-    const consultation = await consultationDao.create({
-      ...input,
-      status: ConsultationStatus.PENDING_AI
-    });
+    const existing = await findExistingConsultationForClientKey(input);
+    if (existing?.aiResponse) {
+      return toLegacyOrlCase(existing, input.viewerRole);
+    }
+
+    const consultation =
+      existing ??
+      (await consultationDao.create({
+        ...input,
+        status: ConsultationStatus.PENDING_AI
+      }));
 
     if (input.image) {
       await consultationDao.createOtoscopicImage({

@@ -81,7 +81,8 @@ class ConsultationHistoryList extends StatelessWidget {
           const SizedBox(height: 12),
         ],
         ...consultations.map((consultation) {
-          final patientName = patient?.fullName ?? patientNameFor?.call(consultation);
+          final patientName =
+              patient?.fullName ?? patientNameFor?.call(consultation);
           return ConsultationHistoryEntry(
             consultation: consultation,
             patientName: patientName,
@@ -136,7 +137,8 @@ class ConsultationHistoryEntry extends StatelessWidget {
           side: BorderSide(color: Colors.grey.shade200),
         ),
         child: ListTile(
-          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
           leading: CircleAvatar(
             backgroundColor: color.withValues(alpha: 0.12),
             child: Icon(Icons.edit_note, color: color, size: 22),
@@ -150,17 +152,21 @@ class ConsultationHistoryEntry extends StatelessWidget {
             children: [
               if (patientName != null) ...[
                 const SizedBox(height: 4),
-                Text(patientName!, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                Text(patientName!,
+                    style: const TextStyle(
+                        fontSize: 12, fontWeight: FontWeight.w600)),
               ],
               const SizedBox(height: 4),
               Text(
                 '${ConsultationFormat.statusLabel(consultation.status)} · Brouillon à reprendre',
-                style: TextStyle(fontSize: 12, color: color, fontWeight: FontWeight.w600),
+                style: TextStyle(
+                    fontSize: 12, color: color, fontWeight: FontWeight.w600),
               ),
             ],
           ),
           trailing: Icon(Icons.play_arrow_rounded, color: color),
-          onTap: onResumeDraft == null ? null : () => onResumeDraft!(consultation),
+          onTap:
+              onResumeDraft == null ? null : () => onResumeDraft!(consultation),
         ),
       );
     }
@@ -195,16 +201,21 @@ class ConsultationHistoryEntry extends StatelessWidget {
             children: [
               if (patientName != null) ...[
                 const SizedBox(height: 4),
-                Text(patientName!, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                Text(patientName!,
+                    style: const TextStyle(
+                        fontSize: 12, fontWeight: FontWeight.w600)),
               ],
               const SizedBox(height: 4),
               Text(
                 ConsultationFormat.statusLabel(consultation.status),
-                style: TextStyle(fontSize: 12, color: color, fontWeight: FontWeight.w600),
+                style: TextStyle(
+                    fontSize: 12, color: color, fontWeight: FontWeight.w600),
               ),
               const SizedBox(height: 2),
               Text(
-                hasAiDetails ? 'Déplier pour voir le compte-rendu' : 'Aucun diagnostic IA disponible',
+                hasAiDetails
+                    ? 'Déplier pour voir le compte-rendu'
+                    : 'Aucun diagnostic IA disponible',
                 style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
               ),
             ],
@@ -213,6 +224,7 @@ class ConsultationHistoryEntry extends StatelessWidget {
               ? [
                   ConsultationDiagnosticDetails(
                     consultation: consultation,
+                    patientName: patientName,
                     forPatient: forPatient,
                     onRequestExpertise: onRequestExpertise,
                     onConsultationUpdated: onConsultationUpdated,
@@ -223,7 +235,8 @@ class ConsultationHistoryEntry extends StatelessWidget {
                     padding: const EdgeInsets.all(12),
                     child: Text(
                       'Diagnostic en cours ou non généré.',
-                      style: TextStyle(fontSize: 13, color: Colors.grey.shade700),
+                      style:
+                          TextStyle(fontSize: 13, color: Colors.grey.shade700),
                     ),
                   ),
                 ],
@@ -244,12 +257,14 @@ class ConsultationDiagnosticDetails extends StatelessWidget {
   const ConsultationDiagnosticDetails({
     super.key,
     required this.consultation,
+    this.patientName,
     this.forPatient = false,
     this.onRequestExpertise,
     this.onConsultationUpdated,
   });
 
   final AiCase consultation;
+  final String? patientName;
   final bool forPatient;
   final ExpertiseRequestCallback? onRequestExpertise;
   final void Function(AiCase updated)? onConsultationUpdated;
@@ -257,7 +272,8 @@ class ConsultationDiagnosticDetails extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final effective = consultation.effectiveSummary;
-    final hideForPatient = forPatient && !consultation.patientCanSeeClinicalDetails;
+    final hideForPatient =
+        forPatient && !consultation.patientCanSeeClinicalDetails;
 
     if (hideForPatient) {
       return Padding(
@@ -271,84 +287,35 @@ class ConsultationDiagnosticDetails extends StatelessWidget {
     }
 
     final summary = consultation.summary;
+    final expertise = consultation.expertiseReview;
     final sections = <Widget>[
       _ExpandableDetailSection(
-        title: 'Informations',
-        icon: Icons.info_outline,
-        children: [
-          _DetailRow('Statut', ConsultationFormat.statusLabel(consultation.status)),
-          _DetailRow('Oreille', ConsultationFormat.earSideLabel(consultation.earSide)),
-          _DetailRow('Mise à jour', ConsultationFormat.formatDateTime(consultation.updatedAt)),
-          if (effective != null)
-            _DetailRow('Source', effective.source.badgeLabel),
-        ],
+        title: 'Informations patient',
+        subtitle: patientName ?? 'Déplier pour voir',
+        icon: Icons.person_outline,
+        children: _patientInfoChildren(),
       ),
-      if (_hasText(consultation.displayDiagnosis) ||
-          consultation.displayConfidence != AiConfidenceLabel.unknown)
+      _ExpandableDetailSection(
+        title: 'Informations cliniques',
+        subtitle: _clinicalSubtitle(),
+        icon: Icons.medical_information_outlined,
+        children: _clinicalInfoChildren(),
+      ),
+      _ExpandableDetailSection(
+        title: 'Réponse de l\'IA',
+        subtitle: summary.likelyDiagnosis?.trim().isNotEmpty == true
+            ? summary.likelyDiagnosis!
+            : 'Voir le détail',
+        icon: Icons.psychology_outlined,
+        children: _aiResponseChildren(summary),
+      ),
+      if (expertise != null)
         _ExpandableDetailSection(
-          title: 'Synthèse diagnostique',
-          icon: Icons.medical_information_outlined,
-          children: [
-            _DetailRow('Diagnostic', consultation.displayDiagnosis),
-            _DetailRow('Confiance', consultation.displayConfidence.value),
-            if (_hasText(consultation.displayRecommendation))
-              _DetailRow('Recommandation', consultation.displayRecommendation!),
-            if (_hasText(consultation.displayClinicalSummary))
-              _DetailParagraph(consultation.displayClinicalSummary!),
-          ],
-        ),
-      if (effective == null || effective.source == EffectiveSummarySource.ai) ...[
-        if (_hasText(summary.imageOpinion))
-          _ExpandableDetailSection(
-            title: 'Avis image (IA)',
-            icon: Icons.image_outlined,
-            children: [_DetailParagraph(summary.imageOpinion!)],
-          ),
-        if (_hasText(summary.ragOpinion))
-          _ExpandableDetailSection(
-            title: 'Avis symptômes RAG (IA)',
-            icon: Icons.article_outlined,
-            children: [_DetailParagraph(summary.ragOpinion!)],
-          ),
-      ],
-      if (consultation.expertiseReview != null)
-        _ExpandableDetailSection(
-          title: 'Expertise',
+          title: 'Réponse de l\'expert',
+          subtitle: _expertSubtitle(expertise),
           icon: Icons.verified_user_outlined,
-          children: [
-            if (consultation.expertiseReview!.decision != null)
-              _DetailRow('Décision', consultation.expertiseReview!.decision!.label),
-            if (_hasText(consultation.expertiseReview!.comment))
-              _DetailParagraph(consultation.expertiseReview!.comment!),
-          ],
-        ),
-      if (consultation.symptomLabels.isNotEmpty ||
-          consultation.medicalHistoryLabels.isNotEmpty ||
-          consultation.touchCheckLabels.isNotEmpty)
-        _ExpandableDetailSection(
-          title: 'Données cliniques saisies',
-          icon: Icons.checklist_outlined,
-          children: [
-            if (consultation.symptomLabels.isNotEmpty)
-              _DetailRow('Symptômes', consultation.symptomLabels.join(', ')),
-            if (consultation.medicalHistoryLabels.isNotEmpty)
-              _DetailRow('Antécédents', consultation.medicalHistoryLabels.join(', ')),
-            if (consultation.touchCheckLabels.isNotEmpty)
-              _DetailRow('Toucher', consultation.touchCheckLabels.join(', ')),
-          ],
-        ),
-      if (summary.warnings.isNotEmpty)
-        _ExpandableDetailSection(
-          title: 'Alertes (${summary.warnings.length})',
-          icon: Icons.warning_amber_rounded,
-          iconColor: Colors.orange.shade800,
-          children: summary.warnings.map((w) => _DetailBullet(w)).toList(),
-        ),
-      if (summary.sources.isNotEmpty)
-        _ExpandableDetailSection(
-          title: 'Sources (${summary.sources.length})',
-          icon: Icons.menu_book_outlined,
-          children: summary.sources.map((s) => _DetailBullet(s)).toList(),
+          iconColor: const Color(0xFF006D77),
+          children: _expertResponseChildren(expertise),
         ),
       if (!forPatient && onRequestExpertise != null)
         ExpertiseRequestPanel(
@@ -361,6 +328,178 @@ class ConsultationDiagnosticDetails extends StatelessWidget {
     return Column(children: sections);
   }
 
+  List<Widget> _patientInfoChildren() {
+    return [
+      if (patientName != null) _DetailRow('Patient', patientName!),
+      _DetailRow(
+          'Date', ConsultationFormat.formatDateTime(consultation.createdAt)),
+      _DetailRow(
+          'Oreille', ConsultationFormat.earSideLabel(consultation.earSide)),
+      _DetailRow('Urgence', consultation.urgency.value),
+      _DetailRow('Statut', ConsultationFormat.statusLabel(consultation.status)),
+      _DetailRow('Mise à jour',
+          ConsultationFormat.formatDateTime(consultation.updatedAt)),
+      if (_hasText(consultation.clinicalNotes))
+        _DetailParagraph(consultation.clinicalNotes!),
+    ];
+  }
+
+  String _clinicalSubtitle() {
+    final parts = <String>[];
+    if (consultation.symptomLabels.isNotEmpty) {
+      parts.add('${consultation.symptomLabels.length} symptôme(s)');
+    }
+    if (consultation.medicalHistoryLabels.isNotEmpty) {
+      parts.add('${consultation.medicalHistoryLabels.length} antécédent(s)');
+    }
+    return parts.isEmpty ? 'Déplier pour voir' : parts.join(' · ');
+  }
+
+  List<Widget> _clinicalInfoChildren() {
+    final children = <Widget>[];
+    if (consultation.symptomLabels.isNotEmpty) {
+      children
+          .add(_DetailRow('Symptômes', consultation.symptomLabels.join(', ')));
+    }
+    if (consultation.medicalHistoryLabels.isNotEmpty) {
+      children.add(_DetailRow(
+          'Antécédents', consultation.medicalHistoryLabels.join(', ')));
+    }
+    if (consultation.touchCheckLabels.isNotEmpty) {
+      for (var i = 0; i < consultation.touchCheckLabels.length; i++) {
+        final label = consultation.touchCheckLabels[i];
+        final id = i < consultation.touchCheckIds.length
+            ? consultation.touchCheckIds[i]
+            : null;
+        final obs = id != null ? consultation.touchObservations[id] : null;
+        children.add(
+          _DetailRow(
+            'Toucher',
+            obs != null && obs.isNotEmpty ? '$label — $obs' : label,
+          ),
+        );
+      }
+    }
+    if (children.isEmpty && _hasText(consultation.symptoms)) {
+      children.add(_DetailParagraph(consultation.symptoms!));
+    }
+    if (children.isEmpty) {
+      children.add(
+        Text(
+          'Aucune donnée clinique structurée.',
+          style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
+        ),
+      );
+    }
+    return children;
+  }
+
+  List<Widget> _aiResponseChildren(AiSummary summary) {
+    final children = <Widget>[
+      _DetailRow(
+          'Diagnostic probable', summary.likelyDiagnosis ?? 'Non déterminé'),
+      _DetailRow('Confiance', summary.confidenceLabel.value),
+    ];
+    if (_hasText(summary.imageOpinion)) {
+      children.add(_DetailBlock('Avis image', summary.imageOpinion!));
+    }
+    if (_hasText(summary.ragOpinion)) {
+      children.add(_DetailBlock('Avis symptômes (RAG)', summary.ragOpinion!));
+    }
+    if (summary.warnings.isNotEmpty) {
+      children.add(const Padding(
+        padding: EdgeInsets.only(top: 8, bottom: 4),
+        child: Text('Alertes',
+            style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12)),
+      ));
+      children.addAll(summary.warnings.map((w) => _DetailBullet(w)));
+    }
+    return children;
+  }
+
+  String _expertSubtitle(ExpertiseReview expertise) {
+    if (expertise.status == ExpertiseStatus.completed &&
+        expertise.decision != null) {
+      return expertise.decision!.label;
+    }
+    return switch (expertise.status) {
+      ExpertiseStatus.pending => 'En attente de prise en charge',
+      ExpertiseStatus.inReview => 'Analyse en cours',
+      ExpertiseStatus.completed => 'Terminée',
+    };
+  }
+
+  List<Widget> _expertResponseChildren(ExpertiseReview expertise) {
+    final children = <Widget>[
+      _DetailRow('Statut expertise', _expertStatusLabel(expertise.status)),
+    ];
+
+    if (_hasText(expertise.summaryNote)) {
+      children.add(_DetailBlock('Note à l\'escalade', expertise.summaryNote!));
+    }
+
+    if (expertise.status != ExpertiseStatus.completed ||
+        expertise.decision == null) {
+      children.add(
+        Padding(
+          padding: const EdgeInsets.only(top: 4),
+          child: Text(
+            'L\'avis du spécialiste sera affiché ici une fois la revue terminée.',
+            style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
+          ),
+        ),
+      );
+      return children;
+    }
+
+    children.add(_DetailRow('Décision', expertise.decision!.label));
+
+    switch (expertise.decision!) {
+      case ExpertDecision.validated:
+        children.add(
+          _DetailRow(
+            'Diagnostic retenu',
+            consultation.summary.likelyDiagnosis ?? 'Non déterminé',
+          ),
+        );
+        children.add(
+          _DetailRow('Confiance', 'HIGH (validation experte)'),
+        );
+      case ExpertDecision.corrected:
+      case ExpertDecision.insufficient:
+        if (_hasText(expertise.correctedLikelyDiagnosis)) {
+          children.add(
+              _DetailRow('Diagnostic', expertise.correctedLikelyDiagnosis!));
+        } else if (expertise.decision == ExpertDecision.insufficient) {
+          children.add(_DetailRow('Diagnostic', 'Indéterminé'));
+        }
+        if (_hasText(expertise.correctedClinicalSummary)) {
+          children.add(_DetailBlock(
+              'Synthèse clinique', expertise.correctedClinicalSummary!));
+        }
+    }
+
+    if (_hasText(expertise.correctedRecommendation)) {
+      children.add(
+          _DetailRow('Recommandation', expertise.correctedRecommendation!));
+    }
+    if (_hasText(expertise.comment)) {
+      children.add(_DetailBlock('Commentaire', expertise.comment!));
+    }
+    if (_hasText(expertise.reviewedAt)) {
+      children.add(_DetailRow('Date de l\'avis',
+          ConsultationFormat.formatDateTime(expertise.reviewedAt)));
+    }
+
+    return children;
+  }
+
+  String _expertStatusLabel(ExpertiseStatus status) => switch (status) {
+        ExpertiseStatus.pending => 'En attente',
+        ExpertiseStatus.inReview => 'En cours de revue',
+        ExpertiseStatus.completed => 'Terminée',
+      };
+
   bool _hasText(String? value) => value != null && value.trim().isNotEmpty;
 }
 
@@ -369,10 +508,12 @@ class _ExpandableDetailSection extends StatelessWidget {
     required this.title,
     required this.icon,
     required this.children,
+    this.subtitle,
     this.iconColor,
   });
 
   final String title;
+  final String? subtitle;
   final IconData icon;
   final List<Widget> children;
   final Color? iconColor;
@@ -385,11 +526,20 @@ class _ExpandableDetailSection extends StatelessWidget {
         dense: true,
         tilePadding: const EdgeInsets.symmetric(horizontal: 8),
         childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
-        leading: Icon(icon, size: 20, color: iconColor ?? const Color(0xFF006D77)),
+        leading:
+            Icon(icon, size: 20, color: iconColor ?? const Color(0xFF006D77)),
         title: Text(
           title,
           style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
         ),
+        subtitle: subtitle != null
+            ? Text(
+                subtitle!,
+                style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              )
+            : null,
         children: children,
       ),
     );
@@ -413,11 +563,15 @@ class _DetailRow extends StatelessWidget {
             width: 118,
             child: Text(
               '$label :',
-              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.grey.shade700),
+              style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.grey.shade700),
             ),
           ),
           Expanded(
-            child: Text(value, style: const TextStyle(fontSize: 13, height: 1.35)),
+            child:
+                Text(value, style: const TextStyle(fontSize: 13, height: 1.35)),
           ),
         ],
       ),
@@ -439,6 +593,30 @@ class _DetailParagraph extends StatelessWidget {
   }
 }
 
+class _DetailBlock extends StatelessWidget {
+  const _DetailBlock(this.label, this.text);
+
+  final String label;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label,
+              style:
+                  const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+          const SizedBox(height: 4),
+          Text(text, style: const TextStyle(fontSize: 12, height: 1.4)),
+        ],
+      ),
+    );
+  }
+}
+
 class _DetailBullet extends StatelessWidget {
   const _DetailBullet(this.text);
 
@@ -452,7 +630,9 @@ class _DetailBullet extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text('• ', style: TextStyle(fontSize: 13)),
-          Expanded(child: Text(text, style: const TextStyle(fontSize: 13, height: 1.35))),
+          Expanded(
+              child: Text(text,
+                  style: const TextStyle(fontSize: 13, height: 1.35))),
         ],
       ),
     );
@@ -460,7 +640,8 @@ class _DetailBullet extends StatelessWidget {
 }
 
 /// Feuille modale avec le même système de sections repliables (usage optionnel).
-void showConsultationDetailSheet(BuildContext context, AiCase consultation, {String? patientName}) {
+void showConsultationDetailSheet(BuildContext context, AiCase consultation,
+    {String? patientName}) {
   showModalBottomSheet(
     context: context,
     isScrollControlled: true,
@@ -497,11 +678,15 @@ void showConsultationDetailSheet(BuildContext context, AiCase consultation, {Str
                     children: [
                       Text(
                         'Consultation du ${ConsultationFormat.formatDateTime(consultation.createdAt)}',
-                        style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+                        style: Theme.of(context)
+                            .textTheme
+                            .titleLarge
+                            ?.copyWith(fontWeight: FontWeight.bold),
                       ),
                       if (patientName != null) ...[
                         const SizedBox(height: 4),
-                        Text(patientName, style: TextStyle(color: Colors.grey.shade700)),
+                        Text(patientName,
+                            style: TextStyle(color: Colors.grey.shade700)),
                       ],
                     ],
                   ),

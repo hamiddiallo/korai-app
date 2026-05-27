@@ -71,18 +71,20 @@ class AiCase {
 
   /// Résultat affiché (effectiveSummary prioritaire sur summary IA brut).
   String get displayDiagnosis =>
-      effectiveSummary?.likelyDiagnosis ?? summary.likelyDiagnosis ?? 'Non déterminé';
+      effectiveSummary?.likelyDiagnosis ??
+      summary.likelyDiagnosis ??
+      'Non déterminé';
 
   String? get displayClinicalSummary => effectiveSummary?.clinicalSummary;
 
   String? get displayRecommendation => effectiveSummary?.recommendation;
 
-  AiConfidenceLabel get displayConfidence =>
-      effectiveSummary != null
-          ? AiConfidenceLabel.fromApi(effectiveSummary!.confidenceLabel)
-          : summary.confidenceLabel;
+  AiConfidenceLabel get displayConfidence => effectiveSummary != null
+      ? AiConfidenceLabel.fromApi(effectiveSummary!.confidenceLabel)
+      : summary.confidenceLabel;
 
-  bool get patientCanSeeClinicalDetails => effectiveSummary?.patientVisible ?? false;
+  bool get patientCanSeeClinicalDetails =>
+      effectiveSummary?.patientVisible ?? false;
 
   factory AiCase.fromJson(Map<String, dynamic> json) {
     return AiCase(
@@ -94,7 +96,9 @@ class AiCase {
       createdAt: json['createdAt']?.toString() ?? '',
       updatedAt: json['updatedAt']?.toString() ?? '',
       urgency: UrgencyLevel.values.firstWhere(
-        (u) => u.value == (json['urgency']?.toString() ?? UrgencyLevel.medium.value),
+        (u) =>
+            u.value ==
+            (json['urgency']?.toString() ?? UrgencyLevel.medium.value),
         orElse: () => UrgencyLevel.medium,
       ),
       earSide: EarSide.fromApi(json['earSide']?.toString()),
@@ -106,13 +110,16 @@ class AiCase {
       touchCheckLabels: _parseStringList(json['touchCheckLabels']),
       touchObservations: _parseStringMap(json['touchObservations']),
       summary: AiSummary.fromJson(
-        (json['organizedAiSummary'] ?? <String, dynamic>{}) as Map<String, dynamic>,
+        (json['organizedAiSummary'] ?? <String, dynamic>{})
+            as Map<String, dynamic>,
       ),
       expertiseReview: json['expertiseReview'] != null
-          ? ExpertiseReview.fromJson(json['expertiseReview'] as Map<String, dynamic>)
+          ? ExpertiseReview.fromJson(
+              json['expertiseReview'] as Map<String, dynamic>)
           : null,
       effectiveSummary: json['effectiveSummary'] != null
-          ? EffectiveSummary.fromJson(json['effectiveSummary'] as Map<String, dynamic>)
+          ? EffectiveSummary.fromJson(
+              json['effectiveSummary'] as Map<String, dynamic>)
           : null,
     );
   }
@@ -138,8 +145,10 @@ extension AiCaseListX on List<AiCase> {
   List<AiCase> sortedByNewest() {
     final copy = [...this];
     copy.sort((a, b) {
-      final aDate = DateTime.tryParse(a.createdAt) ?? DateTime.fromMillisecondsSinceEpoch(0);
-      final bDate = DateTime.tryParse(b.createdAt) ?? DateTime.fromMillisecondsSinceEpoch(0);
+      final aDate = DateTime.tryParse(a.createdAt) ??
+          DateTime.fromMillisecondsSinceEpoch(0);
+      final bDate = DateTime.tryParse(b.createdAt) ??
+          DateTime.fromMillisecondsSinceEpoch(0);
       return bDate.compareTo(aDate);
     });
     return copy;
@@ -213,7 +222,8 @@ class ExpertiseReview {
 
   factory ExpertiseReview.fromJson(Map<String, dynamic> json) {
     return ExpertiseReview(
-      status: ExpertiseStatus.tryFromApi(json['status']?.toString()) ?? ExpertiseStatus.pending,
+      status: ExpertiseStatus.tryFromApi(json['status']?.toString()) ??
+          ExpertiseStatus.pending,
       decision: ExpertDecision.tryFromApi(json['decision']?.toString()),
       requestedAt: json['requestedAt']?.toString() ?? '',
       reviewedAt: json['reviewedAt']?.toString(),
@@ -223,7 +233,8 @@ class ExpertiseReview {
       correctedClinicalSummary: json['correctedClinicalSummary']?.toString(),
       assignedToUserId: json['assignedToUserId']?.toString(),
       aiSnapshot: json['aiSnapshot'] != null
-          ? AiSummarySnapshot.fromJson(json['aiSnapshot'] as Map<String, dynamic>)
+          ? AiSummarySnapshot.fromJson(
+              json['aiSnapshot'] as Map<String, dynamic>)
           : null,
       summaryNote: json['summaryNote']?.toString(),
       noteAudio: json['noteAudio']?.toString(),
@@ -254,8 +265,12 @@ class AiSummarySnapshot {
       ragOpinion: json['ragOpinion']?.toString(),
       likelyDiagnosis: json['likelyDiagnosis']?.toString(),
       confidenceLabel: json['confidenceLabel']?.toString(),
-      warnings: (json['warnings'] as List<dynamic>? ?? const []).map((e) => e.toString()).toList(),
-      sources: (json['sources'] as List<dynamic>? ?? const []).map((e) => e.toString()).toList(),
+      warnings: (json['warnings'] as List<dynamic>? ?? const [])
+          .map((e) => e.toString())
+          .toList(),
+      sources: (json['sources'] as List<dynamic>? ?? const [])
+          .map((e) => e.toString())
+          .toList(),
     );
   }
 }
@@ -282,9 +297,14 @@ class AiSummary {
       imageOpinion: json['imageOpinion']?.toString(),
       ragOpinion: json['ragOpinion']?.toString(),
       likelyDiagnosis: json['likelyDiagnosis']?.toString(),
-      confidenceLabel: AiConfidenceLabel.fromApi(json['confidenceLabel']?.toString()),
-      warnings: (json['warnings'] as List<dynamic>? ?? const []).map((item) => item.toString()).toList(),
-      sources: (json['sources'] as List<dynamic>? ?? const []).map((item) => item.toString()).toList(),
+      confidenceLabel:
+          AiConfidenceLabel.fromApi(json['confidenceLabel']?.toString()),
+      warnings: (json['warnings'] as List<dynamic>? ?? const [])
+          .map((item) => item.toString())
+          .toList(),
+      sources: (json['sources'] as List<dynamic>? ?? const [])
+          .map((item) => item.toString())
+          .toList(),
     );
   }
 }

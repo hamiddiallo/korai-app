@@ -1,5 +1,7 @@
-import 'package:flutter/foundation.dart';
+import 'dart:convert';
+
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../api/api_client.dart';
 
@@ -22,7 +24,6 @@ class SessionUser {
 
   static String _normalizeRole(String raw) {
     final role = raw.trim().toUpperCase();
-    // Compatibilite ancienne base PostgreSQL (enum PROFESSIONAL).
     if (role == 'PROFESSIONAL') return 'NURSE';
     return role;
   }
@@ -37,55 +38,127 @@ class SessionUser {
       phone: json['phone']?.toString(),
     );
   }
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'fullName': fullName,
+        'email': email,
+        'role': role,
+        if (linkedPatientId != null) 'linkedPatientId': linkedPatientId,
+        if (phone != null) 'phone': phone,
+      };
 }
 
-class SessionController extends ChangeNotifier {
-  SessionController({
+class AuthState {
+  const AuthState({
+    this.user,
+    this.isRestoring = false,
+    this.isSubmitting = false,
+    this.errorMessage,
+  });
+
+  final SessionUser? user;
+  final bool isRestoring;
+  final bool isSubmitting;
+  final String? errorMessage;
+
+  bool get isAuthenticated => user != null;
+  bool get isBusy => isRestoring || isSubmitting;
+
+  AuthState copyWith({
+    Object? user = _unset,
+    bool? isRestoring,
+    bool? isSubmitting,
+    Object? errorMessage = _unset,
+  }) {
+    return AuthState(
+      user: identical(user, _unset) ? this.user : user as SessionUser?,
+      isRestoring: isRestoring ?? this.isRestoring,
+      isSubmitting: isSubmitting ?? this.isSubmitting,
+      errorMessage: identical(errorMessage, _unset)
+          ? this.errorMessage
+          : errorMessage as String?,
+    );
+  }
+}
+
+const Object _unset = Object();
+
+class AuthCubit extends Cubit<AuthState> {
+  AuthCubit({
     required this.apiClient,
     FlutterSecureStorage? storage,
-  }) : _storage = storage ?? const FlutterSecureStorage();
+  })  : _storage = storage ?? const FlutterSecureStorage(),
+        super(const AuthState());
 
   final ApiClient apiClient;
   final FlutterSecureStorage _storage;
+  static const _accessTokenKey = 'accessToken';
+  static const _refreshTokenKey = 'refreshToken';
+  static const _sessionUserKey = 'sessionUser';
 
-  SessionUser? user;
-  bool isLoading = false;
-  String? errorMessage;
-
-  bool get isAuthenticated => user != null;
+  SessionUser? get user => state.user;
+  bool get isAuthenticated => state.isAuthenticated;
+  bool get isLoading => state.isBusy;
+  String? get errorMessage => state.errorMessage;
 
   Future<void> restore() async {
-    final token = await _storage.read(key: 'accessToken');
-    if (token == null) return;
+    emit(state.copyWith(isRestoring: true, errorMessage: null));
+    final token = await _storage.read(key: _accessTokenKey);
+    final cachedUser = await _readCachedUser();
+    if (token == null) {
+      emit(state.copyWith(isRestoring: false, user: null));
+      return;
+    }
+
     apiClient.setAccessToken(token);
     try {
       final response = await apiClient.getJson('/auth/me');
-      user = SessionUser.fromJson(response['user'] as Map<String, dynamic>);
-      notifyListeners();
-    } catch (_) {
-      await logout();
+      final user =
+          SessionUser.fromJson(response['user'] as Map<String, dynamic>);
+      await _cacheUser(user);
+      emit(
+        state.copyWith(
+          user: user,
+          isRestoring: false,
+          errorMessage: null,
+        ),
+      );
+    } on ApiException catch (error) {
+      if (error.code == 'UNAUTHORIZED' || error.code == 'FORBIDDEN') {
+        await logout();
+        return;
+      }
+      emit(
+        state.copyWith(
+          user: cachedUser,
+          isRestoring: false,
+          errorMessage: cachedUser == null ? error.toString() : null,
+        ),
+      );
+    } catch (error) {
+      emit(
+        state.copyWith(
+          user: cachedUser,
+          isRestoring: false,
+          errorMessage: cachedUser == null ? error.toString() : null,
+        ),
+      );
     }
   }
 
   Future<void> login(String email, String password) async {
-    isLoading = true;
-    errorMessage = null;
-    notifyListeners();
+    emit(state.copyWith(isSubmitting: true, errorMessage: null));
     try {
       final response = await apiClient.postJson('/auth/login', {
         'email': email.trim(),
         'password': password,
       });
-      final accessToken = response['accessToken'].toString();
-      apiClient.setAccessToken(accessToken);
-      await _storage.write(key: 'accessToken', value: accessToken);
-      await _storage.write(key: 'refreshToken', value: response['refreshToken'].toString());
-      user = SessionUser.fromJson(response['user'] as Map<String, dynamic>);
+      await _persistAuthPayload(response);
     } catch (error) {
-      errorMessage = error.toString();
+      emit(state.copyWith(errorMessage: error.toString()));
     } finally {
-      isLoading = false;
-      notifyListeners();
+      emit(state.copyWith(isSubmitting: false));
     }
   }
 
@@ -99,9 +172,7 @@ class SessionController extends ChangeNotifier {
     String? birthDate,
     String? sex,
   }) async {
-    isLoading = true;
-    errorMessage = null;
-    notifyListeners();
+    emit(state.copyWith(isSubmitting: true, errorMessage: null));
     try {
       final response = await apiClient.postJson('/auth/register/patient', {
         'firstName': firstName.trim(),
@@ -110,29 +181,57 @@ class SessionController extends ChangeNotifier {
         'password': password,
         if (phone != null && phone.isNotEmpty) 'phone': phone.trim(),
         if (address != null && address.isNotEmpty) 'address': address.trim(),
-        if (birthDate != null && birthDate.isNotEmpty) 'birthDate': birthDate.trim(),
+        if (birthDate != null && birthDate.isNotEmpty)
+          'birthDate': birthDate.trim(),
         if (sex != null && sex.isNotEmpty) 'sex': sex,
         'consentForAi': true,
         'consentForTeleExpertise': true,
       });
-      final accessToken = response['accessToken'].toString();
-      apiClient.setAccessToken(accessToken);
-      await _storage.write(key: 'accessToken', value: accessToken);
-      await _storage.write(key: 'refreshToken', value: response['refreshToken'].toString());
-      user = SessionUser.fromJson(response['user'] as Map<String, dynamic>);
+      await _persistAuthPayload(response);
     } catch (error) {
-      errorMessage = error.toString();
+      emit(state.copyWith(errorMessage: error.toString()));
     } finally {
-      isLoading = false;
-      notifyListeners();
+      emit(state.copyWith(isSubmitting: false));
     }
   }
 
   Future<void> logout() async {
-    await _storage.delete(key: 'accessToken');
-    await _storage.delete(key: 'refreshToken');
+    await _storage.delete(key: _accessTokenKey);
+    await _storage.delete(key: _refreshTokenKey);
+    await _storage.delete(key: _sessionUserKey);
     apiClient.setAccessToken(null);
-    user = null;
-    notifyListeners();
+    emit(const AuthState());
+  }
+
+  Future<void> _persistAuthPayload(Map<String, dynamic> response) async {
+    final accessToken = response['accessToken'].toString();
+    final user = SessionUser.fromJson(response['user'] as Map<String, dynamic>);
+    apiClient.setAccessToken(accessToken);
+    await _storage.write(key: _accessTokenKey, value: accessToken);
+    await _storage.write(
+        key: _refreshTokenKey, value: response['refreshToken'].toString());
+    await _cacheUser(user);
+    emit(
+      state.copyWith(
+        user: user,
+        errorMessage: null,
+      ),
+    );
+  }
+
+  Future<void> _cacheUser(SessionUser user) async {
+    await _storage.write(
+        key: _sessionUserKey, value: jsonEncode(user.toJson()));
+  }
+
+  Future<SessionUser?> _readCachedUser() async {
+    final raw = await _storage.read(key: _sessionUserKey);
+    if (raw == null || raw.isEmpty) return null;
+    try {
+      return SessionUser.fromJson(jsonDecode(raw) as Map<String, dynamic>);
+    } catch (_) {
+      await _storage.delete(key: _sessionUserKey);
+      return null;
+    }
   }
 }

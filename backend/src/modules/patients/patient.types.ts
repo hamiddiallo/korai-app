@@ -13,6 +13,8 @@ export type PatientRecord = {
   consentForAi: boolean;
   consentForTeleExpertise: boolean;
   isValidated: boolean;
+  clientLocalId?: string;
+  clientMutationId?: string;
   createdAt: string;
   updatedAt: string;
 };

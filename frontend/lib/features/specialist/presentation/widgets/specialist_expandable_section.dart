@@ -35,7 +35,8 @@ class SpecialistExpandableSection extends StatelessWidget {
           initiallyExpanded: initiallyExpanded,
           tilePadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
           childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-          leading: Icon(icon, size: 22, color: iconColor ?? const Color(0xFF006D77)),
+          leading:
+              Icon(icon, size: 22, color: iconColor ?? const Color(0xFF006D77)),
           title: Text(
             title,
             style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),

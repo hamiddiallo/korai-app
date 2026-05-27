@@ -4,6 +4,22 @@ import type { PatientRecord } from './patient.types.js';
 
 export const patientService = {
   create(createdByUserId: string, input: Omit<PatientRecord, 'id' | 'createdAt' | 'updatedAt' | 'createdByUserId' | 'userId'> & { userId?: string }) {
+    return this.createIdempotent(createdByUserId, input);
+  },
+
+  async createIdempotent(
+    createdByUserId: string,
+    input: Omit<PatientRecord, 'id' | 'createdAt' | 'updatedAt' | 'createdByUserId' | 'userId'> & { userId?: string }
+  ) {
+    if (input.clientMutationId) {
+      const existing = await patientDao.findByClientMutationId(createdByUserId, input.clientMutationId);
+      if (existing) return existing;
+    }
+    if (input.clientLocalId) {
+      const existing = await patientDao.findByClientLocalId(createdByUserId, input.clientLocalId);
+      if (existing) return existing;
+    }
+
     return patientDao.create({
       ...input,
       createdByUserId,

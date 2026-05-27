@@ -4,14 +4,14 @@ import '../../../core/auth/session_controller.dart';
 import '../../../core/domain/korai_enums.dart';
 import '../../../core/utils/consultation_format.dart';
 import '../../nurse/domain/ai_case.dart';
-import '../../nurse/presentation/widgets/consultation_history_list.dart';
 import '../data/specialist_repository.dart';
+import 'widgets/specialist_consultation_sections.dart';
 import 'widgets/specialist_expandable_section.dart';
 
 class SpecialistHomePage extends StatefulWidget {
   const SpecialistHomePage({super.key, required this.session});
 
-  final SessionController session;
+  final AuthCubit session;
 
   @override
   State<SpecialistHomePage> createState() => _SpecialistHomePageState();
@@ -92,7 +92,8 @@ class _SpecialistHomePageState extends State<SpecialistHomePage> {
           : error != null
               ? Center(child: Text(error!, textAlign: TextAlign.center))
               : inbox.isEmpty
-                  ? const Center(child: Text('Aucun dossier en attente d\'expertise.'))
+                  ? const Center(
+                      child: Text('Aucun dossier en attente d\'expertise.'))
                   : RefreshIndicator(
                       onRefresh: _loadInbox,
                       child: ListView.builder(
@@ -100,7 +101,8 @@ class _SpecialistHomePageState extends State<SpecialistHomePage> {
                         itemCount: inbox.length,
                         itemBuilder: (context, index) {
                           final item = inbox[index];
-                          final isMine = item.assignedToUserId == widget.session.user?.id;
+                          final isMine =
+                              item.assignedToUserId == widget.session.user?.id;
                           return _InboxRequestCard(
                             item: item,
                             isMine: isMine,
@@ -150,7 +152,8 @@ class _InboxRequestCard extends StatelessWidget {
           childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
           leading: CircleAvatar(
             radius: 18,
-            backgroundColor: (isMine ? Colors.blue : Colors.teal).withValues(alpha: 0.12),
+            backgroundColor:
+                (isMine ? Colors.blue : Colors.teal).withValues(alpha: 0.12),
             child: Icon(
               isMine ? Icons.edit_note : Icons.inbox_outlined,
               size: 20,
@@ -181,7 +184,10 @@ class _InboxRequestCard extends StatelessWidget {
                 padding: const EdgeInsets.only(top: 6, bottom: 4),
                 child: Text(
                   'Dossier assigné à vous',
-                  style: TextStyle(fontSize: 11, color: Colors.blue.shade800, fontWeight: FontWeight.w600),
+                  style: TextStyle(
+                      fontSize: 11,
+                      color: Colors.blue.shade800,
+                      fontWeight: FontWeight.w600),
                 ),
               ),
             const SizedBox(height: 8),
@@ -210,7 +216,7 @@ class SpecialistReviewPage extends StatefulWidget {
     required this.onCompleted,
   });
 
-  final SessionController session;
+  final AuthCubit session;
   final SpecialistRepository repository;
   final AiCase consultation;
   final ExpertiseInboxItem inboxItem;
@@ -235,7 +241,8 @@ class _SpecialistReviewPageState extends State<SpecialistReviewPage> {
     super.initState();
     assigned = widget.inboxItem.status == ExpertiseStatus.inReview &&
         widget.inboxItem.assignedToUserId == widget.session.user?.id;
-    diagnosisController.text = widget.consultation.summary.likelyDiagnosis ?? '';
+    diagnosisController.text =
+        widget.consultation.summary.likelyDiagnosis ?? '';
   }
 
   @override
@@ -307,8 +314,6 @@ class _SpecialistReviewPageState extends State<SpecialistReviewPage> {
   Widget build(BuildContext context) {
     final c = widget.consultation;
     final review = c.expertiseReview;
-    final snapshot = review?.aiSnapshot;
-    final aiDiag = c.summary.likelyDiagnosis ?? snapshot?.likelyDiagnosis ?? '—';
 
     return Scaffold(
       appBar: AppBar(
@@ -321,7 +326,8 @@ class _SpecialistReviewPageState extends State<SpecialistReviewPage> {
             ),
             Text(
               _statusLabel(widget.inboxItem.status),
-              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.normal),
+              style:
+                  const TextStyle(fontSize: 12, fontWeight: FontWeight.normal),
             ),
           ],
         ),
@@ -329,42 +335,6 @@ class _SpecialistReviewPageState extends State<SpecialistReviewPage> {
       body: ListView(
         padding: const EdgeInsets.all(12),
         children: [
-          Card(
-            elevation: 0,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-              side: BorderSide(color: Colors.grey.shade200),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.all(14),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    widget.inboxItem.patientLabel,
-                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                  ),
-                  const SizedBox(height: 6),
-                  _HeaderChip(
-                    icon: Icons.schedule,
-                    label: ConsultationFormat.formatDateTime(widget.inboxItem.createdAt),
-                  ),
-                  const SizedBox(height: 4),
-                  _HeaderChip(icon: Icons.psychology_outlined, label: 'IA : $aiDiag'),
-                  if (review?.summaryNote != null && review!.summaryNote!.trim().isNotEmpty)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 6),
-                      child: Text(
-                        'Note infirmier : ${review.summaryNote}',
-                        style: TextStyle(fontSize: 12, color: Colors.grey.shade800),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                ],
-              ),
-            ),
-          ),
           if (!assigned) ...[
             const SizedBox(height: 8),
             Card(
@@ -377,7 +347,8 @@ class _SpecialistReviewPageState extends State<SpecialistReviewPage> {
                   children: [
                     const Text(
                       'Prise en charge requise',
-                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                      style:
+                          TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
                     ),
                     const SizedBox(height: 4),
                     const Text(
@@ -386,7 +357,9 @@ class _SpecialistReviewPageState extends State<SpecialistReviewPage> {
                     ),
                     if (assignError != null) ...[
                       const SizedBox(height: 6),
-                      Text(assignError!, style: TextStyle(color: Colors.red.shade700, fontSize: 11)),
+                      Text(assignError!,
+                          style: TextStyle(
+                              color: Colors.red.shade700, fontSize: 11)),
                     ],
                     const SizedBox(height: 10),
                     FilledButton(
@@ -405,29 +378,20 @@ class _SpecialistReviewPageState extends State<SpecialistReviewPage> {
             ),
           ],
           const SizedBox(height: 4),
-          if (review?.summaryNote != null && review!.summaryNote!.trim().isNotEmpty)
+          if (review?.summaryNote != null &&
+              review!.summaryNote!.trim().isNotEmpty)
             SpecialistExpandableSection(
               title: 'Transmission infirmier',
               subtitle: 'Note à l\'escalade',
               icon: Icons.notes_outlined,
               children: [
-                Text(review.summaryNote!, style: const TextStyle(fontSize: 13, height: 1.4)),
+                Text(review.summaryNote!,
+                    style: const TextStyle(fontSize: 13, height: 1.4)),
               ],
             ),
-          if (snapshot != null)
-            SpecialistExpandableSection(
-              title: 'Snapshot IA (à la demande)',
-              subtitle: snapshot.likelyDiagnosis ?? 'Voir le détail',
-              icon: Icons.history,
-              children: [_SnapshotDetails(snapshot: snapshot)],
-            ),
-          SpecialistExpandableSection(
-            title: 'Analyse IA et dossier',
-            subtitle: aiDiag,
-            icon: Icons.folder_open_outlined,
-            children: [
-              ConsultationDiagnosticDetails(consultation: c),
-            ],
+          SpecialistConsultationSections(
+            consultation: c,
+            patientLabel: widget.inboxItem.patientLabel,
           ),
           SpecialistExpandableSection(
             title: 'Votre avis',
@@ -444,9 +408,12 @@ class _SpecialistReviewPageState extends State<SpecialistReviewPage> {
                   isDense: true,
                 ),
                 items: ExpertDecision.values
-                    .map((d) => DropdownMenuItem(value: d, child: Text(d.label)))
+                    .map(
+                        (d) => DropdownMenuItem(value: d, child: Text(d.label)))
                     .toList(),
-                onChanged: assigned && !submitting ? (v) => setState(() => decision = v!) : null,
+                onChanged: assigned && !submitting
+                    ? (v) => setState(() => decision = v!)
+                    : null,
               ),
               const SizedBox(height: 12),
               TextField(
@@ -459,7 +426,8 @@ class _SpecialistReviewPageState extends State<SpecialistReviewPage> {
                 maxLines: 2,
                 enabled: assigned && !submitting,
               ),
-              if (decision == ExpertDecision.corrected || decision == ExpertDecision.insufficient) ...[
+              if (decision == ExpertDecision.corrected ||
+                  decision == ExpertDecision.insufficient) ...[
                 const SizedBox(height: 12),
                 TextField(
                   controller: diagnosisController,
@@ -504,7 +472,8 @@ class _SpecialistReviewPageState extends State<SpecialistReviewPage> {
                       ? const SizedBox(
                           height: 22,
                           width: 22,
-                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2, color: Colors.white),
                         )
                       : const Text('Soumettre l\'avis'),
                 ),
@@ -522,105 +491,4 @@ class _SpecialistReviewPageState extends State<SpecialistReviewPage> {
         ExpertiseStatus.inReview => 'En cours',
         ExpertiseStatus.completed => 'Terminé',
       };
-}
-
-class _HeaderChip extends StatelessWidget {
-  const _HeaderChip({required this.icon, required this.label});
-
-  final IconData icon;
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Icon(icon, size: 14, color: Colors.grey.shade600),
-        const SizedBox(width: 6),
-        Expanded(
-          child: Text(
-            label,
-            style: TextStyle(fontSize: 12, color: Colors.grey.shade800),
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _SnapshotDetails extends StatelessWidget {
-  const _SnapshotDetails({required this.snapshot});
-
-  final AiSummarySnapshot snapshot;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        if (snapshot.likelyDiagnosis != null)
-          _SnapshotLine('Diagnostic', snapshot.likelyDiagnosis!),
-        if (snapshot.confidenceLabel != null)
-          _SnapshotLine('Confiance', snapshot.confidenceLabel!),
-        if (snapshot.imageOpinion != null)
-          _SnapshotBlock('Avis image', snapshot.imageOpinion!),
-        if (snapshot.ragOpinion != null)
-          _SnapshotBlock('Avis RAG', snapshot.ragOpinion!),
-        if (snapshot.warnings.isNotEmpty) ...[
-          const SizedBox(height: 8),
-          const Text('Alertes', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12)),
-          ...snapshot.warnings.map((w) => Padding(
-                padding: const EdgeInsets.only(top: 4),
-                child: Text('• $w', style: const TextStyle(fontSize: 12)),
-              )),
-        ],
-      ],
-    );
-  }
-}
-
-class _SnapshotLine extends StatelessWidget {
-  const _SnapshotLine(this.label, this.value);
-
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 6),
-      child: RichText(
-        text: TextSpan(
-          style: TextStyle(fontSize: 12, color: Colors.grey.shade900),
-          children: [
-            TextSpan(text: '$label : ', style: const TextStyle(fontWeight: FontWeight.w600)),
-            TextSpan(text: value),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _SnapshotBlock extends StatelessWidget {
-  const _SnapshotBlock(this.label, this.text);
-
-  final String label;
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(top: 8),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(label, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12)),
-          const SizedBox(height: 4),
-          Text(text, style: const TextStyle(fontSize: 12, height: 1.35)),
-        ],
-      ),
-    );
-  }
 }

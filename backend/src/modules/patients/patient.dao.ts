@@ -17,6 +17,8 @@ const mapPatient = (patient: {
   consentForAi: boolean;
   consentForTeleExpertise: boolean;
   isValidated: boolean;
+  clientLocalId: string | null;
+  clientMutationId: string | null;
   createdAt: Date;
   updatedAt: Date;
 }): PatientRecord => ({
@@ -32,6 +34,8 @@ const mapPatient = (patient: {
   consentForAi: patient.consentForAi,
   consentForTeleExpertise: patient.consentForTeleExpertise,
   isValidated: patient.isValidated,
+  clientLocalId: nullable(patient.clientLocalId),
+  clientMutationId: nullable(patient.clientMutationId),
   createdAt: patient.createdAt.toISOString(),
   updatedAt: patient.updatedAt.toISOString()
 });
@@ -49,9 +53,35 @@ export const patientDao = {
     consentForAi: boolean;
     consentForTeleExpertise: boolean;
     isValidated: boolean;
+    clientLocalId?: string;
+    clientMutationId?: string;
   }) {
     const patient = await prisma.patient.create({ data: input });
     return mapPatient(patient);
+  },
+
+  async findByClientLocalId(createdByUserId: string, clientLocalId: string) {
+    const patient = await prisma.patient.findUnique({
+      where: {
+        createdByUserId_clientLocalId: {
+          createdByUserId,
+          clientLocalId
+        }
+      }
+    });
+    return patient ? mapPatient(patient) : undefined;
+  },
+
+  async findByClientMutationId(createdByUserId: string, clientMutationId: string) {
+    const patient = await prisma.patient.findUnique({
+      where: {
+        createdByUserId_clientMutationId: {
+          createdByUserId,
+          clientMutationId
+        }
+      }
+    });
+    return patient ? mapPatient(patient) : undefined;
   },
 
   async findById(id: string) {

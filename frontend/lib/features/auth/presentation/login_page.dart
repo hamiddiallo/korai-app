@@ -1,16 +1,19 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+
 import '../../../core/auth/session_controller.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key, required this.session});
 
-  final SessionController session;
+  final AuthCubit session;
 
   @override
   State<LoginPage> createState() => _LoginPageState();
 }
 
-class _LoginPageState extends State<LoginPage> with SingleTickerProviderStateMixin {
+class _LoginPageState extends State<LoginPage>
+    with SingleTickerProviderStateMixin {
   late TabController _tabController;
 
   // Login controllers
@@ -78,101 +81,104 @@ class _LoginPageState extends State<LoginPage> with SingleTickerProviderStateMix
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Scaffold(
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              Color(0xFFE8F1F2),
-              Color(0xFFB2F2BB), // Smooth minty clean medical look
-            ],
-          ),
-        ),
-        child: SafeArea(
-          child: Center(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 440),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    // Brand / Logo Header
-                    Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF006D77).withOpacity(0.1),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(
-                        Icons.hearing_rounded,
-                        size: 54,
-                        color: Color(0xFF006D77),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    const Text(
-                      'KORAI ORL',
-                      style: TextStyle(
-                        fontSize: 28,
-                        fontWeight: FontWeight.w900,
-                        color: Color(0xFF006D77),
-                        letterSpacing: 1.2,
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    const Text(
-                      'Plateforme intelligente de pré-consultation ORL',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: Colors.black54,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-
-                    // Modern card
-                    Container(
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.95),
-                        borderRadius: BorderRadius.circular(28),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.08),
-                            blurRadius: 24,
-                            offset: const Offset(0, 12),
+    return BlocBuilder<AuthCubit, AuthState>(
+      bloc: widget.session,
+      builder: (context, authState) {
+        return Scaffold(
+          body: Container(
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  Color(0xFFE8F1F2),
+                  Color(0xFFB2F2BB), // Smooth minty clean medical look
+                ],
+              ),
+            ),
+            child: SafeArea(
+              child: Center(
+                child: SingleChildScrollView(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 440),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // Brand / Logo Header
+                        Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color:
+                                const Color(0xFF006D77).withValues(alpha: 0.1),
+                            shape: BoxShape.circle,
                           ),
-                        ],
-                      ),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(28),
-                        child: Column(
-                          children: [
-                            // Custom Tab Bar
-                            Container(
-                              color: Colors.grey.shade100,
-                              child: TabBar(
-                                controller: _tabController,
-                                indicatorColor: const Color(0xFF006D77),
-                                labelColor: const Color(0xFF006D77),
-                                unselectedLabelColor: Colors.black54,
-                                indicatorWeight: 3.5,
-                                labelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
-                                tabs: const [
-                                  Tab(text: 'Connexion'),
-                                  Tab(text: 'Créer un compte'),
-                                ],
-                              ),
-                            ),
+                          child: const Icon(
+                            Icons.hearing_rounded,
+                            size: 54,
+                            color: Color(0xFF006D77),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        const Text(
+                          'KORAI ORL',
+                          style: TextStyle(
+                            fontSize: 28,
+                            fontWeight: FontWeight.w900,
+                            color: Color(0xFF006D77),
+                            letterSpacing: 1.2,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        const Text(
+                          'Plateforme intelligente de pré-consultation ORL',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: Colors.black54,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                        const SizedBox(height: 24),
 
-                            // Tab view content
-                            AnimatedBuilder(
-                              animation: widget.session,
-                              builder: (context, _) {
-                                return Container(
+                        // Modern card
+                        Container(
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.95),
+                            borderRadius: BorderRadius.circular(28),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.08),
+                                blurRadius: 24,
+                                offset: const Offset(0, 12),
+                              ),
+                            ],
+                          ),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(28),
+                            child: Column(
+                              children: [
+                                // Custom Tab Bar
+                                Container(
+                                  color: Colors.grey.shade100,
+                                  child: TabBar(
+                                    controller: _tabController,
+                                    indicatorColor: const Color(0xFF006D77),
+                                    labelColor: const Color(0xFF006D77),
+                                    unselectedLabelColor: Colors.black54,
+                                    indicatorWeight: 3.5,
+                                    labelStyle: const TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 15),
+                                    tabs: const [
+                                      Tab(text: 'Connexion'),
+                                      Tab(text: 'Créer un compte'),
+                                    ],
+                                  ),
+                                ),
+
+                                Container(
                                   padding: const EdgeInsets.all(24),
                                   height: 430,
                                   child: TabBarView(
@@ -182,37 +188,41 @@ class _LoginPageState extends State<LoginPage> with SingleTickerProviderStateMix
                                       _buildRegisterTab(theme),
                                     ],
                                   ),
-                                );
-                              },
+                                ),
+                              ],
                             ),
-                          ],
+                          ),
                         ),
-                      ),
-                    ),
 
-                    if (widget.session.errorMessage != null) ...[
-                      const SizedBox(height: 16),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                        decoration: BoxDecoration(
-                          color: Colors.red.shade50,
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: Colors.red.shade200),
-                        ),
-                        child: Text(
-                          widget.session.errorMessage!,
-                          textAlign: TextAlign.center,
-                          style: TextStyle(color: Colors.red.shade900, fontWeight: FontWeight.w600, fontSize: 13),
-                        ),
-                      ),
-                    ],
-                  ],
+                        if (authState.errorMessage != null) ...[
+                          const SizedBox(height: 16),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 16, vertical: 10),
+                            decoration: BoxDecoration(
+                              color: Colors.red.shade50,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: Colors.red.shade200),
+                            ),
+                            child: Text(
+                              authState.errorMessage!,
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                  color: Colors.red.shade900,
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 13),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
                 ),
               ),
             ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 
@@ -287,18 +297,22 @@ class _LoginPageState extends State<LoginPage> with SingleTickerProviderStateMix
             style: FilledButton.styleFrom(
               backgroundColor: const Color(0xFF006D77),
               foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12)),
             ),
             onPressed: widget.session.isLoading ? null : _handleLogin,
             icon: widget.session.isLoading
                 ? const SizedBox(
                     height: 18,
                     width: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                    child: CircularProgressIndicator(
+                        strokeWidth: 2, color: Colors.white),
                   )
                 : const Icon(Icons.login_rounded),
             label: Text(
-              widget.session.isLoading ? 'Connexion en cours...' : 'Se connecter',
+              widget.session.isLoading
+                  ? 'Connexion en cours...'
+                  : 'Se connecter',
               style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
             ),
           ),
@@ -368,26 +382,30 @@ class _LoginPageState extends State<LoginPage> with SingleTickerProviderStateMix
             ),
           ),
           const SizedBox(height: 20),
-
           SizedBox(
             height: 52,
             child: FilledButton.icon(
               style: FilledButton.styleFrom(
                 backgroundColor: const Color(0xFF006D77),
                 foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12)),
               ),
               onPressed: widget.session.isLoading ? null : _handleRegister,
               icon: widget.session.isLoading
                   ? const SizedBox(
                       height: 18,
                       width: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: Colors.white),
                     )
                   : const Icon(Icons.person_add_rounded),
               label: Text(
-                widget.session.isLoading ? 'Création de compte...' : 'S\'inscrire',
-                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                widget.session.isLoading
+                    ? 'Création de compte...'
+                    : 'S\'inscrire',
+                style:
+                    const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
               ),
             ),
           ),
@@ -412,7 +430,7 @@ class _LoginPageState extends State<LoginPage> with SingleTickerProviderStateMix
           boxShadow: isSelected
               ? [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.05),
+                    color: Colors.black.withValues(alpha: 0.05),
                     blurRadius: 4,
                     offset: const Offset(0, 2),
                   )

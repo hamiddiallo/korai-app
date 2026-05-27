@@ -57,6 +57,22 @@ enum ExpertDecision {
   INSUFFICIENT
 }
 
+enum ChatMessageRole {
+  USER
+  ASSISTANT
+}
+
+enum ChatConversationStatus {
+  ACTIVE
+  ARCHIVED
+}
+
+enum ChatDeliveryStatus {
+  PENDING
+  COMPLETED
+  FAILED
+}
+
 model User {
   id              String   @id @default(uuid())
   fullName        String
@@ -75,6 +91,7 @@ model User {
   consultationsAssigned Consultation[] @relation("ConsultationSpecialist")
   expertiseRequested    ExpertiseRequest[] @relation("ExpertiseRequester")
   expertiseAssigned     ExpertiseRequest[] @relation("ExpertiseAssignee")
+  chatConversations     ChatConversation[]
 }
 
 model Patient {
@@ -90,12 +107,17 @@ model Patient {
   consentForAi            Boolean  @default(false)
   consentForTeleExpertise Boolean  @default(false)
   isValidated             Boolean  @default(true)
+  clientLocalId           String?
+  clientMutationId        String?
   createdAt               DateTime @default(now())
   updatedAt               DateTime @updatedAt
 
   account       User?          @relation("PatientAccount", fields: [userId], references: [id])
   creator       User           @relation("PatientCreator", fields: [createdByUserId], references: [id])
   consultations Consultation[]
+
+  @@unique([createdByUserId, clientLocalId])
+  @@unique([createdByUserId, clientMutationId])
 }
 
 model Consultation {
@@ -116,6 +138,8 @@ model Consultation {
   clinicalNarrative    String
   status               ConsultationStatus @default(DRAFT)
   urgency              UrgencyLevel       @default(MEDIUM)
+  clientLocalId        String?
+  clientMutationId     String?
   createdAt            DateTime           @default(now())
   updatedAt            DateTime           @updatedAt
 
@@ -125,6 +149,9 @@ model Consultation {
   otoscopicImages    OtoscopicImage[]
   aiResponse         AiResponse?
   expertiseRequest   ExpertiseRequest?
+
+  @@unique([createdByUserId, clientLocalId])
+  @@unique([createdByUserId, clientMutationId])
 }
 
 model OtoscopicImage {
@@ -190,4 +217,42 @@ model ClinicalReferenceItem {
   updatedAt   DateTime              @updatedAt
 
   @@index([type, isActive])
+}
+
+model ChatConversation {
+  id                     String                 @id @default(uuid())
+  userId                 String
+  title                  String                 @default("Nouvelle conversation")
+  status                 ChatConversationStatus @default(ACTIVE)
+  externalConversationId String?
+  messageCount           Int                    @default(0)
+  lastMessageAt          DateTime               @default(now())
+  archivedAt             DateTime?
+  createdAt              DateTime               @default(now())
+  updatedAt              DateTime               @updatedAt
+
+  user     User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages ChatMessage[]
+
+  @@index([userId, status, lastMessageAt(sort: Desc)])
+}
+
+model ChatMessage {
+  id              String             @id @default(uuid())
+  conversationId  String
+  role            ChatMessageRole
+  content         String
+  sources         String[]
+  sequence        Int
+  deliveryStatus  ChatDeliveryStatus @default(COMPLETED)
+  isRead          Boolean            @default(false)
+  errorCode       String?
+  externalRawJson Json?
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+
+  conversation ChatConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@unique([conversationId, sequence])
+  @@index([conversationId, sequence])
 }

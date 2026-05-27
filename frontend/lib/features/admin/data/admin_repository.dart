@@ -34,7 +34,8 @@ class AdminRepository {
         .toList();
   }
 
-  Future<AdminPatient> updatePatient(String id, Map<String, dynamic> input) async {
+  Future<AdminPatient> updatePatient(
+      String id, Map<String, dynamic> input) async {
     final response = await apiClient.patchJson('/admin/patients/$id', input);
     return AdminPatient.fromJson(response['patient'] as Map<String, dynamic>);
   }
@@ -49,20 +50,27 @@ class AdminRepository {
   }
 
   Future<List<ClinicalReferenceItem>> listClinicalItems(String type) async {
-    final response = await apiClient.getJson('/admin/clinical-items?type=$type');
+    final response =
+        await apiClient.getJson('/admin/clinical-items?type=$type');
     return (response['items'] as List<dynamic>)
-        .map((item) => ClinicalReferenceItem.fromJson(item as Map<String, dynamic>))
+        .map((item) =>
+            ClinicalReferenceItem.fromJson(item as Map<String, dynamic>))
         .toList();
   }
 
-  Future<ClinicalReferenceItem> createClinicalItem(Map<String, dynamic> input) async {
+  Future<ClinicalReferenceItem> createClinicalItem(
+      Map<String, dynamic> input) async {
     final response = await apiClient.postJson('/admin/clinical-items', input);
-    return ClinicalReferenceItem.fromJson(response['item'] as Map<String, dynamic>);
+    return ClinicalReferenceItem.fromJson(
+        response['item'] as Map<String, dynamic>);
   }
 
-  Future<ClinicalReferenceItem> updateClinicalItem(String id, Map<String, dynamic> input) async {
-    final response = await apiClient.patchJson('/admin/clinical-items/$id', input);
-    return ClinicalReferenceItem.fromJson(response['item'] as Map<String, dynamic>);
+  Future<ClinicalReferenceItem> updateClinicalItem(
+      String id, Map<String, dynamic> input) async {
+    final response =
+        await apiClient.patchJson('/admin/clinical-items/$id', input);
+    return ClinicalReferenceItem.fromJson(
+        response['item'] as Map<String, dynamic>);
   }
 
   Future<void> deleteClinicalItem(String id) async {

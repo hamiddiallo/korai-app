@@ -38,7 +38,8 @@ class ExpertiseInboxItem {
     return ExpertiseInboxItem(
       expertiseId: expertise['id']?.toString() ?? '',
       consultationId: expertise['consultationId']?.toString() ?? '',
-      status: ExpertiseStatus.tryFromApi(expertise['status']?.toString()) ?? ExpertiseStatus.pending,
+      status: ExpertiseStatus.tryFromApi(expertise['status']?.toString()) ??
+          ExpertiseStatus.pending,
       createdAt: expertise['createdAt']?.toString() ?? '',
       assignedToUserId: expertise['assignedToUserId']?.toString(),
       patientFirstName: patient['firstName']?.toString(),
@@ -56,7 +57,8 @@ class SpecialistRepository {
   Future<List<ExpertiseInboxItem>> listInbox() async {
     final response = await apiClient.getJson('/expertise/inbox');
     return (response['items'] as List<dynamic>)
-        .map((item) => ExpertiseInboxItem.fromJson(item as Map<String, dynamic>))
+        .map(
+            (item) => ExpertiseInboxItem.fromJson(item as Map<String, dynamic>))
         .toList();
   }
 
@@ -87,14 +89,17 @@ class SpecialistRepository {
     String? correctedRecommendation,
     String? correctedClinicalSummary,
   }) async {
-    final response = await apiClient.postJson('/cases/$consultationId/expertise/review', {
+    final response =
+        await apiClient.postJson('/cases/$consultationId/expertise/review', {
       'decision': decision.value,
       if (comment != null && comment.isNotEmpty) 'comment': comment,
-      if (correctedLikelyDiagnosis != null && correctedLikelyDiagnosis.isNotEmpty)
+      if (correctedLikelyDiagnosis != null &&
+          correctedLikelyDiagnosis.isNotEmpty)
         'correctedLikelyDiagnosis': correctedLikelyDiagnosis,
       if (correctedRecommendation != null && correctedRecommendation.isNotEmpty)
         'correctedRecommendation': correctedRecommendation,
-      if (correctedClinicalSummary != null && correctedClinicalSummary.isNotEmpty)
+      if (correctedClinicalSummary != null &&
+          correctedClinicalSummary.isNotEmpty)
         'correctedClinicalSummary': correctedClinicalSummary,
     });
     // Recharger le cas complet pour l'affichage

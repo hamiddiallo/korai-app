@@ -39,12 +39,14 @@ class _ExpertiseRequestPanelState extends State<ExpertiseRequestPanel> {
       if (!mounted) return;
       widget.onUpdated?.call(updated);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Demande d\'expertise envoyée au spécialiste')),
+        const SnackBar(
+            content: Text('Demande d\'expertise envoyée au spécialiste')),
       );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString()), backgroundColor: Colors.red.shade700),
+        SnackBar(
+            content: Text(e.toString()), backgroundColor: Colors.red.shade700),
       );
     } finally {
       if (mounted) setState(() => submitting = false);
@@ -108,10 +110,12 @@ class _ExpertiseRequestPanelState extends State<ExpertiseRequestPanel> {
                   ? const SizedBox(
                       width: 18,
                       height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: Colors.white),
                     )
                   : const Icon(Icons.send_outlined),
-              label: Text(submitting ? 'Envoi…' : 'Demander un avis spécialiste'),
+              label:
+                  Text(submitting ? 'Envoi…' : 'Demander un avis spécialiste'),
             ),
           ],
         ),

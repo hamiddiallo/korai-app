@@ -1,8 +1,9 @@
 import 'dart:io';
 
-import 'package:flutter/foundation.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:image_picker/image_picker.dart';
 
+import '../../../core/api/api_client.dart';
 import '../../../core/domain/clinical_snapshot.dart';
 import '../../../core/domain/consultation_create_payload.dart';
 import '../../../core/domain/korai_enums.dart';
@@ -12,12 +13,21 @@ import '../domain/ai_case.dart';
 import '../domain/clinical_reference_item.dart';
 import '../domain/patient.dart';
 
-class NurseConsultationViewModel extends ChangeNotifier {
+class NurseConsultationState {
+  const NurseConsultationState({this.version = 0});
+
+  final int version;
+
+  NurseConsultationState next() => NurseConsultationState(version: version + 1);
+}
+
+class NurseConsultationViewModel extends Cubit<NurseConsultationState> {
   NurseConsultationViewModel({
     required NurseRepository repository,
     ImagePicker? imagePicker,
   })  : _repository = repository,
-        _imagePicker = imagePicker ?? ImagePicker();
+        _imagePicker = imagePicker ?? ImagePicker(),
+        super(const NurseConsultationState());
 
   final NurseRepository _repository;
   final ImagePicker _imagePicker;
@@ -31,6 +41,7 @@ class NurseConsultationViewModel extends ChangeNotifier {
   bool isEditingImage = false;
   EarSide earSide = EarSide.both;
   String? errorMessage;
+  String? infoMessage;
   List<ClinicalReferenceItem> symptoms = [];
   List<ClinicalReferenceItem> medicalHistories = [];
   List<ClinicalReferenceItem> touchChecks = [];
@@ -49,10 +60,21 @@ class NurseConsultationViewModel extends ChangeNotifier {
     'Anormal — sévère',
   ];
 
+  void _emitState() {
+    if (!isClosed) emit(state.next());
+  }
+
+  void setErrorMessage(String message) {
+    errorMessage = message;
+    infoMessage = null;
+    _emitState();
+  }
+
   Future<void> loadClinicalReferences() async {
     isLoading = true;
     errorMessage = null;
-    notifyListeners();
+    infoMessage = null;
+    _emitState();
     try {
       final results = await Future.wait([
         _repository.listClinicalItems('SYMPTOM'),
@@ -66,14 +88,15 @@ class NurseConsultationViewModel extends ChangeNotifier {
       errorMessage = error.toString();
     } finally {
       isLoading = false;
-      notifyListeners();
+      _emitState();
     }
   }
 
   void goToStep(int step) {
     currentStep = step.clamp(0, totalSteps - 1);
     errorMessage = null;
-    notifyListeners();
+    infoMessage = null;
+    _emitState();
   }
 
   void nextStep() => goToStep(currentStep + 1);
@@ -82,7 +105,9 @@ class NurseConsultationViewModel extends ChangeNotifier {
 
   AiCase? findPatientPreconsultationCase(List<AiCase> cases, String patientId) {
     final matching = cases
-        .where((c) => c.patientId == patientId && (c.symptoms?.trim().isNotEmpty ?? false))
+        .where((c) =>
+            c.patientId == patientId &&
+            (c.symptoms?.trim().isNotEmpty ?? false))
         .toList();
     if (matching.isEmpty) return null;
 
@@ -111,7 +136,7 @@ class NurseConsultationViewModel extends ChangeNotifier {
       touchCheckObservations
         ..clear()
         ..addAll(consultation.touchObservations);
-      notifyListeners();
+      _emitState();
       return;
     }
 
@@ -120,7 +145,7 @@ class NurseConsultationViewModel extends ChangeNotifier {
 
   void setEarSide(EarSide value) {
     earSide = value;
-    notifyListeners();
+    _emitState();
   }
 
   void applyClinicalPrefillFromNarrative(String? narrative) {
@@ -143,7 +168,8 @@ class NurseConsultationViewModel extends ChangeNotifier {
       }
     }
     for (final touchCheck in touchChecks) {
-      final observation = _parseTouchObservationFromNarrative(narrative, touchCheck.label);
+      final observation =
+          _parseTouchObservationFromNarrative(narrative, touchCheck.label);
       if (observation != null) {
         selectedTouchCheckIds.add(touchCheck.id);
         touchCheckObservations[touchCheck.id] = observation;
@@ -152,7 +178,7 @@ class NurseConsultationViewModel extends ChangeNotifier {
         touchCheckObservations[touchCheck.id] = touchObservationOptions[1];
       }
     }
-    notifyListeners();
+    _emitState();
   }
 
   String? _parseTouchObservationFromNarrative(String narrative, String label) {
@@ -223,7 +249,8 @@ class NurseConsultationViewModel extends ChangeNotifier {
       target.remove(id);
     }
     errorMessage = null;
-    notifyListeners();
+    infoMessage = null;
+    _emitState();
   }
 
   void toggleTouchCheck(String id, bool selected) {
@@ -235,13 +262,15 @@ class NurseConsultationViewModel extends ChangeNotifier {
       touchCheckObservations.remove(id);
     }
     errorMessage = null;
-    notifyListeners();
+    infoMessage = null;
+    _emitState();
   }
 
   void setTouchCheckObservation(String id, String value) {
     touchCheckObservations[id] = value;
     errorMessage = null;
-    notifyListeners();
+    infoMessage = null;
+    _emitState();
   }
 
   String? validateTouchCheckStep() {
@@ -257,7 +286,8 @@ class NurseConsultationViewModel extends ChangeNotifier {
   List<String> touchCheckSummaries() {
     return touchChecks
         .where((item) => selectedTouchCheckIds.contains(item.id))
-        .map((item) => '${item.label}: ${touchCheckObservations[item.id] ?? "—"}')
+        .map((item) =>
+            '${item.label}: ${touchCheckObservations[item.id] ?? "—"}')
         .toList();
   }
 
@@ -289,13 +319,15 @@ class NurseConsultationViewModel extends ChangeNotifier {
     if (picked == null) return;
     image = File(picked.path);
     errorMessage = null;
-    notifyListeners();
+    infoMessage = null;
+    _emitState();
   }
 
   void clearImage() {
     image = null;
     errorMessage = null;
-    notifyListeners();
+    infoMessage = null;
+    _emitState();
   }
 
   Future<void> rotateImage({required bool clockwise}) async {
@@ -318,7 +350,8 @@ class NurseConsultationViewModel extends ChangeNotifier {
     await _editImage(() async {
       final current = image;
       if (current == null) return;
-      image = await OrlImageEditor.adjustBrightness(current, brighter: brighter);
+      image =
+          await OrlImageEditor.adjustBrightness(current, brighter: brighter);
     });
   }
 
@@ -326,14 +359,14 @@ class NurseConsultationViewModel extends ChangeNotifier {
     if (image == null) return;
     isEditingImage = true;
     errorMessage = null;
-    notifyListeners();
+    _emitState();
     try {
       await action();
     } catch (error) {
       errorMessage = error.toString();
     } finally {
       isEditingImage = false;
-      notifyListeners();
+      _emitState();
     }
   }
 
@@ -350,8 +383,9 @@ class NurseConsultationViewModel extends ChangeNotifier {
 
     isSubmitting = true;
     errorMessage = null;
+    infoMessage = null;
     aiCase = null;
-    notifyListeners();
+    _emitState();
     try {
       patient ??= await _repository.createPatient(
         firstName: firstName,
@@ -362,24 +396,61 @@ class NurseConsultationViewModel extends ChangeNotifier {
         address: address,
       );
 
-      aiCase = await _repository.diagnose(
-        payload: buildConsultationPayload(
-          patientId: patient!.id,
-          firstName: firstName,
-          lastName: lastName,
-          phone: phone,
-          address: address,
-          age: age,
-          sex: sex,
-          notes: notes,
-        ),
+      final currentPatient = patient!;
+      final localPayload = buildConsultationPayload(
+        patientId: currentPatient.id,
+        firstName: firstName,
+        lastName: lastName,
+        phone: phone,
+        address: address,
+        age: age,
+        sex: sex,
+        notes: notes,
+      );
+      final localDraft = await _repository.savePendingDiagnosisDraft(
+        patient: currentPatient,
+        payload: localPayload,
         image: selectedImage,
       );
+
+      try {
+        final remotePatient = await _repository.syncLocalPatient(
+          currentPatient,
+          firstName: firstName,
+          lastName: lastName,
+          birthDate: age.isEmpty ? null : 'Age: $age',
+          phone: phone,
+          sex: sex,
+          address: address,
+        );
+        patient = remotePatient;
+
+        aiCase = await _repository.diagnose(
+          payload: buildConsultationPayload(
+            patientId: remotePatient.id,
+            firstName: firstName,
+            lastName: lastName,
+            phone: phone,
+            address: address,
+            age: age,
+            sex: sex,
+            notes: notes,
+          ),
+          image: selectedImage,
+          localConsultationId: localDraft.localId,
+        );
+      } on ApiException catch (error) {
+        errorMessage =
+            'Consultation enregistree localement, mais le serveur a refuse la synchronisation: ${error.message}';
+      } catch (_) {
+        infoMessage =
+            'Consultation enregistree localement. L analyse IA sera synchronisee des que le reseau revient.';
+      }
     } catch (error) {
       errorMessage = error.toString();
     } finally {
       isSubmitting = false;
-      notifyListeners();
+      _emitState();
     }
   }
 
@@ -395,6 +466,31 @@ class NurseConsultationViewModel extends ChangeNotifier {
   }) async {
     await _run(() async {
       aiCase = null;
+      final currentPatient = patient ??
+          Patient(
+            id: patientId,
+            firstName: firstName,
+            lastName: lastName,
+            phone: phone,
+            address: address,
+            birthDate: age.isEmpty ? null : 'Age: $age',
+            sex: sex,
+          );
+      final payload = buildConsultationPayload(
+        patientId: currentPatient.id,
+        firstName: firstName,
+        lastName: lastName,
+        phone: phone,
+        address: address,
+        age: age,
+        sex: sex,
+        notes: notes,
+      );
+      final localDraft = await _repository.savePendingDiagnosisDraft(
+        patient: currentPatient,
+        payload: payload,
+        image: image,
+      );
       aiCase = await _repository.diagnose(
         payload: buildConsultationPayload(
           patientId: patientId,
@@ -407,6 +503,7 @@ class NurseConsultationViewModel extends ChangeNotifier {
           notes: notes,
         ),
         image: image,
+        localConsultationId: localDraft.localId,
       );
     });
   }
@@ -438,9 +535,11 @@ class NurseConsultationViewModel extends ChangeNotifier {
       symptomIds: ClinicalSnapshot.ids(selectedSymptomIds),
       symptomLabels: ClinicalSnapshot.labels(symptoms, selectedSymptomIds),
       medicalHistoryIds: ClinicalSnapshot.ids(selectedMedicalHistoryIds),
-      medicalHistoryLabels: ClinicalSnapshot.labels(medicalHistories, selectedMedicalHistoryIds),
+      medicalHistoryLabels:
+          ClinicalSnapshot.labels(medicalHistories, selectedMedicalHistoryIds),
       touchCheckIds: ClinicalSnapshot.ids(selectedTouchCheckIds),
-      touchCheckLabels: ClinicalSnapshot.labels(touchChecks, selectedTouchCheckIds),
+      touchCheckLabels:
+          ClinicalSnapshot.labels(touchChecks, selectedTouchCheckIds),
       touchObservations: Map<String, String>.from(touchCheckObservations),
     );
   }
@@ -451,7 +550,8 @@ class NurseConsultationViewModel extends ChangeNotifier {
 
     AiCase? updated;
     await _run(() async {
-      updated = await _repository.requestExpertise(current.id, summaryNote: summaryNote);
+      updated = await _repository.requestExpertise(current.id,
+          summaryNote: summaryNote);
       aiCase = updated;
     });
     return updated;
@@ -489,21 +589,26 @@ class NurseConsultationViewModel extends ChangeNotifier {
     ];
   }
 
-  List<String> labelsFor(List<ClinicalReferenceItem> items, Set<String> selectedIds) {
-    return items.where((item) => selectedIds.contains(item.id)).map((item) => item.label).toList();
+  List<String> labelsFor(
+      List<ClinicalReferenceItem> items, Set<String> selectedIds) {
+    return items
+        .where((item) => selectedIds.contains(item.id))
+        .map((item) => item.label)
+        .toList();
   }
 
   Future<void> _run(Future<void> Function() action) async {
     isLoading = true;
     errorMessage = null;
-    notifyListeners();
+    infoMessage = null;
+    _emitState();
     try {
       await action();
     } catch (error) {
       errorMessage = error.toString();
     } finally {
       isLoading = false;
-      notifyListeners();
+      _emitState();
     }
   }
 }
@@ -522,5 +627,8 @@ class PreconsultationPreview {
   final String? notes;
 
   bool get hasClinicalData =>
-      symptomLabels.isNotEmpty || historyLabels.isNotEmpty || touchCheckLabels.isNotEmpty || (notes?.isNotEmpty ?? false);
+      symptomLabels.isNotEmpty ||
+      historyLabels.isNotEmpty ||
+      touchCheckLabels.isNotEmpty ||
+      (notes?.isNotEmpty ?? false);
 }

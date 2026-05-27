@@ -23,7 +23,9 @@ export class ConsultationController {
       medicalHistoryLabels: body.medicalHistoryLabels,
       touchCheckIds: body.touchCheckIds,
       touchCheckLabels: body.touchCheckLabels,
-      touchObservations: body.touchObservations
+      touchObservations: body.touchObservations,
+      clientLocalId: body.clientLocalId,
+      clientMutationId: body.clientMutationId
     };
 
     if (req.user!.role === 'PATIENT') {

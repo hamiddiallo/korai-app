@@ -30,6 +30,8 @@ const mapConsultation = (row: {
   clinicalNarrative: string;
   status: ConsultationStatus;
   urgency: UrgencyLevel;
+  clientLocalId: string | null;
+  clientMutationId: string | null;
   createdAt: Date;
   updatedAt: Date;
   aiResponse?: {
@@ -63,6 +65,8 @@ const mapConsultation = (row: {
   clinicalNarrative: row.clinicalNarrative,
   status: row.status,
   urgency: row.urgency,
+  clientLocalId: nullable(row.clientLocalId),
+  clientMutationId: nullable(row.clientMutationId),
   createdAt: row.createdAt.toISOString(),
   updatedAt: row.updatedAt.toISOString(),
   aiResponse: row.aiResponse
@@ -100,6 +104,8 @@ export const consultationDao = {
     touchCheckIds?: string[];
     touchCheckLabels?: string[];
     touchObservations?: Record<string, string>;
+    clientLocalId?: string;
+    clientMutationId?: string;
   }) {
     const row = await prisma.consultation.create({
       data: {
@@ -116,11 +122,39 @@ export const consultationDao = {
         medicalHistoryLabels: input.medicalHistoryLabels ?? [],
         touchCheckIds: input.touchCheckIds ?? [],
         touchCheckLabels: input.touchCheckLabels ?? [],
-        touchObservations: input.touchObservations ?? undefined
+        touchObservations: input.touchObservations ?? undefined,
+        clientLocalId: input.clientLocalId,
+        clientMutationId: input.clientMutationId
       },
       include: includeRelations
     });
     return mapConsultation(row);
+  },
+
+  async findByClientLocalId(createdByUserId: string, clientLocalId: string) {
+    const row = await prisma.consultation.findUnique({
+      where: {
+        createdByUserId_clientLocalId: {
+          createdByUserId,
+          clientLocalId
+        }
+      },
+      include: includeRelations
+    });
+    return row ? mapConsultation(row) : undefined;
+  },
+
+  async findByClientMutationId(createdByUserId: string, clientMutationId: string) {
+    const row = await prisma.consultation.findUnique({
+      where: {
+        createdByUserId_clientMutationId: {
+          createdByUserId,
+          clientMutationId
+        }
+      },
+      include: includeRelations
+    });
+    return row ? mapConsultation(row) : undefined;
   },
 
   async findById(id: string) {

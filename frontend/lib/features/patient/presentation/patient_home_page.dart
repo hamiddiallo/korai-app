@@ -1,4 +1,7 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../core/auth/session_controller.dart';
 import '../../../core/domain/korai_enums.dart';
@@ -12,7 +15,7 @@ import 'patient_consultation_view_model.dart';
 class PatientHomePage extends StatefulWidget {
   const PatientHomePage({super.key, required this.session});
 
-  final SessionController session;
+  final AuthCubit session;
 
   @override
   State<PatientHomePage> createState() => _PatientHomePageState();
@@ -20,6 +23,8 @@ class PatientHomePage extends StatefulWidget {
 
 class _PatientHomePageState extends State<PatientHomePage> {
   late final PatientConsultationViewModel viewModel;
+  late final StreamSubscription<PatientConsultationState>
+      _viewModelSubscription;
 
   final firstNameController = TextEditingController();
   final lastNameController = TextEditingController();
@@ -45,8 +50,9 @@ class _PatientHomePageState extends State<PatientHomePage> {
       repository: PatientRepository(widget.session.apiClient),
       session: widget.session,
     );
+    _viewModelSubscription =
+        viewModel.stream.listen((_) => _onViewModelChanged());
     viewModel.initialize();
-    viewModel.addListener(_onViewModelChanged);
   }
 
   void _onViewModelChanged() {
@@ -56,10 +62,13 @@ class _PatientHomePageState extends State<PatientHomePage> {
       if (!_isProfilePopulated) {
         firstNameController.text = viewModel.patient!.firstName;
         lastNameController.text = viewModel.patient!.lastName;
-        phoneController.text = viewModel.patient!.phone ?? widget.session.user?.phone ?? '';
+        phoneController.text =
+            viewModel.patient!.phone ?? widget.session.user?.phone ?? '';
         addressController.text = viewModel.patient!.address ?? '';
         if (viewModel.patient!.birthDate != null) {
-          ageController.text = viewModel.patient!.birthDate!.replaceAll('Age: ', '').replaceAll(' ans', '');
+          ageController.text = viewModel.patient!.birthDate!
+              .replaceAll('Age: ', '')
+              .replaceAll(' ans', '');
         }
         if (viewModel.patient!.sex != null) {
           sex = viewModel.patient!.sex == 'M' ? 'M' : 'F';
@@ -74,21 +83,21 @@ class _PatientHomePageState extends State<PatientHomePage> {
 
   @override
   void dispose() {
-    viewModel.removeListener(_onViewModelChanged);
+    _viewModelSubscription.cancel();
     firstNameController.dispose();
     lastNameController.dispose();
     phoneController.dispose();
     addressController.dispose();
     ageController.dispose();
     notesController.dispose();
-    viewModel.dispose();
+    viewModel.close();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: viewModel,
+    return BlocBuilder<PatientConsultationViewModel, PatientConsultationState>(
+      bloc: viewModel,
       builder: (context, _) {
         if (viewModel.isLoading) {
           return const Scaffold(
@@ -98,7 +107,8 @@ class _PatientHomePageState extends State<PatientHomePage> {
                 children: [
                   CircularProgressIndicator(),
                   SizedBox(height: 16),
-                  Text('Chargement de votre dossier patient...', style: TextStyle(fontWeight: FontWeight.w600)),
+                  Text('Chargement de votre dossier patient...',
+                      style: TextStyle(fontWeight: FontWeight.w600)),
                 ],
               ),
             ),
@@ -109,13 +119,19 @@ class _PatientHomePageState extends State<PatientHomePage> {
           appBar: _currentTab == 1
               ? null
               : AppBar(
-                  backgroundColor: Theme.of(context).colorScheme.primaryContainer.withOpacity(0.3),
+                  backgroundColor: Theme.of(context)
+                      .colorScheme
+                      .primaryContainer
+                      .withValues(alpha: 0.3),
                   title: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        _currentTab == 2 ? 'Mon Profil' : 'Pré-consultation ORL',
-                        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                        _currentTab == 2
+                            ? 'Mon Profil'
+                            : 'Pré-consultation ORL',
+                        style: const TextStyle(
+                            fontSize: 18, fontWeight: FontWeight.bold),
                       ),
                       const Text(
                         'Espace Patient',
@@ -141,44 +157,51 @@ class _PatientHomePageState extends State<PatientHomePage> {
                   : viewModel.isReadOnly
                       ? _buildReadOnlyConsultationTab()
                       : SafeArea(
-                      child: Column(
-                        children: [
-                          PatientSprintProgress(
-                            steps: steps,
-                            currentStep: viewModel.currentStep,
-                            onTap: viewModel.isReadOnly ? (_) {} : viewModel.goToStep,
-                          ),
-                          Expanded(
-                            child: ListView(
-                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                              children: [
-                                if (viewModel.errorMessage != null) ...[
-                                  PatientErrorBanner(message: viewModel.errorMessage!),
-                                  const SizedBox(height: 12),
-                                ],
-                                PatientSprintCard(
-                                  title: steps[viewModel.currentStep],
-                                  subtitle: _getStepSubtitle(viewModel.currentStep),
-                                  child: _currentStepBody(),
+                          child: Column(
+                            children: [
+                              PatientSprintProgress(
+                                steps: steps,
+                                currentStep: viewModel.currentStep,
+                                onTap: viewModel.isReadOnly
+                                    ? (_) {}
+                                    : viewModel.goToStep,
+                              ),
+                              Expanded(
+                                child: ListView(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 16, vertical: 8),
+                                  children: [
+                                    if (viewModel.errorMessage != null) ...[
+                                      PatientErrorBanner(
+                                          message: viewModel.errorMessage!),
+                                      const SizedBox(height: 12),
+                                    ],
+                                    PatientSprintCard(
+                                      title: steps[viewModel.currentStep],
+                                      subtitle: _getStepSubtitle(
+                                          viewModel.currentStep),
+                                      child: _currentStepBody(),
+                                    ),
+                                    if (viewModel.aiCase != null) ...[
+                                      const SizedBox(height: 16),
+                                      PatientAiResultCard(
+                                          aiCase: viewModel.aiCase!),
+                                    ],
+                                  ],
                                 ),
-                                if (viewModel.aiCase != null) ...[
-                                  const SizedBox(height: 16),
-                                  PatientAiResultCard(aiCase: viewModel.aiCase!),
-                                ],
-                              ],
-                            ),
+                              ),
+                              PatientSprintNavigationBar(
+                                isFirst: viewModel.currentStep == 0,
+                                isLast:
+                                    viewModel.currentStep == steps.length - 1,
+                                isBusy: viewModel.isSubmitting,
+                                isReadOnly: viewModel.isReadOnly,
+                                onPrevious: viewModel.previousStep,
+                                onNext: _handleNext,
+                              ),
+                            ],
                           ),
-                          PatientSprintNavigationBar(
-                            isFirst: viewModel.currentStep == 0,
-                            isLast: viewModel.currentStep == steps.length - 1,
-                            isBusy: viewModel.isSubmitting,
-                            isReadOnly: viewModel.isReadOnly,
-                            onPrevious: viewModel.previousStep,
-                            onNext: _handleNext,
-                          ),
-                        ],
-                      ),
-                    ),
+                        ),
           bottomNavigationBar: Container(
             margin: const EdgeInsets.fromLTRB(16, 0, 16, 12),
             padding: const EdgeInsets.symmetric(vertical: 6),
@@ -188,7 +211,7 @@ class _PatientHomePageState extends State<PatientHomePage> {
               border: Border.all(color: Colors.grey.shade200),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.04),
+                  color: Colors.black.withValues(alpha: 0.04),
                   blurRadius: 10,
                   offset: const Offset(0, -2),
                 ),
@@ -322,8 +345,9 @@ class _PatientHomePageState extends State<PatientHomePage> {
             children: [
               CircleAvatar(
                 radius: 30,
-                backgroundColor: const Color(0xFF006D77).withOpacity(0.1),
-                child: const Icon(Icons.person, size: 36, color: Color(0xFF006D77)),
+                backgroundColor: const Color(0xFF006D77).withValues(alpha: 0.1),
+                child: const Icon(Icons.person,
+                    size: 36, color: Color(0xFF006D77)),
               ),
               const SizedBox(width: 16),
               Expanded(
@@ -332,7 +356,8 @@ class _PatientHomePageState extends State<PatientHomePage> {
                   children: [
                     Text(
                       patient.fullName,
-                      style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                      style: const TextStyle(
+                          fontSize: 20, fontWeight: FontWeight.bold),
                     ),
                     const SizedBox(height: 4),
                     Text(
@@ -345,7 +370,6 @@ class _PatientHomePageState extends State<PatientHomePage> {
             ],
           ),
           const SizedBox(height: 24),
-
           if (!patient.isValidated)
             Container(
               padding: const EdgeInsets.all(16),
@@ -356,7 +380,8 @@ class _PatientHomePageState extends State<PatientHomePage> {
               ),
               child: const Row(
                 children: [
-                  Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 28),
+                  Icon(Icons.warning_amber_rounded,
+                      color: Colors.orange, size: 28),
                   SizedBox(width: 12),
                   Expanded(
                     child: Column(
@@ -364,7 +389,10 @@ class _PatientHomePageState extends State<PatientHomePage> {
                       children: [
                         Text(
                           'Compte en attente de validation',
-                          style: TextStyle(fontWeight: FontWeight.bold, color: Colors.orange, fontSize: 14),
+                          style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: Colors.orange,
+                              fontSize: 14),
                         ),
                         SizedBox(height: 4),
                         Text(
@@ -387,7 +415,8 @@ class _PatientHomePageState extends State<PatientHomePage> {
               ),
               child: const Row(
                 children: [
-                  Icon(Icons.check_circle_outline, color: Colors.green, size: 28),
+                  Icon(Icons.check_circle_outline,
+                      color: Colors.green, size: 28),
                   SizedBox(width: 12),
                   Expanded(
                     child: Column(
@@ -395,7 +424,10 @@ class _PatientHomePageState extends State<PatientHomePage> {
                       children: [
                         Text(
                           'Compte Validé et Actif',
-                          style: TextStyle(fontWeight: FontWeight.bold, color: Colors.green, fontSize: 14),
+                          style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: Colors.green,
+                              fontSize: 14),
                         ),
                         SizedBox(height: 4),
                         Text(
@@ -409,13 +441,11 @@ class _PatientHomePageState extends State<PatientHomePage> {
               ),
             ),
           const SizedBox(height: 24),
-
           const Text(
             'Informations personnelles',
             style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 16),
-
           TextFormField(
             controller: firstNameController,
             readOnly: patient.isValidated,
@@ -475,7 +505,8 @@ class _PatientHomePageState extends State<PatientHomePage> {
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFF006D77),
                   foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12)),
                 ),
                 onPressed: () async {
                   try {
@@ -484,9 +515,12 @@ class _PatientHomePageState extends State<PatientHomePage> {
                       lastName: lastNameController.text.trim(),
                       phone: phoneController.text.trim(),
                       address: addressController.text.trim(),
-                      birthDate: ageController.text.isEmpty ? null : 'Age: ${ageController.text.trim()} ans',
+                      birthDate: ageController.text.isEmpty
+                          ? null
+                          : 'Age: ${ageController.text.trim()} ans',
                       sex: sex,
                     );
+                    if (!mounted) return;
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(
                         content: Text('Profil mis à jour avec succès !'),
@@ -494,6 +528,7 @@ class _PatientHomePageState extends State<PatientHomePage> {
                       ),
                     );
                   } catch (e) {
+                    if (!mounted) return;
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
                         content: Text('Erreur lors de la mise à jour : $e'),
@@ -502,7 +537,9 @@ class _PatientHomePageState extends State<PatientHomePage> {
                     );
                   }
                 },
-                child: const Text('Enregistrer les modifications', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                child: const Text('Enregistrer les modifications',
+                    style:
+                        TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
               ),
             ),
           ],
@@ -517,7 +554,8 @@ class _PatientHomePageState extends State<PatientHomePage> {
     }
     return switch (step) {
       0 => 'Vérifiez et complétez vos coordonnées personnelles.',
-      1 => 'Sélectionnez les signes et douleurs que vous ressentez actuellement.',
+      1 =>
+        'Sélectionnez les signes et douleurs que vous ressentez actuellement.',
       2 => 'Avez-vous des antécédents médicaux particuliers ?',
       _ => 'Vérifiez toutes vos réponses avant de valider votre dossier.',
     };
@@ -541,14 +579,16 @@ class _PatientHomePageState extends State<PatientHomePage> {
           selectedIds: viewModel.selectedSymptomIds,
           emptyText: 'Aucun symptôme configuré',
           readOnly: readOnly,
-          onChanged: (id, selected) => viewModel.toggleSelection('SYMPTOM', id, selected),
+          onChanged: (id, selected) =>
+              viewModel.toggleSelection('SYMPTOM', id, selected),
         ),
       2 => PatientClinicalSelectionStep(
           items: viewModel.medicalHistories,
           selectedIds: viewModel.selectedMedicalHistoryIds,
           emptyText: 'Aucun antécédent configuré',
           readOnly: readOnly,
-          onChanged: (id, selected) => viewModel.toggleSelection('MEDICAL_HISTORY', id, selected),
+          onChanged: (id, selected) =>
+              viewModel.toggleSelection('MEDICAL_HISTORY', id, selected),
         ),
       _ => PatientRecapStep(
           firstName: firstNameController.text,
@@ -561,8 +601,10 @@ class _PatientHomePageState extends State<PatientHomePage> {
           onEarSideChanged: readOnly ? null : viewModel.setEarSide,
           notesController: notesController,
           readOnly: readOnly,
-          selectedSymptoms: viewModel.labelsFor(viewModel.symptoms, viewModel.selectedSymptomIds),
-          selectedHistories: viewModel.labelsFor(viewModel.medicalHistories, viewModel.selectedMedicalHistoryIds),
+          selectedSymptoms: viewModel.labelsFor(
+              viewModel.symptoms, viewModel.selectedSymptomIds),
+          selectedHistories: viewModel.labelsFor(
+              viewModel.medicalHistories, viewModel.selectedMedicalHistoryIds),
           selectedTouchChecks: const [],
           hasImage: false,
         ),
@@ -691,7 +733,10 @@ class _PatientSprintProgressState extends State<PatientSprintProgress> {
     final screenWidth = MediaQuery.of(context).size.width;
 
     // Target scroll offset to center active index
-    final targetOffset = (widget.currentStep * itemWidth) + 16.0 - (screenWidth / 2) + (itemWidth / 2);
+    final targetOffset = (widget.currentStep * itemWidth) +
+        16.0 -
+        (screenWidth / 2) +
+        (itemWidth / 2);
     final maxScroll = _scrollController.position.maxScrollExtent;
     final clampedOffset = targetOffset.clamp(0.0, maxScroll);
 
@@ -718,7 +763,7 @@ class _PatientSprintProgressState extends State<PatientSprintProgress> {
               child: LinearProgressIndicator(
                 value: (widget.currentStep + 1) / widget.steps.length,
                 minHeight: 6,
-                backgroundColor: colorScheme.primary.withOpacity(0.1),
+                backgroundColor: colorScheme.primary.withValues(alpha: 0.1),
                 valueColor: AlwaysStoppedAnimation<Color>(colorScheme.primary),
               ),
             ),
@@ -736,18 +781,19 @@ class _PatientSprintProgressState extends State<PatientSprintProgress> {
                     onTap: () => widget.onTap(index),
                     child: AnimatedContainer(
                       duration: const Duration(milliseconds: 200),
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 6),
                       decoration: BoxDecoration(
                         color: index == widget.currentStep
                             ? colorScheme.primary
                             : index < widget.currentStep
-                                ? colorScheme.primary.withOpacity(0.08)
+                                ? colorScheme.primary.withValues(alpha: 0.08)
                                 : colorScheme.surface,
                         borderRadius: BorderRadius.circular(20),
                         border: Border.all(
                           color: index == widget.currentStep
                               ? colorScheme.primary
-                              : colorScheme.outline.withOpacity(0.2),
+                              : colorScheme.outline.withValues(alpha: 0.2),
                         ),
                       ),
                       child: Row(
@@ -758,14 +804,18 @@ class _PatientSprintProgressState extends State<PatientSprintProgress> {
                                 ? Colors.white
                                 : index < widget.currentStep
                                     ? colorScheme.primary
-                                    : colorScheme.outline.withOpacity(0.5),
+                                    : colorScheme.outline
+                                        .withValues(alpha: 0.5),
                             child: index < widget.currentStep
-                                ? const Icon(Icons.check, size: 10, color: Colors.white)
+                                ? const Icon(Icons.check,
+                                    size: 10, color: Colors.white)
                                 : Text(
                                     '${index + 1}',
                                     style: TextStyle(
                                       fontSize: 10,
-                                      color: index == widget.currentStep ? colorScheme.primary : Colors.white,
+                                      color: index == widget.currentStep
+                                          ? colorScheme.primary
+                                          : Colors.white,
                                       fontWeight: FontWeight.bold,
                                     ),
                                   ),
@@ -775,12 +825,15 @@ class _PatientSprintProgressState extends State<PatientSprintProgress> {
                             widget.steps[index],
                             style: TextStyle(
                               fontSize: 12,
-                              fontWeight: index == widget.currentStep ? FontWeight.bold : FontWeight.normal,
+                              fontWeight: index == widget.currentStep
+                                  ? FontWeight.bold
+                                  : FontWeight.normal,
                               color: index == widget.currentStep
                                   ? Colors.white
                                   : index < widget.currentStep
                                       ? colorScheme.primary
-                                      : colorScheme.onSurface.withOpacity(0.6),
+                                      : colorScheme.onSurface
+                                          .withValues(alpha: 0.6),
                             ),
                           ),
                         ],
@@ -869,7 +922,8 @@ class PatientClinicalSelectionStep extends StatelessWidget {
     if (items.isEmpty) {
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: 32),
-        child: Center(child: Text(emptyText, style: const TextStyle(color: Colors.grey))),
+        child: Center(
+            child: Text(emptyText, style: const TextStyle(color: Colors.grey))),
       );
     }
 
@@ -881,7 +935,7 @@ class PatientClinicalSelectionStep extends StatelessWidget {
           margin: const EdgeInsets.only(bottom: 10),
           decoration: BoxDecoration(
             color: isSelected
-                ? Theme.of(context).colorScheme.primary.withOpacity(0.04)
+                ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.04)
                 : Colors.white,
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
@@ -892,8 +946,10 @@ class PatientClinicalSelectionStep extends StatelessWidget {
             ),
           ),
           child: CheckboxListTile(
-            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            contentPadding:
+                const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             title: Text(
               item.label,
               style: TextStyle(
@@ -903,7 +959,8 @@ class PatientClinicalSelectionStep extends StatelessWidget {
             subtitle: item.description == null ? null : Text(item.description!),
             value: isSelected,
             activeColor: Theme.of(context).colorScheme.primary,
-            onChanged: readOnly ? null : (value) => onChanged(item.id, value ?? false),
+            onChanged:
+                readOnly ? null : (value) => onChanged(item.id, value ?? false),
           ),
         );
       }).toList(),
@@ -944,15 +1001,19 @@ class PatientInfoStep extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('Nom', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                  const Text('Nom',
+                      style:
+                          TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
                   const SizedBox(height: 6),
                   TextField(
                     controller: lastNameController,
                     readOnly: readOnly,
                     decoration: InputDecoration(
                       hintText: 'ex: Diallo',
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 10),
+                      border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8)),
                     ),
                   ),
                 ],
@@ -963,15 +1024,19 @@ class PatientInfoStep extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('Prénom', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                  const Text('Prénom',
+                      style:
+                          TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
                   const SizedBox(height: 6),
                   TextField(
                     controller: firstNameController,
                     readOnly: readOnly,
                     decoration: InputDecoration(
                       hintText: 'ex: Aïssatou',
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 10),
+                      border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8)),
                     ),
                   ),
                 ],
@@ -980,7 +1045,8 @@ class PatientInfoStep extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 16),
-        const Text('Téléphone', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+        const Text('Téléphone',
+            style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
         const SizedBox(height: 6),
         TextField(
           controller: phoneController,
@@ -988,19 +1054,22 @@ class PatientInfoStep extends StatelessWidget {
           keyboardType: TextInputType.phone,
           decoration: InputDecoration(
             hintText: 'ex: +221 77 ...',
-            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            contentPadding:
+                const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
           ),
         ),
         const SizedBox(height: 16),
-        const Text('Adresse', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+        const Text('Adresse',
+            style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
         const SizedBox(height: 6),
         TextField(
           controller: addressController,
           readOnly: readOnly,
           decoration: InputDecoration(
             hintText: 'ex: Sacré-Cœur 3, Dakar',
-            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            contentPadding:
+                const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
           ),
         ),
@@ -1012,7 +1081,9 @@ class PatientInfoStep extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('Âge (ans)', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                  const Text('Âge (ans)',
+                      style:
+                          TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
                   const SizedBox(height: 6),
                   TextField(
                     controller: ageController,
@@ -1020,8 +1091,10 @@ class PatientInfoStep extends StatelessWidget {
                     keyboardType: TextInputType.number,
                     decoration: InputDecoration(
                       hintText: 'ex: 28',
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 10),
+                      border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8)),
                     ),
                   ),
                 ],
@@ -1033,20 +1106,25 @@ class PatientInfoStep extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('Sexe', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                  const Text('Sexe',
+                      style:
+                          TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
                   const SizedBox(height: 6),
                   SegmentedButton<String>(
                     style: SegmentedButton.styleFrom(
-                      selectedBackgroundColor: Theme.of(context).colorScheme.primary,
+                      selectedBackgroundColor:
+                          Theme.of(context).colorScheme.primary,
                       selectedForegroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8)),
                     ),
                     segments: const [
                       ButtonSegment(value: 'M', label: Text('M')),
                       ButtonSegment(value: 'F', label: Text('F')),
                     ],
                     selected: {sex},
-                    onSelectionChanged: readOnly ? null : (value) => onSexChanged(value.first),
+                    onSelectionChanged:
+                        readOnly ? null : (value) => onSexChanged(value.first),
                   ),
                 ],
               ),
@@ -1098,24 +1176,33 @@ class PatientRecapStep extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _RecapRow(label: 'Patient', value: '$firstName $lastName'.trim()),
-        _RecapRow(label: 'Âge', value: age.isEmpty ? 'Non renseigné' : '$age ans'),
+        _RecapRow(
+            label: 'Âge', value: age.isEmpty ? 'Non renseigné' : '$age ans'),
         _RecapRow(label: 'Sexe', value: sex == 'M' ? 'Masculin' : 'Féminin'),
         if (readOnly)
-          _RecapRow(label: 'Oreille', value: ConsultationFormat.earSideLabel(earSide))
+          _RecapRow(
+              label: 'Oreille', value: ConsultationFormat.earSideLabel(earSide))
         else if (onEarSideChanged != null) ...[
           EarSideSelector(value: earSide, onChanged: onEarSideChanged!),
           const SizedBox(height: 12),
         ],
-        _RecapRow(label: 'Téléphone', value: phone.isEmpty ? 'Non renseigné' : phone),
-        _RecapRow(label: 'Adresse', value: address.isEmpty ? 'Non renseignée' : address),
+        _RecapRow(
+            label: 'Téléphone', value: phone.isEmpty ? 'Non renseigné' : phone),
+        _RecapRow(
+            label: 'Adresse',
+            value: address.isEmpty ? 'Non renseignée' : address),
         const Divider(height: 20),
         _RecapRow(
           label: 'Symptômes',
-          value: selectedSymptoms.isEmpty ? 'Aucun sélectionné' : selectedSymptoms.join(', '),
+          value: selectedSymptoms.isEmpty
+              ? 'Aucun sélectionné'
+              : selectedSymptoms.join(', '),
         ),
         _RecapRow(
           label: 'Antécédents',
-          value: selectedHistories.isEmpty ? 'Aucun sélectionné' : selectedHistories.join(', '),
+          value: selectedHistories.isEmpty
+              ? 'Aucun sélectionné'
+              : selectedHistories.join(', '),
         ),
         const Divider(height: 24),
         const Text(
@@ -1162,7 +1249,8 @@ class _RecapRow extends StatelessWidget {
             width: 110,
             child: Text(
               '$label :',
-              style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.grey),
+              style: const TextStyle(
+                  fontWeight: FontWeight.bold, color: Colors.grey),
             ),
           ),
           Expanded(
@@ -1214,7 +1302,8 @@ class PatientSprintNavigationBar extends StatelessWidget {
                 onPressed: isFirst || isBusy ? null : onPrevious,
                 style: OutlinedButton.styleFrom(
                   minimumSize: const Size.fromHeight(48),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8)),
                 ),
                 icon: const Icon(Icons.arrow_back),
                 label: const Text('Précédent'),
@@ -1226,12 +1315,21 @@ class PatientSprintNavigationBar extends StatelessWidget {
                 onPressed: isBusy || (isReadOnly && isLast) ? null : onNext,
                 style: FilledButton.styleFrom(
                   minimumSize: const Size.fromHeight(48),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8)),
                 ),
                 icon: isBusy
-                    ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                    : Icon(isReadOnly || !isLast ? Icons.arrow_forward : Icons.save),
-                label: Text(isReadOnly ? 'Suivant' : (isLast ? 'Enregistrer' : 'Suivant')),
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                            strokeWidth: 2, color: Colors.white))
+                    : Icon(isReadOnly || !isLast
+                        ? Icons.arrow_forward
+                        : Icons.save),
+                label: Text(isReadOnly
+                    ? 'Suivant'
+                    : (isLast ? 'Enregistrer' : 'Suivant')),
               ),
             ),
           ],
@@ -1262,7 +1360,8 @@ class PatientErrorBanner extends StatelessWidget {
           Expanded(
             child: Text(
               message,
-              style: const TextStyle(color: Colors.red, fontWeight: FontWeight.w500),
+              style: const TextStyle(
+                  color: Colors.red, fontWeight: FontWeight.w500),
             ),
           ),
         ],
@@ -1286,7 +1385,8 @@ class PatientAiResultCard extends StatelessWidget {
       margin: const EdgeInsets.only(top: 16),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: colorScheme.primary.withOpacity(0.3), width: 1.5),
+        side: BorderSide(
+            color: colorScheme.primary.withValues(alpha: 0.3), width: 1.5),
       ),
       child: Padding(
         padding: const EdgeInsets.all(20),
@@ -1307,9 +1407,15 @@ class PatientAiResultCard extends StatelessWidget {
               ],
             ),
             const Divider(height: 24),
-            _RecapRow(label: 'Diagnostic probable', value: summary.likelyDiagnosis ?? 'Non déterminé'),
-            _RecapRow(label: 'Avis image', value: summary.imageOpinion ?? 'Non disponible'),
-            _RecapRow(label: 'Avis symptômes', value: summary.ragOpinion ?? 'Non disponible'),
+            _RecapRow(
+                label: 'Diagnostic probable',
+                value: summary.likelyDiagnosis ?? 'Non déterminé'),
+            _RecapRow(
+                label: 'Avis image',
+                value: summary.imageOpinion ?? 'Non disponible'),
+            _RecapRow(
+                label: 'Avis symptômes',
+                value: summary.ragOpinion ?? 'Non disponible'),
             _RecapRow(
               label: 'Niveau de confiance',
               value: summary.confidenceLabel.value,
@@ -1321,7 +1427,8 @@ class PatientAiResultCard extends StatelessWidget {
             ),
             if (summary.warnings.isNotEmpty) ...[
               const SizedBox(height: 12),
-              const Text('Alertes & Conseils', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+              const Text('Alertes & Conseils',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
               const SizedBox(height: 6),
               ...summary.warnings.map(
                 (warning) => Padding(
@@ -1329,12 +1436,14 @@ class PatientAiResultCard extends StatelessWidget {
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Icon(Icons.warning_amber_rounded, size: 16, color: Colors.orange),
+                      const Icon(Icons.warning_amber_rounded,
+                          size: 16, color: Colors.orange),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
                           warning,
-                          style: const TextStyle(fontSize: 12, color: Colors.black87),
+                          style: const TextStyle(
+                              fontSize: 12, color: Colors.black87),
                         ),
                       ),
                     ],

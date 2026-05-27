@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../../core/auth/session_controller.dart';
@@ -15,11 +16,12 @@ import 'nurse_consultation_view_model.dart';
 import 'widgets/consultation_history_list.dart';
 import 'widgets/expertise_request_panel.dart';
 import '../../chatbot/presentation/korai_chatbot_screen.dart';
+import '../../../core/widgets/sync_status_banner.dart';
 
 class NurseHomePage extends StatefulWidget {
   const NurseHomePage({super.key, required this.session});
 
-  final SessionController session;
+  final AuthCubit session;
 
   @override
   State<NurseHomePage> createState() => _NurseHomePageState();
@@ -37,7 +39,8 @@ class _NurseHomePageState extends State<NurseHomePage> {
   late final NurseConsultationViewModel viewModel;
   late final NurseRepository repository;
 
-  int _currentTab = 0; // 0 = Home/Dashboard, 1 = Chatbot, 2 = Consultation, 3 = Rapport, 4 = Profil
+  int _currentTab =
+      0; // 0 = Home/Dashboard, 1 = Chatbot, 2 = Consultation, 3 = Rapport, 4 = Profil
   bool _isSprintActive = false; // Whether the consultation wizard is active
   bool _isLoadingStats = false;
   List<Patient> _patients = [];
@@ -83,7 +86,8 @@ class _NurseHomePageState extends State<NurseHomePage> {
     }
   }
 
-  void _showNotificationBottomSheet(BuildContext context, List<Patient> unvalidatedPatients) {
+  void _showNotificationBottomSheet(
+      BuildContext context, List<Patient> unvalidatedPatients) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -125,7 +129,8 @@ class _NurseHomePageState extends State<NurseHomePage> {
                   ),
                   if (unvalidatedPatients.isNotEmpty)
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 4),
                       decoration: BoxDecoration(
                         color: Colors.orange.shade50,
                         borderRadius: BorderRadius.circular(12),
@@ -149,11 +154,13 @@ class _NurseHomePageState extends State<NurseHomePage> {
                   child: Center(
                     child: Column(
                       children: [
-                        Icon(Icons.notifications_none, size: 48, color: Colors.grey),
+                        Icon(Icons.notifications_none,
+                            size: 48, color: Colors.grey),
                         SizedBox(height: 12),
                         Text(
                           'Aucune nouvelle notification',
-                          style: TextStyle(color: Colors.grey, fontWeight: FontWeight.w500),
+                          style: TextStyle(
+                              color: Colors.grey, fontWeight: FontWeight.w500),
                         ),
                       ],
                     ),
@@ -183,7 +190,8 @@ class _NurseHomePageState extends State<NurseHomePage> {
                                 color: Colors.orange.shade100,
                                 shape: BoxShape.circle,
                               ),
-                              child: const Icon(Icons.person_add_outlined, color: Colors.orange, size: 20),
+                              child: const Icon(Icons.person_add_outlined,
+                                  color: Colors.orange, size: 20),
                             ),
                             const SizedBox(width: 12),
                             Expanded(
@@ -192,12 +200,15 @@ class _NurseHomePageState extends State<NurseHomePage> {
                                 children: [
                                   RichText(
                                     text: TextSpan(
-                                      style: const TextStyle(color: Colors.black87, fontSize: 14),
+                                      style: const TextStyle(
+                                          color: Colors.black87, fontSize: 14),
                                       children: [
-                                        const TextSpan(text: 'Nouveau compte créé par '),
+                                        const TextSpan(
+                                            text: 'Nouveau compte créé par '),
                                         TextSpan(
                                           text: patient.fullName,
-                                          style: const TextStyle(fontWeight: FontWeight.bold),
+                                          style: const TextStyle(
+                                              fontWeight: FontWeight.bold),
                                         ),
                                         const TextSpan(text: '. À valider.'),
                                       ],
@@ -206,7 +217,9 @@ class _NurseHomePageState extends State<NurseHomePage> {
                                   const SizedBox(height: 4),
                                   Text(
                                     patient.phone ?? 'Pas de téléphone',
-                                    style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                                    style: TextStyle(
+                                        fontSize: 12,
+                                        color: Colors.grey.shade600),
                                   ),
                                 ],
                               ),
@@ -216,7 +229,8 @@ class _NurseHomePageState extends State<NurseHomePage> {
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: const Color(0xFF006D77),
                                 foregroundColor: Colors.white,
-                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 12, vertical: 4),
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(16),
                                 ),
@@ -226,7 +240,10 @@ class _NurseHomePageState extends State<NurseHomePage> {
                                 Navigator.pop(context);
                                 _showPatientValidationSheet(patient);
                               },
-                              child: const Text('Voir', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                              child: const Text('Voir',
+                                  style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.bold)),
                             ),
                           ],
                         ),
@@ -249,7 +266,7 @@ class _NurseHomePageState extends State<NurseHomePage> {
     addressController.dispose();
     ageController.dispose();
     notesController.dispose();
-    viewModel.dispose();
+    viewModel.close();
     super.dispose();
   }
 
@@ -286,7 +303,8 @@ class _NurseHomePageState extends State<NurseHomePage> {
     return null;
   }
 
-  Future<AiCase> _requestExpertise(AiCase consultation, {String? summaryNote}) async {
+  Future<AiCase> _requestExpertise(AiCase consultation,
+      {String? summaryNote}) async {
     final updated = await repository.requestExpertise(
       consultation.id,
       summaryNote: summaryNote ?? consultation.clinicalNotes,
@@ -343,11 +361,15 @@ class _NurseHomePageState extends State<NurseHomePage> {
                   ),
                   Text(
                     'Dossier patient',
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+                    style: Theme.of(context)
+                        .textTheme
+                        .titleLarge
+                        ?.copyWith(fontWeight: FontWeight.bold),
                   ),
                   Text(
                     patient.fullName,
-                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                    style: const TextStyle(
+                        fontSize: 16, fontWeight: FontWeight.w600),
                   ),
                   const SizedBox(height: 4),
                   Text(
@@ -364,7 +386,8 @@ class _NurseHomePageState extends State<NurseHomePage> {
                     },
                     onResumeDraft: (draft) {
                       Navigator.pop(context);
-                      _startExistingPatientConsultation(patient, prefillNarrative: draft.symptoms);
+                      _startExistingPatientConsultation(patient,
+                          prefillNarrative: draft.symptoms);
                     },
                     onRequestExpertise: _requestExpertise,
                     onConsultationUpdated: _onConsultationUpdated,
@@ -382,14 +405,17 @@ class _NurseHomePageState extends State<NurseHomePage> {
     _startExistingPatientConsultation(patient);
   }
 
-  void _startExistingPatientConsultation(Patient patient, {String? prefillNarrative}) {
+  void _startExistingPatientConsultation(Patient patient,
+      {String? prefillNarrative}) {
     setState(() {
       viewModel.patient = patient;
       lastNameController.text = patient.lastName;
       firstNameController.text = patient.firstName;
       phoneController.text = patient.phone ?? '';
       addressController.text = patient.address ?? '';
-      ageController.text = patient.birthDate?.replaceAll('Age: ', '').replaceAll(' ans', '') ?? '';
+      ageController.text =
+          patient.birthDate?.replaceAll('Age: ', '').replaceAll(' ans', '') ??
+              '';
       sex = patient.sex == 'M' ? 'M' : 'F';
       viewModel.image = null;
       viewModel.aiCase = null;
@@ -398,8 +424,10 @@ class _NurseHomePageState extends State<NurseHomePage> {
       viewModel.selectedMedicalHistoryIds.clear();
       viewModel.selectedTouchCheckIds.clear();
       viewModel.touchCheckObservations.clear();
-      notesController.text = viewModel.extractNotesFromNarrative(prefillNarrative) ?? '';
-      final preCase = viewModel.findPatientPreconsultationCase(_cases, patient.id);
+      notesController.text =
+          viewModel.extractNotesFromNarrative(prefillNarrative) ?? '';
+      final preCase =
+          viewModel.findPatientPreconsultationCase(_cases, patient.id);
       if (preCase != null) {
         viewModel.applyClinicalPrefillFromCase(preCase);
       } else {
@@ -409,7 +437,8 @@ class _NurseHomePageState extends State<NurseHomePage> {
     });
   }
 
-  Future<void> _validateAndOpenConsultation(Patient patient, {String? prefillNarrative}) async {
+  Future<void> _validateAndOpenConsultation(Patient patient,
+      {String? prefillNarrative}) async {
     try {
       setState(() => _isLoadingStats = true);
       final validated = await repository.validatePatient(patient.id);
@@ -423,7 +452,8 @@ class _NurseHomePageState extends State<NurseHomePage> {
       await _loadDashboardData();
       if (!mounted) return;
       setState(() => _currentTab = 2);
-      _startExistingPatientConsultation(validated, prefillNarrative: prefillNarrative);
+      _startExistingPatientConsultation(validated,
+          prefillNarrative: prefillNarrative);
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -438,7 +468,8 @@ class _NurseHomePageState extends State<NurseHomePage> {
   }
 
   void _showPatientValidationSheet(Patient patient) {
-    final preCase = viewModel.findPatientPreconsultationCase(_cases, patient.id);
+    final preCase =
+        viewModel.findPatientPreconsultationCase(_cases, patient.id);
     final narrative = preCase?.symptoms;
     final preview = viewModel.buildPreconsultationPreview(narrative);
 
@@ -482,19 +513,29 @@ class _NurseHomePageState extends State<NurseHomePage> {
                   const SizedBox(height: 4),
                   Text(
                     patient.fullName,
-                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                    style: const TextStyle(
+                        fontSize: 18, fontWeight: FontWeight.w600),
                   ),
                   const SizedBox(height: 20),
                   _validationSectionTitle('Identité'),
-                  _validationInfoRow('Téléphone', patient.phone ?? 'Non renseigné'),
-                  _validationInfoRow('Adresse', patient.address ?? 'Non renseignée'),
+                  _validationInfoRow(
+                      'Téléphone', patient.phone ?? 'Non renseigné'),
+                  _validationInfoRow(
+                      'Adresse', patient.address ?? 'Non renseignée'),
                   _validationInfoRow(
                     'Âge',
-                    patient.birthDate?.replaceAll('Age: ', '').replaceAll(' ans', '') ?? 'Non renseigné',
+                    patient.birthDate
+                            ?.replaceAll('Age: ', '')
+                            .replaceAll(' ans', '') ??
+                        'Non renseigné',
                   ),
                   _validationInfoRow(
                     'Sexe',
-                    patient.sex == 'M' ? 'Masculin' : patient.sex == 'F' ? 'Féminin' : 'Non renseigné',
+                    patient.sex == 'M'
+                        ? 'Masculin'
+                        : patient.sex == 'F'
+                            ? 'Féminin'
+                            : 'Non renseigné',
                   ),
                   const SizedBox(height: 16),
                   _validationSectionTitle('Pré-consultation du patient'),
@@ -504,12 +545,15 @@ class _NurseHomePageState extends State<NurseHomePage> {
                       style: TextStyle(color: Colors.grey),
                     )
                   else ...[
-                    _validationChipGroup('Symptômes déclarés', preview.symptomLabels),
+                    _validationChipGroup(
+                        'Symptômes déclarés', preview.symptomLabels),
                     const SizedBox(height: 12),
-                    _validationChipGroup('Antécédents déclarés', preview.historyLabels),
+                    _validationChipGroup(
+                        'Antécédents déclarés', preview.historyLabels),
                     if (preview.touchCheckLabels.isNotEmpty) ...[
                       const SizedBox(height: 12),
-                      _validationChipGroup('Vérifications au toucher', preview.touchCheckLabels),
+                      _validationChipGroup(
+                          'Vérifications au toucher', preview.touchCheckLabels),
                     ],
                     if (preview.notes != null && preview.notes!.isNotEmpty) ...[
                       const SizedBox(height: 12),
@@ -581,7 +625,10 @@ class _NurseHomePageState extends State<NurseHomePage> {
             width: 110,
             child: Text(
               label,
-              style: TextStyle(fontSize: 13, color: Colors.grey.shade700, fontWeight: FontWeight.w600),
+              style: TextStyle(
+                  fontSize: 13,
+                  color: Colors.grey.shade700,
+                  fontWeight: FontWeight.w600),
             ),
           ),
           Expanded(
@@ -596,10 +643,15 @@ class _NurseHomePageState extends State<NurseHomePage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(title, style: TextStyle(fontSize: 12, color: Colors.grey.shade700, fontWeight: FontWeight.w600)),
+        Text(title,
+            style: TextStyle(
+                fontSize: 12,
+                color: Colors.grey.shade700,
+                fontWeight: FontWeight.w600)),
         const SizedBox(height: 6),
         if (labels.isEmpty)
-          const Text('Aucun', style: TextStyle(fontSize: 13, color: Colors.grey))
+          const Text('Aucun',
+              style: TextStyle(fontSize: 13, color: Colors.grey))
         else
           Wrap(
             spacing: 6,
@@ -621,8 +673,8 @@ class _NurseHomePageState extends State<NurseHomePage> {
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: viewModel,
+    return BlocBuilder<NurseConsultationViewModel, NurseConsultationState>(
+      bloc: viewModel,
       builder: (context, _) {
         return Scaffold(
           body: SafeArea(
@@ -672,7 +724,7 @@ class _NurseHomePageState extends State<NurseHomePage> {
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 colors: [
-                  const Color(0xFF80ED99).withOpacity(0.9),
+                  const Color(0xFF80ED99).withValues(alpha: 0.9),
                   const Color(0xFFC7F9CC),
                 ],
                 begin: Alignment.topLeft,
@@ -691,14 +743,18 @@ class _NurseHomePageState extends State<NurseHomePage> {
                   children: [
                     Row(
                       children: [
-                        const Icon(Icons.hearing, size: 28, color: Color(0xFF006D77)),
+                        const Icon(Icons.hearing,
+                            size: 28, color: Color(0xFF006D77)),
                         const SizedBox(width: 8),
                         Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
                               'KORAI',
-                              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .titleLarge
+                                  ?.copyWith(
                                     fontWeight: FontWeight.w900,
                                     color: const Color(0xFF006D77),
                                     letterSpacing: 1.2,
@@ -708,7 +764,8 @@ class _NurseHomePageState extends State<NurseHomePage> {
                               'Assistant ORL IA',
                               style: TextStyle(
                                 fontSize: 11,
-                                color: const Color(0xFF006D77).withOpacity(0.7),
+                                color: const Color(0xFF006D77)
+                                    .withValues(alpha: 0.7),
                                 fontWeight: FontWeight.w600,
                               ),
                             ),
@@ -720,22 +777,28 @@ class _NurseHomePageState extends State<NurseHomePage> {
                       children: [
                         Builder(
                           builder: (context) {
-                            final unvalidatedPatients = _patients.where((p) => !p.isValidated).toList();
+                            final unvalidatedPatients =
+                                _patients.where((p) => !p.isValidated).toList();
                             final count = unvalidatedPatients.length;
                             return IconButton(
-                              onPressed: () => _showNotificationBottomSheet(context, unvalidatedPatients),
+                              onPressed: () => _showNotificationBottomSheet(
+                                  context, unvalidatedPatients),
                               icon: count > 0
                                   ? Badge(
                                       label: Text('$count'),
-                                      child: const Icon(Icons.notifications_active, color: Color(0xFF006D77)),
+                                      child: const Icon(
+                                          Icons.notifications_active,
+                                          color: Color(0xFF006D77)),
                                     )
-                                  : const Icon(Icons.notifications_none, color: Color(0xFF006D77)),
+                                  : const Icon(Icons.notifications_none,
+                                      color: Color(0xFF006D77)),
                             );
                           },
                         ),
                         IconButton(
                           onPressed: () => setState(() => _currentTab = 4),
-                          icon: const Icon(Icons.settings_outlined, color: Color(0xFF006D77)),
+                          icon: const Icon(Icons.settings_outlined,
+                              color: Color(0xFF006D77)),
                         ),
                       ],
                     ),
@@ -754,7 +817,9 @@ class _NurseHomePageState extends State<NurseHomePage> {
                       label: 'Otoscope',
                       onPressed: () {
                         ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Module Otoscope en cours de préparation.')),
+                          const SnackBar(
+                              content: Text(
+                                  'Module Otoscope en cours de préparation.')),
                         );
                       },
                     ),
@@ -767,6 +832,9 @@ class _NurseHomePageState extends State<NurseHomePage> {
               ],
             ),
           ),
+
+          // 2. Bandeau statut synchronisation (visible uniquement si nécessaire)
+          const SyncStatusBanner(),
 
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
@@ -789,19 +857,25 @@ class _NurseHomePageState extends State<NurseHomePage> {
                           children: [
                             Text(
                               'Bonjour, $nurseName',
-                              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .titleLarge
+                                  ?.copyWith(
                                     fontWeight: FontWeight.w800,
                                   ),
                             ),
                             const SizedBox(height: 4),
                             const Text(
                               'Bienvenue sur KORAI.',
-                              style: TextStyle(color: Colors.grey, fontWeight: FontWeight.w500),
+                              style: TextStyle(
+                                  color: Colors.grey,
+                                  fontWeight: FontWeight.w500),
                             ),
                           ],
                         ),
                       ),
-                      const Icon(Icons.sentiment_satisfied_alt_outlined, size: 48, color: Color(0xFF006D77)),
+                      const Icon(Icons.sentiment_satisfied_alt_outlined,
+                          size: 48, color: Color(0xFF006D77)),
                     ],
                   ),
                 ),
@@ -829,7 +903,9 @@ class _NurseHomePageState extends State<NurseHomePage> {
                     Expanded(
                       child: _buildStatCard(
                         title: 'Diagnostic',
-                        value: _isLoadingStats ? '...' : '${_cases.where((c) => c.status == 'AI_COMPLETED' || c.status == 'SPECIALIST_COMPLETED').length}',
+                        value: _isLoadingStats
+                            ? '...'
+                            : '${_cases.where((c) => c.status == 'AI_COMPLETED' || c.status == 'SPECIALIST_COMPLETED').length}',
                         color: const Color(0xFFF1F8E9),
                       ),
                     ),
@@ -854,22 +930,27 @@ class _NurseHomePageState extends State<NurseHomePage> {
                 _buildKoraiFeatureRow(
                   icon: Icons.assignment_outlined,
                   title: 'Gestion sécurisée des dossiers patients ORL',
-                  description: 'Sauvegardez les données et images dans un espace crypté.',
+                  description:
+                      'Sauvegardez les données et images dans un espace crypté.',
                 ),
                 _buildKoraiFeatureRow(
                   icon: Icons.recommend_outlined,
                   title: 'Accès rapide aux recommandations médicales',
-                  description: 'Obtenez des suggestions de traitement approuvées par l\'IA.',
+                  description:
+                      'Obtenez des suggestions de traitement approuvées par l\'IA.',
                 ),
                 _buildKoraiFeatureRow(
                   icon: Icons.people_outline,
                   title: 'Collaboration fluide entre professionnels de santé',
-                  description: 'Partagez instantanément les cas complexes avec des experts.',
+                  description:
+                      'Partagez instantanément les cas complexes avec des experts.',
                 ),
                 _buildKoraiFeatureRow(
                   icon: Icons.lock_outline,
-                  title: 'Confidentialité optimale grâce au chiffrement des données',
-                  description: 'Respectez scrupuleusement la confidentialité médicale de vos patients.',
+                  title:
+                      'Confidentialité optimale grâce au chiffrement des données',
+                  description:
+                      'Respectez scrupuleusement la confidentialité médicale de vos patients.',
                 ),
               ],
             ),
@@ -879,7 +960,8 @@ class _NurseHomePageState extends State<NurseHomePage> {
     );
   }
 
-  Widget _buildStatCard({required String title, required String value, required Color color}) {
+  Widget _buildStatCard(
+      {required String title, required String value, required Color color}) {
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8),
       decoration: BoxDecoration(
@@ -890,19 +972,28 @@ class _NurseHomePageState extends State<NurseHomePage> {
         children: [
           Text(
             title,
-            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.black54),
+            style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+                color: Colors.black54),
           ),
           const SizedBox(height: 8),
           Text(
             value,
-            style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w900, color: Color(0xFF006D77)),
+            style: const TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.w900,
+                color: Color(0xFF006D77)),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildKoraiFeatureRow({required IconData icon, required String title, required String description}) {
+  Widget _buildKoraiFeatureRow(
+      {required IconData icon,
+      required String title,
+      required String description}) {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(12),
@@ -924,7 +1015,10 @@ class _NurseHomePageState extends State<NurseHomePage> {
               children: [
                 Text(
                   title,
-                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.black87),
+                  style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black87),
                 ),
                 const SizedBox(height: 2),
                 Text(
@@ -945,7 +1039,8 @@ class _NurseHomePageState extends State<NurseHomePage> {
       return _buildConsultationSprintWizard();
     }
 
-    final filteredPendingPatients = _patients.where((p) => !p.isValidated).where((p) {
+    final filteredPendingPatients =
+        _patients.where((p) => !p.isValidated).where((p) {
       if (_pendingSearchQuery.isEmpty) return true;
       final query = _pendingSearchQuery.toLowerCase();
       final phone = p.phone?.toLowerCase() ?? '';
@@ -958,7 +1053,10 @@ class _NurseHomePageState extends State<NurseHomePage> {
       children: [
         Text(
           'Lancer une consultation',
-          style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
+          style: Theme.of(context)
+              .textTheme
+              .headlineSmall
+              ?.copyWith(fontWeight: FontWeight.bold),
         ),
         const SizedBox(height: 4),
         const Text('Choisissez l\'origine du dossier patient.'),
@@ -995,7 +1093,8 @@ class _NurseHomePageState extends State<NurseHomePage> {
           const SizedBox(height: 32),
           Row(
             children: [
-              const Icon(Icons.pending_actions_rounded, color: Colors.orange, size: 24),
+              const Icon(Icons.pending_actions_rounded,
+                  color: Colors.orange, size: 24),
               const SizedBox(width: 8),
               Text(
                 'Comptes patients en attente (${_patients.where((p) => !p.isValidated).length})',
@@ -1012,7 +1111,8 @@ class _NurseHomePageState extends State<NurseHomePage> {
             decoration: InputDecoration(
               prefixIcon: const Icon(Icons.search, color: Colors.orange),
               hintText: 'Rechercher par téléphone ou nom...',
-              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
                 borderSide: const BorderSide(color: Colors.orange, width: 1.5),
@@ -1041,7 +1141,8 @@ class _NurseHomePageState extends State<NurseHomePage> {
             ...filteredPendingPatients.map((patient) {
               return Container(
                 margin: const EdgeInsets.only(bottom: 12),
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 decoration: BoxDecoration(
                   color: const Color(0xFFFFF3E0),
                   borderRadius: BorderRadius.circular(16),
@@ -1077,14 +1178,17 @@ class _NurseHomePageState extends State<NurseHomePage> {
                       style: ElevatedButton.styleFrom(
                         backgroundColor: const Color(0xFF006D77),
                         foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 8),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(20),
                         ),
                         elevation: 0,
                       ),
                       icon: const Icon(Icons.visibility_outlined, size: 16),
-                      label: const Text('Voir le dossier', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                      label: const Text('Voir le dossier',
+                          style: TextStyle(
+                              fontSize: 12, fontWeight: FontWeight.bold)),
                       onPressed: () => _showPatientValidationSheet(patient),
                     ),
                   ],
@@ -1123,7 +1227,10 @@ class _NurseHomePageState extends State<NurseHomePage> {
             Text(
               title,
               textAlign: TextAlign.center,
-              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Color(0xFF006D77)),
+              style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                  color: Color(0xFF006D77)),
             ),
             const SizedBox(height: 8),
             Text(
@@ -1155,7 +1262,8 @@ class _NurseHomePageState extends State<NurseHomePage> {
             }).toList();
 
             return Container(
-              padding: EdgeInsets.fromLTRB(20, 20, 20, MediaQuery.of(context).viewInsets.bottom + 20),
+              padding: EdgeInsets.fromLTRB(
+                  20, 20, 20, MediaQuery.of(context).viewInsets.bottom + 20),
               height: MediaQuery.of(context).size.height * 0.75,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -1165,7 +1273,8 @@ class _NurseHomePageState extends State<NurseHomePage> {
                     children: [
                       const Text(
                         'Sélectionner un patient',
-                        style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18),
+                        style: TextStyle(
+                            fontWeight: FontWeight.w900, fontSize: 18),
                       ),
                       IconButton(
                         onPressed: () => Navigator.pop(context),
@@ -1179,8 +1288,10 @@ class _NurseHomePageState extends State<NurseHomePage> {
                     decoration: InputDecoration(
                       prefixIcon: const Icon(Icons.search),
                       hintText: 'Rechercher par nom, prénom ou téléphone...',
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 8),
+                      border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12)),
                     ),
                     onChanged: (val) {
                       setModalState(() => _searchQuery = val);
@@ -1204,11 +1315,13 @@ class _NurseHomePageState extends State<NurseHomePage> {
                                 child: ListTile(
                                   leading: const CircleAvatar(
                                     backgroundColor: Color(0xFF006D77),
-                                    child: Icon(Icons.person, color: Colors.white),
+                                    child:
+                                        Icon(Icons.person, color: Colors.white),
                                   ),
                                   title: Text(
                                     '${p.firstName} ${p.lastName}',
-                                    style: const TextStyle(fontWeight: FontWeight.bold),
+                                    style: const TextStyle(
+                                        fontWeight: FontWeight.bold),
                                   ),
                                   subtitle: Text(
                                     '${p.phone ?? 'Pas de numéro'} · ${_consultationsForPatient(p.id).length} consultation(s)',
@@ -1248,7 +1361,8 @@ class _NurseHomePageState extends State<NurseHomePage> {
                     context: context,
                     builder: (context) => AlertDialog(
                       title: const Text('Quitter la consultation ?'),
-                      content: const Text('Toutes les données saisies pour ce sprint seront perdues.'),
+                      content: const Text(
+                          'Toutes les données saisies pour ce sprint seront perdues.'),
                       actions: [
                         TextButton(
                           onPressed: () => Navigator.pop(context),
@@ -1268,13 +1382,18 @@ class _NurseHomePageState extends State<NurseHomePage> {
                 icon: const Icon(Icons.arrow_back),
               ),
               Text(
-                viewModel.patient != null ? 'Consultation (Existant)' : 'Consultation (Nouveau)',
-                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                viewModel.patient != null
+                    ? 'Consultation (Existant)'
+                    : 'Consultation (Nouveau)',
+                style:
+                    const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
               ),
               const Spacer(),
               Text(
                 'Étape ${viewModel.currentStep + 1}/${steps.length}',
-                style: TextStyle(fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.primary),
+                style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: Theme.of(context).colorScheme.primary),
               ),
             ],
           ),
@@ -1290,6 +1409,10 @@ class _NurseHomePageState extends State<NurseHomePage> {
             children: [
               if (viewModel.errorMessage != null) ...[
                 ErrorBanner(message: viewModel.errorMessage!),
+                const SizedBox(height: 12),
+              ],
+              if (viewModel.infoMessage != null) ...[
+                InfoBanner(message: viewModel.infoMessage!),
                 const SizedBox(height: 12),
               ],
               SprintCard(
@@ -1334,19 +1457,22 @@ class _NurseHomePageState extends State<NurseHomePage> {
           items: viewModel.symptoms,
           selectedIds: viewModel.selectedSymptomIds,
           emptyText: 'Aucun symptôme configuré',
-          onChanged: (id, selected) => viewModel.toggleSelection('SYMPTOM', id, selected),
+          onChanged: (id, selected) =>
+              viewModel.toggleSelection('SYMPTOM', id, selected),
         ),
       2 => ClinicalSelectionStep(
           items: viewModel.medicalHistories,
           selectedIds: viewModel.selectedMedicalHistoryIds,
           emptyText: 'Aucun antécédent configuré',
-          onChanged: (id, selected) => viewModel.toggleSelection('MEDICAL_HISTORY', id, selected),
+          onChanged: (id, selected) =>
+              viewModel.toggleSelection('MEDICAL_HISTORY', id, selected),
         ),
       3 => TouchCheckSelectionStep(
           items: viewModel.touchChecks,
           selectedIds: viewModel.selectedTouchCheckIds,
           observations: viewModel.touchCheckObservations,
-          observationOptions: NurseConsultationViewModel.touchObservationOptions,
+          observationOptions:
+              NurseConsultationViewModel.touchObservationOptions,
           emptyText: 'Aucune vérification configurée',
           onSelectionChanged: viewModel.toggleTouchCheck,
           onObservationChanged: viewModel.setTouchCheckObservation,
@@ -1374,8 +1500,10 @@ class _NurseHomePageState extends State<NurseHomePage> {
           sex: sex,
           earSide: viewModel.earSide,
           notesController: notesController,
-          selectedSymptoms: viewModel.labelsFor(viewModel.symptoms, viewModel.selectedSymptomIds),
-          selectedHistories: viewModel.labelsFor(viewModel.medicalHistories, viewModel.selectedMedicalHistoryIds),
+          selectedSymptoms: viewModel.labelsFor(
+              viewModel.symptoms, viewModel.selectedSymptomIds),
+          selectedHistories: viewModel.labelsFor(
+              viewModel.medicalHistories, viewModel.selectedMedicalHistoryIds),
           selectedTouchChecks: viewModel.touchCheckSummaries(),
           image: viewModel.image,
         ),
@@ -1386,10 +1514,10 @@ class _NurseHomePageState extends State<NurseHomePage> {
     if (viewModel.currentStep == 3) {
       final validationError = viewModel.validateTouchCheckStep();
       if (validationError != null) {
-        viewModel.errorMessage = validationError;
-        viewModel.notifyListeners();
+        viewModel.setErrorMessage(validationError);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(validationError), backgroundColor: Colors.orange),
+          SnackBar(
+              content: Text(validationError), backgroundColor: Colors.orange),
         );
         return;
       }
@@ -1400,7 +1528,8 @@ class _NurseHomePageState extends State<NurseHomePage> {
       return;
     }
 
-    viewModel.submitSprint(
+    viewModel
+        .submitSprint(
       firstName: firstNameController.text,
       lastName: lastNameController.text,
       phone: phoneController.text,
@@ -1408,7 +1537,8 @@ class _NurseHomePageState extends State<NurseHomePage> {
       age: ageController.text,
       sex: sex,
       notes: notesController.text,
-    ).then((_) {
+    )
+        .then((_) {
       if (viewModel.aiCase != null) {
         _loadDashboardData(); // Refresh counts
       }
@@ -1424,7 +1554,10 @@ class _NurseHomePageState extends State<NurseHomePage> {
         children: [
           Text(
             'Historique des Diagnostics',
-            style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
+            style: Theme.of(context)
+                .textTheme
+                .headlineSmall
+                ?.copyWith(fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 4),
           const Text('Visualisez les comptes-rendus et expertises ORL.'),
@@ -1450,7 +1583,6 @@ class _NurseHomePageState extends State<NurseHomePage> {
   // --- PROFILE TAB ---
   Widget _buildProfileTab() {
     final user = widget.session.user;
-    final colorScheme = Theme.of(context).colorScheme;
 
     return Padding(
       padding: const EdgeInsets.all(24),
@@ -1466,7 +1598,10 @@ class _NurseHomePageState extends State<NurseHomePage> {
           Center(
             child: Text(
               user?.fullName ?? 'Infirmier',
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+              style: Theme.of(context)
+                  .textTheme
+                  .titleLarge
+                  ?.copyWith(fontWeight: FontWeight.bold),
             ),
           ),
           Center(
@@ -1486,9 +1621,12 @@ class _NurseHomePageState extends State<NurseHomePage> {
               padding: const EdgeInsets.all(16),
               child: Column(
                 children: [
-                  _ProfileDetailRow(label: 'Rôle', value: user?.role ?? 'NURSE'),
+                  _ProfileDetailRow(
+                      label: 'Rôle', value: user?.role ?? 'NURSE'),
                   const Divider(),
-                  _ProfileDetailRow(label: 'Identifiant Patient Lié', value: user?.linkedPatientId ?? 'Aucun'),
+                  _ProfileDetailRow(
+                      label: 'Identifiant Patient Lié',
+                      value: user?.linkedPatientId ?? 'Aucun'),
                 ],
               ),
             ),
@@ -1510,7 +1648,6 @@ class _NurseHomePageState extends State<NurseHomePage> {
 
   // --- BOTTOM BAR UI ---
   Widget _buildBottomNavigationBar() {
-    final colorScheme = Theme.of(context).colorScheme;
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 0, 16, 12),
       padding: const EdgeInsets.symmetric(vertical: 4),
@@ -1519,7 +1656,7 @@ class _NurseHomePageState extends State<NurseHomePage> {
         borderRadius: BorderRadius.circular(30),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: Colors.black.withValues(alpha: 0.04),
             blurRadius: 10,
             offset: const Offset(0, -2),
           ),
@@ -1590,7 +1727,7 @@ class _HeaderTabButton extends StatelessWidget {
       onPressed: onPressed,
       style: TextButton.styleFrom(
         foregroundColor: const Color(0xFF006D77),
-        backgroundColor: Colors.white.withOpacity(0.5),
+        backgroundColor: Colors.white.withValues(alpha: 0.5),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ),
@@ -1641,7 +1778,9 @@ class _ProfileDetailRow extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.grey)),
+          Text(label,
+              style: const TextStyle(
+                  fontWeight: FontWeight.bold, color: Colors.grey)),
           Text(value, style: const TextStyle(fontWeight: FontWeight.w600)),
         ],
       ),
@@ -1697,7 +1836,10 @@ class _SprintProgressState extends State<SprintProgress> {
     final screenWidth = MediaQuery.of(context).size.width;
 
     // Target scroll offset to center active index
-    final targetOffset = (widget.currentStep * itemWidth) + 16.0 - (screenWidth / 2) + (itemWidth / 2);
+    final targetOffset = (widget.currentStep * itemWidth) +
+        16.0 -
+        (screenWidth / 2) +
+        (itemWidth / 2);
     final maxScroll = _scrollController.position.maxScrollExtent;
     final clampedOffset = targetOffset.clamp(0.0, maxScroll);
 
@@ -1723,7 +1865,7 @@ class _SprintProgressState extends State<SprintProgress> {
               child: LinearProgressIndicator(
                 value: (widget.currentStep + 1) / widget.steps.length,
                 minHeight: 6,
-                backgroundColor: colorScheme.primary.withOpacity(0.1),
+                backgroundColor: colorScheme.primary.withValues(alpha: 0.1),
                 valueColor: AlwaysStoppedAnimation<Color>(colorScheme.primary),
               ),
             ),
@@ -1740,18 +1882,19 @@ class _SprintProgressState extends State<SprintProgress> {
                     onTap: () => widget.onTap(index),
                     child: AnimatedContainer(
                       duration: const Duration(milliseconds: 200),
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 6),
                       decoration: BoxDecoration(
                         color: index == widget.currentStep
                             ? colorScheme.primary
                             : index < widget.currentStep
-                                ? colorScheme.primary.withOpacity(0.08)
+                                ? colorScheme.primary.withValues(alpha: 0.08)
                                 : Colors.white,
                         borderRadius: BorderRadius.circular(20),
                         border: Border.all(
                           color: index == widget.currentStep
                               ? colorScheme.primary
-                              : colorScheme.outline.withOpacity(0.2),
+                              : colorScheme.outline.withValues(alpha: 0.2),
                         ),
                       ),
                       child: Row(
@@ -1762,14 +1905,18 @@ class _SprintProgressState extends State<SprintProgress> {
                                 ? Colors.white
                                 : index < widget.currentStep
                                     ? colorScheme.primary
-                                    : colorScheme.outline.withOpacity(0.5),
+                                    : colorScheme.outline
+                                        .withValues(alpha: 0.5),
                             child: index < widget.currentStep
-                                ? const Icon(Icons.check, size: 10, color: Colors.white)
+                                ? const Icon(Icons.check,
+                                    size: 10, color: Colors.white)
                                 : Text(
                                     '${index + 1}',
                                     style: TextStyle(
                                       fontSize: 10,
-                                      color: index == widget.currentStep ? colorScheme.primary : Colors.white,
+                                      color: index == widget.currentStep
+                                          ? colorScheme.primary
+                                          : Colors.white,
                                       fontWeight: FontWeight.bold,
                                     ),
                                   ),
@@ -1779,12 +1926,15 @@ class _SprintProgressState extends State<SprintProgress> {
                             widget.steps[index],
                             style: TextStyle(
                               fontSize: 12,
-                              fontWeight: index == widget.currentStep ? FontWeight.bold : FontWeight.normal,
+                              fontWeight: index == widget.currentStep
+                                  ? FontWeight.bold
+                                  : FontWeight.normal,
                               color: index == widget.currentStep
                                   ? Colors.white
                                   : index < widget.currentStep
                                       ? colorScheme.primary
-                                      : colorScheme.onSurface.withOpacity(0.6),
+                                      : colorScheme.onSurface
+                                          .withValues(alpha: 0.6),
                             ),
                           ),
                         ],
@@ -1868,7 +2018,8 @@ class TouchCheckSelectionStep extends StatelessWidget {
     if (items.isEmpty) {
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: 32),
-        child: Center(child: Text(emptyText, style: const TextStyle(color: Colors.grey))),
+        child: Center(
+            child: Text(emptyText, style: const TextStyle(color: Colors.grey))),
       );
     }
 
@@ -1877,7 +2028,8 @@ class TouchCheckSelectionStep extends StatelessWidget {
       children: [
         Text(
           'Cochez chaque vérification réalisée, puis indiquez ce que vous avez observé.',
-          style: TextStyle(fontSize: 13, color: Colors.grey.shade700, height: 1.4),
+          style:
+              TextStyle(fontSize: 13, color: Colors.grey.shade700, height: 1.4),
         ),
         const SizedBox(height: 12),
         ...items.map((item) {
@@ -1889,7 +2041,10 @@ class TouchCheckSelectionStep extends StatelessWidget {
             margin: const EdgeInsets.only(bottom: 12),
             decoration: BoxDecoration(
               color: isSelected
-                  ? Theme.of(context).colorScheme.primary.withOpacity(0.04)
+                  ? Theme.of(context)
+                      .colorScheme
+                      .primary
+                      .withValues(alpha: 0.04)
                   : Colors.white,
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
@@ -1902,16 +2057,22 @@ class TouchCheckSelectionStep extends StatelessWidget {
             child: Column(
               children: [
                 CheckboxListTile(
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12)),
                   title: Text(
                     item.label,
-                    style: TextStyle(fontWeight: isSelected ? FontWeight.bold : FontWeight.normal),
+                    style: TextStyle(
+                        fontWeight:
+                            isSelected ? FontWeight.bold : FontWeight.normal),
                   ),
-                  subtitle: item.description == null ? null : Text(item.description!),
+                  subtitle:
+                      item.description == null ? null : Text(item.description!),
                   value: isSelected,
                   activeColor: Theme.of(context).colorScheme.primary,
-                  onChanged: (value) => onSelectionChanged(item.id, value ?? false),
+                  onChanged: (value) =>
+                      onSelectionChanged(item.id, value ?? false),
                 ),
                 if (isSelected)
                   Padding(
@@ -1929,12 +2090,14 @@ class TouchCheckSelectionStep extends StatelessWidget {
                         ),
                         const SizedBox(height: 6),
                         DropdownButtonFormField<String>(
-                          value: observationOptions.contains(observation)
+                          initialValue: observationOptions.contains(observation)
                               ? observation
                               : observationOptions.first,
                           decoration: InputDecoration(
-                            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                            contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 12, vertical: 10),
+                            border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(8)),
                             filled: true,
                             fillColor: Colors.white,
                           ),
@@ -1942,12 +2105,15 @@ class TouchCheckSelectionStep extends StatelessWidget {
                               .map(
                                 (option) => DropdownMenuItem(
                                   value: option,
-                                  child: Text(option, style: const TextStyle(fontSize: 14)),
+                                  child: Text(option,
+                                      style: const TextStyle(fontSize: 14)),
                                 ),
                               )
                               .toList(),
                           onChanged: (value) {
-                            if (value != null) onObservationChanged(item.id, value);
+                            if (value != null) {
+                              onObservationChanged(item.id, value);
+                            }
                           },
                         ),
                       ],
@@ -1981,7 +2147,8 @@ class ClinicalSelectionStep extends StatelessWidget {
     if (items.isEmpty) {
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: 32),
-        child: Center(child: Text(emptyText, style: const TextStyle(color: Colors.grey))),
+        child: Center(
+            child: Text(emptyText, style: const TextStyle(color: Colors.grey))),
       );
     }
 
@@ -1993,7 +2160,7 @@ class ClinicalSelectionStep extends StatelessWidget {
           margin: const EdgeInsets.only(bottom: 10),
           decoration: BoxDecoration(
             color: isSelected
-                ? Theme.of(context).colorScheme.primary.withOpacity(0.04)
+                ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.04)
                 : Colors.white,
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
@@ -2004,8 +2171,10 @@ class ClinicalSelectionStep extends StatelessWidget {
             ),
           ),
           child: CheckboxListTile(
-            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            contentPadding:
+                const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             title: Text(
               item.label,
               style: TextStyle(
@@ -2054,14 +2223,18 @@ class PatientInfoStep extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('Nom', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                  const Text('Nom',
+                      style:
+                          TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
                   const SizedBox(height: 6),
                   TextField(
                     controller: lastNameController,
                     decoration: InputDecoration(
                       hintText: 'ex: Diallo',
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 10),
+                      border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8)),
                     ),
                   ),
                 ],
@@ -2072,14 +2245,18 @@ class PatientInfoStep extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('Prénom', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                  const Text('Prénom',
+                      style:
+                          TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
                   const SizedBox(height: 6),
                   TextField(
                     controller: firstNameController,
                     decoration: InputDecoration(
                       hintText: 'ex: Aïssatou',
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 10),
+                      border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8)),
                     ),
                   ),
                 ],
@@ -2088,25 +2265,29 @@ class PatientInfoStep extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 16),
-        const Text('Téléphone', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+        const Text('Téléphone',
+            style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
         const SizedBox(height: 6),
         TextField(
           controller: phoneController,
           keyboardType: TextInputType.phone,
           decoration: InputDecoration(
             hintText: 'ex: +221 77 ...',
-            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            contentPadding:
+                const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
           ),
         ),
         const SizedBox(height: 16),
-        const Text('Adresse', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+        const Text('Adresse',
+            style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
         const SizedBox(height: 6),
         TextField(
           controller: addressController,
           decoration: InputDecoration(
             hintText: 'ex: Sacré-Cœur 3, Dakar',
-            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            contentPadding:
+                const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
           ),
         ),
@@ -2118,15 +2299,19 @@ class PatientInfoStep extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('Âge (ans)', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                  const Text('Âge (ans)',
+                      style:
+                          TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
                   const SizedBox(height: 6),
                   TextField(
                     controller: ageController,
                     keyboardType: TextInputType.number,
                     decoration: InputDecoration(
                       hintText: 'ex: 28',
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 10),
+                      border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8)),
                     ),
                   ),
                 ],
@@ -2138,13 +2323,17 @@ class PatientInfoStep extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('Sexe', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                  const Text('Sexe',
+                      style:
+                          TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
                   const SizedBox(height: 6),
                   SegmentedButton<String>(
                     style: SegmentedButton.styleFrom(
-                      selectedBackgroundColor: Theme.of(context).colorScheme.primary,
+                      selectedBackgroundColor:
+                          Theme.of(context).colorScheme.primary,
                       selectedForegroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8)),
                     ),
                     segments: const [
                       ButtonSegment(value: 'M', label: Text('M')),
@@ -2201,27 +2390,40 @@ class RecapStep extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         SummaryLine(label: 'Patient', value: '$firstName $lastName'.trim()),
-        SummaryLine(label: 'Âge', value: age.isEmpty ? 'Non renseigné' : '$age ans'),
+        SummaryLine(
+            label: 'Âge', value: age.isEmpty ? 'Non renseigné' : '$age ans'),
         SummaryLine(label: 'Sexe', value: sex == 'M' ? 'Masculin' : 'Féminin'),
-        SummaryLine(label: 'Oreille', value: ConsultationFormat.earSideLabel(earSide)),
-        SummaryLine(label: 'Téléphone', value: phone.isEmpty ? 'Non renseigné' : phone),
-        SummaryLine(label: 'Adresse', value: address.isEmpty ? 'Non renseignée' : address),
+        SummaryLine(
+            label: 'Oreille', value: ConsultationFormat.earSideLabel(earSide)),
+        SummaryLine(
+            label: 'Téléphone', value: phone.isEmpty ? 'Non renseigné' : phone),
+        SummaryLine(
+            label: 'Adresse',
+            value: address.isEmpty ? 'Non renseignée' : address),
         const Divider(height: 20),
         SummaryLine(
           label: 'Symptômes',
-          value: selectedSymptoms.isEmpty ? 'Aucun sélectionné' : selectedSymptoms.join(', '),
+          value: selectedSymptoms.isEmpty
+              ? 'Aucun sélectionné'
+              : selectedSymptoms.join(', '),
         ),
         SummaryLine(
           label: 'Antécédents',
-          value: selectedHistories.isEmpty ? 'Aucun sélectionné' : selectedHistories.join(', '),
+          value: selectedHistories.isEmpty
+              ? 'Aucun sélectionné'
+              : selectedHistories.join(', '),
         ),
         SummaryLine(
           label: 'Toucher',
-          value: selectedTouchChecks.isEmpty ? 'Aucun sélectionné' : selectedTouchChecks.join('\n'),
+          value: selectedTouchChecks.isEmpty
+              ? 'Aucun sélectionné'
+              : selectedTouchChecks.join('\n'),
         ),
         SummaryLine(
           label: 'Image ORL',
-          value: hasImage ? 'Photo prête (diagnostic image + symptômes)' : 'Non fournie (analyse symptômes seule)',
+          value: hasImage
+              ? 'Photo prête (diagnostic image + symptômes)'
+              : 'Non fournie (analyse symptômes seule)',
           valueColor: hasImage ? Colors.green : Colors.orange,
         ),
         if (hasImage) ...[
@@ -2288,7 +2490,8 @@ class SprintNavigationBar extends StatelessWidget {
                 onPressed: isFirst || isBusy ? null : onPrevious,
                 style: OutlinedButton.styleFrom(
                   minimumSize: const Size.fromHeight(48),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8)),
                 ),
                 icon: const Icon(Icons.arrow_back),
                 label: const Text('Précédent'),
@@ -2300,10 +2503,15 @@ class SprintNavigationBar extends StatelessWidget {
                 onPressed: isBusy ? null : onNext,
                 style: FilledButton.styleFrom(
                   minimumSize: const Size.fromHeight(48),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8)),
                 ),
                 icon: isBusy
-                    ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                            strokeWidth: 2, color: Colors.white))
                     : Icon(isLast ? Icons.send : Icons.arrow_forward),
                 label: Text(isLast ? 'Valider et Analyser' : 'Suivant'),
               ),
@@ -2336,7 +2544,41 @@ class ErrorBanner extends StatelessWidget {
           Expanded(
             child: Text(
               message,
-              style: const TextStyle(color: Colors.red, fontWeight: FontWeight.w500),
+              style: const TextStyle(
+                  color: Colors.red, fontWeight: FontWeight.w500),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class InfoBanner extends StatelessWidget {
+  const InfoBanner({super.key, required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFEAF7F7),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFF9BD8D8)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.cloud_off_outlined, color: Color(0xFF007C82)),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              message,
+              style: const TextStyle(
+                color: Color(0xFF006D77),
+                fontWeight: FontWeight.w600,
+              ),
             ),
           ),
         ],
@@ -2369,7 +2611,8 @@ class AiResultCard extends StatelessWidget {
       margin: const EdgeInsets.only(top: 16),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: colorScheme.primary.withOpacity(0.3), width: 1.5),
+        side: BorderSide(
+            color: colorScheme.primary.withValues(alpha: 0.3), width: 1.5),
       ),
       child: Padding(
         padding: const EdgeInsets.all(20),
@@ -2390,9 +2633,15 @@ class AiResultCard extends StatelessWidget {
               ],
             ),
             const Divider(height: 24),
-            SummaryLine(label: 'Diagnostic probable', value: summary.likelyDiagnosis ?? 'Non déterminé'),
-            SummaryLine(label: 'Avis image', value: summary.imageOpinion ?? 'Non disponible'),
-            SummaryLine(label: 'Avis symptômes', value: summary.ragOpinion ?? 'Non disponible'),
+            SummaryLine(
+                label: 'Diagnostic probable',
+                value: summary.likelyDiagnosis ?? 'Non déterminé'),
+            SummaryLine(
+                label: 'Avis image',
+                value: summary.imageOpinion ?? 'Non disponible'),
+            SummaryLine(
+                label: 'Avis symptômes',
+                value: summary.ragOpinion ?? 'Non disponible'),
             SummaryLine(
               label: 'Niveau de confiance',
               value: summary.confidenceLabel.value,
@@ -2404,7 +2653,8 @@ class AiResultCard extends StatelessWidget {
             ),
             if (summary.warnings.isNotEmpty) ...[
               const SizedBox(height: 12),
-              const Text('Alertes & Conseils', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+              const Text('Alertes & Conseils',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
               const SizedBox(height: 6),
               ...summary.warnings.map(
                 (warning) => Padding(
@@ -2412,12 +2662,14 @@ class AiResultCard extends StatelessWidget {
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Icon(Icons.warning_amber_rounded, size: 16, color: Colors.orange),
+                      const Icon(Icons.warning_amber_rounded,
+                          size: 16, color: Colors.orange),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
                           warning,
-                          style: const TextStyle(fontSize: 12, color: Colors.black87),
+                          style: const TextStyle(
+                              fontSize: 12, color: Colors.black87),
                         ),
                       ),
                     ],
@@ -2462,7 +2714,8 @@ class SummaryLine extends StatelessWidget {
             width: 120,
             child: Text(
               '$label :',
-              style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.grey),
+              style: const TextStyle(
+                  fontWeight: FontWeight.bold, color: Colors.grey),
             ),
           ),
           Expanded(
