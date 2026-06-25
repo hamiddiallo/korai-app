@@ -782,6 +782,9 @@ class AdminPatientsTab extends StatefulWidget {
 
 class _AdminPatientsTabState extends State<AdminPatientsTab> {
   List<AdminPatient> patients = [];
+  List<AdminPatient> deletedPatients = [];
+  bool showTrash = false;
+  AdminPatient? selectedPatient;
   bool isLoading = true;
   String? errorMessage;
 
@@ -792,12 +795,18 @@ class _AdminPatientsTabState extends State<AdminPatientsTab> {
   }
 
   Future<void> load() async {
+    if (!mounted) return;
     setState(() {
       isLoading = true;
       errorMessage = null;
     });
     try {
-      patients = await widget.repository.listPatients();
+      final results = await Future.wait([
+        widget.repository.listPatients(),
+        widget.repository.listDeletedPatients(),
+      ]);
+      patients = results[0];
+      deletedPatients = results[1];
     } catch (error) {
       errorMessage = error.toString();
     } finally {
@@ -825,55 +834,175 @@ class _AdminPatientsTabState extends State<AdminPatientsTab> {
   }
 
   Future<void> delete(AdminPatient patient) async {
+    final messenger = ScaffoldMessenger.of(context);
     final confirmed =
-        await confirmDelete(context, 'Supprimer ${patient.fullName} ?');
+        await confirmDelete(context, 'Supprimer le dossier complet de ${patient.fullName} ?');
     if (!confirmed) return;
     try {
       await widget.repository.deletePatient(patient.id);
       await load();
+
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('Dossier de ${patient.fullName} supprimé'),
+          duration: const Duration(seconds: 6),
+          action: SnackBarAction(
+            label: 'Annuler',
+            onPressed: () async {
+              try {
+                await widget.repository.restorePatient(patient.id);
+                await load();
+              } catch (e) {
+                messenger.showSnackBar(
+                  SnackBar(content: Text('Erreur de restauration: $e')),
+                );
+              }
+            },
+          ),
+        ),
+      );
     } catch (error) {
       setState(() => errorMessage = error.toString());
     }
   }
 
+  Future<void> restore(AdminPatient patient) async {
+    try {
+      final messenger = ScaffoldMessenger.of(context);
+      await widget.repository.restorePatient(patient.id);
+      await load();
+      messenger.showSnackBar(
+        SnackBar(content: Text('Dossier de ${patient.fullName} restauré')),
+      );
+    } catch (error) {
+      setState(() => errorMessage = error.toString());
+    }
+  }
+
+  Widget _buildTabsToggle() {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade200,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: GestureDetector(
+              onTap: () => setState(() => showTrash = false),
+              child: Container(
+                padding: const EdgeInsets.symmetric(vertical: 10),
+                decoration: BoxDecoration(
+                  color: !showTrash ? Colors.indigo.shade600 : Colors.transparent,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  'Actifs (${patients.length})',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: !showTrash ? Colors.white : Colors.grey.shade700,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ),
+          ),
+          Expanded(
+            child: GestureDetector(
+              onTap: () => setState(() => showTrash = true),
+              child: Container(
+                padding: const EdgeInsets.symmetric(vertical: 10),
+                decoration: BoxDecoration(
+                  color: showTrash ? Colors.indigo.shade600 : Colors.transparent,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  'Corbeille (${deletedPatients.length})',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: showTrash ? Colors.white : Colors.grey.shade700,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    if (selectedPatient != null) {
+      return PatientDossierView(
+        patient: selectedPatient!,
+        repository: widget.repository,
+        onBack: () => setState(() => selectedPatient = null),
+        onPatientUpdated: (updated) {
+          setState(() {
+            selectedPatient = updated;
+          });
+          load();
+        },
+        onPatientDeleted: (patient) async {
+          setState(() => selectedPatient = null);
+          await load();
+        },
+      );
+    }
+
+    final displayedPatients = showTrash ? deletedPatients : patients;
+
     return AdminListScaffold(
       title: 'Patients',
       isLoading: isLoading,
       errorMessage: errorMessage,
       onRefresh: load,
       onCreate: () => openForm(),
-      children: patients
-          .map(
-            (patient) => Container(
-              margin: const EdgeInsets.only(bottom: 12),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: Colors.grey.shade200),
-              ),
-              child: ListTile(
-                contentPadding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                leading: CircleAvatar(
-                  backgroundColor: Colors.teal.shade50,
-                  child: Icon(Icons.personal_injury_rounded,
-                      color: Colors.teal.shade600),
+      children: [
+        _buildTabsToggle(),
+        ...displayedPatients.map(
+          (patient) => Container(
+            margin: const EdgeInsets.only(bottom: 12),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: Colors.grey.shade200),
+            ),
+            child: ListTile(
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              onTap: showTrash
+                  ? null
+                  : () => setState(() => selectedPatient = patient),
+              leading: CircleAvatar(
+                backgroundColor: showTrash ? Colors.red.shade50 : Colors.teal.shade50,
+                child: Icon(
+                  showTrash ? Icons.delete_sweep_rounded : Icons.personal_injury_rounded,
+                  color: showTrash ? Colors.red.shade600 : Colors.teal.shade600,
                 ),
-                title: Text(patient.fullName,
-                    style: const TextStyle(fontWeight: FontWeight.bold)),
-                subtitle: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const SizedBox(height: 4),
+              ),
+              title: Text(patient.fullName,
+                  style: const TextStyle(fontWeight: FontWeight.bold)),
+              subtitle: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const SizedBox(height: 4),
+                  Text(
+                    [patient.phone, patient.address]
+                        .where((e) => e != null && e.isNotEmpty)
+                        .join(' • '),
+                    style: const TextStyle(fontSize: 12),
+                  ),
+                  const SizedBox(height: 6),
+                  if (showTrash)
                     Text(
-                      [patient.phone, patient.address]
-                          .where((e) => e != null && e.isNotEmpty)
-                          .join(' • '),
-                      style: const TextStyle(fontSize: 12),
-                    ),
-                    const SizedBox(height: 6),
+                      'Supprimé le: ${patient.deletedAt != null ? formatDate(patient.deletedAt!) : "Inconnu"}',
+                      style: TextStyle(color: Colors.red.shade800, fontSize: 11, fontWeight: FontWeight.bold),
+                    )
+                  else
                     Row(
                       children: [
                         if (patient.consentForAi)
@@ -887,28 +1016,34 @@ class _AdminPatientsTabState extends State<AdminPatientsTab> {
                           _buildConsentBadge('Expertise NO', Colors.grey),
                       ],
                     ),
-                  ],
-                ),
-                trailing: Wrap(
-                  spacing: 4,
-                  children: [
-                    IconButton(
-                      tooltip: 'Modifier',
-                      icon: const Icon(Icons.edit_outlined, color: Colors.blue),
-                      onPressed: () => openForm(patient),
-                    ),
-                    IconButton(
-                      tooltip: 'Supprimer',
-                      icon: Icon(Icons.delete_outline_rounded,
-                          color: Colors.red.shade400),
-                      onPressed: () => delete(patient),
-                    ),
-                  ],
-                ),
+                ],
               ),
+              trailing: showTrash
+                  ? IconButton(
+                      tooltip: 'Restaurer',
+                      icon: const Icon(Icons.restore_from_trash_rounded, color: Colors.green),
+                      onPressed: () => restore(patient),
+                    )
+                  : Wrap(
+                      spacing: 4,
+                      children: [
+                        IconButton(
+                          tooltip: 'Modifier',
+                          icon: const Icon(Icons.edit_outlined, color: Colors.blue),
+                          onPressed: () => openForm(patient),
+                        ),
+                        IconButton(
+                          tooltip: 'Supprimer',
+                          icon: Icon(Icons.delete_outline_rounded,
+                              color: Colors.red.shade400),
+                          onPressed: () => delete(patient),
+                        ),
+                      ],
+                    ),
             ),
-          )
-          .toList(),
+          ),
+        ),
+      ],
     );
   }
 
@@ -927,6 +1062,697 @@ class _AdminPatientsTabState extends State<AdminPatientsTab> {
     );
   }
 }
+
+// --- SUBVIEW PATIENT DOSSIER VIEW ---
+
+class PatientDossierView extends StatefulWidget {
+  const PatientDossierView({
+    super.key,
+    required this.patient,
+    required this.repository,
+    required this.onBack,
+    required this.onPatientUpdated,
+    required this.onPatientDeleted,
+  });
+
+  final AdminPatient patient;
+  final AdminRepository repository;
+  final VoidCallback onBack;
+  final ValueChanged<AdminPatient> onPatientUpdated;
+  final ValueChanged<AdminPatient> onPatientDeleted;
+
+  @override
+  State<PatientDossierView> createState() => _PatientDossierViewState();
+}
+
+class _PatientDossierViewState extends State<PatientDossierView> {
+  List<AdminConsultation> consultations = [];
+  bool isLoading = true;
+  String? errorMessage;
+
+  @override
+  void initState() {
+    super.initState();
+    loadConsultations();
+  }
+
+  Future<void> loadConsultations() async {
+    if (!mounted) return;
+    setState(() {
+      isLoading = true;
+      errorMessage = null;
+    });
+    try {
+      consultations = await widget.repository.listPatientConsultations(widget.patient.id);
+    } catch (e) {
+      errorMessage = e.toString();
+    } finally {
+      if (mounted) setState(() => isLoading = false);
+    }
+  }
+
+  Future<void> openEditForm() async {
+    final result = await showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (_) => PatientFormDialog(patient: widget.patient),
+    );
+    if (result == null) return;
+
+    try {
+      final updated = await widget.repository.updatePatient(widget.patient.id, result);
+      widget.onPatientUpdated(updated);
+    } catch (error) {
+      setState(() => errorMessage = error.toString());
+    }
+  }
+
+  Future<void> deletePatient() async {
+    final messenger = ScaffoldMessenger.of(context);
+    final confirmed = await confirmDelete(context, 'Supprimer le dossier complet de ${widget.patient.fullName} (cette action soft-deletes toutes ses consultations) ?');
+    if (!confirmed) return;
+    try {
+      await widget.repository.deletePatient(widget.patient.id);
+      widget.onPatientDeleted(widget.patient);
+      
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('Dossier de ${widget.patient.fullName} supprimé'),
+          duration: const Duration(seconds: 6),
+          action: SnackBarAction(
+            label: 'Annuler',
+            onPressed: () async {
+              try {
+                await widget.repository.restorePatient(widget.patient.id);
+                widget.onPatientUpdated(widget.patient);
+              } catch (e) {
+                messenger.showSnackBar(
+                  SnackBar(content: Text('Erreur de restauration: $e')),
+                );
+              }
+            },
+          ),
+        ),
+      );
+    } catch (error) {
+      setState(() => errorMessage = error.toString());
+    }
+  }
+
+  Future<void> deleteConsult(AdminConsultation consult) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final confirmed = await confirmDelete(context, 'Supprimer cette consultation ?');
+    if (!confirmed) return;
+    try {
+      await widget.repository.deleteConsultation(consult.id);
+      await loadConsultations();
+      
+      messenger.showSnackBar(
+        SnackBar(
+          content: const Text('Consultation supprimée'),
+          duration: const Duration(seconds: 6),
+          action: SnackBarAction(
+            label: 'Annuler',
+            onPressed: () async {
+              try {
+                await widget.repository.restoreConsultation(consult.id);
+                await loadConsultations();
+              } catch (e) {
+                messenger.showSnackBar(
+                  SnackBar(content: Text('Erreur de restauration: $e')),
+                );
+              }
+            },
+          ),
+        ),
+      );
+    } catch (error) {
+      setState(() => errorMessage = error.toString());
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.grey.shade50,
+      appBar: AppBar(
+        backgroundColor: Colors.white,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_rounded, color: Color(0xFF1E293B)),
+          onPressed: widget.onBack,
+        ),
+        title: const Text(
+          'Dossier Patient',
+          style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF1E293B)),
+        ),
+        actions: [
+          IconButton(
+            tooltip: 'Modifier patient',
+            icon: const Icon(Icons.edit_outlined, color: Colors.blue),
+            onPressed: openEditForm,
+          ),
+          IconButton(
+            tooltip: 'Supprimer dossier complet',
+            icon: Icon(Icons.delete_outline_rounded, color: Colors.red.shade400),
+            onPressed: deletePatient,
+          ),
+        ],
+      ),
+      body: RefreshIndicator(
+        onRefresh: loadConsultations,
+        child: ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            _buildPatientDetailsCard(),
+            const SizedBox(height: 24),
+            const Text(
+              'Historique des Consultations',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF1E293B)),
+            ),
+            const SizedBox(height: 12),
+            if (errorMessage != null) ...[
+              Text(errorMessage!, style: TextStyle(color: Colors.red.shade600)),
+              const SizedBox(height: 12),
+            ],
+            if (isLoading)
+              const Center(
+                child: Padding(
+                  padding: EdgeInsets.symmetric(vertical: 40),
+                  child: CircularProgressIndicator(),
+                ),
+              )
+            else if (consultations.isEmpty)
+              Card(
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                child: const Padding(
+                  padding: EdgeInsets.all(32),
+                  child: Column(
+                    children: [
+                      Icon(Icons.history_rounded, size: 48, color: Colors.grey),
+                      SizedBox(height: 12),
+                      Text(
+                        'Aucune consultation enregistrée',
+                        style: TextStyle(color: Colors.grey, fontWeight: FontWeight.w600),
+                      ),
+                    ],
+                  ),
+                ),
+              )
+            else
+              ...consultations.asMap().entries.map((entry) {
+                final index = entry.key;
+                final consult = entry.value;
+                return _buildTimelineItem(consult, index, consultations.length);
+              }),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPatientDetailsCard() {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.grey.shade200),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.02),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              CircleAvatar(
+                radius: 28,
+                backgroundColor: Colors.teal.shade50,
+                child: Icon(Icons.personal_injury_rounded, size: 28, color: Colors.teal.shade600),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      widget.patient.fullName,
+                      style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Color(0xFF1E293B)),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Sexe: ${widget.patient.sex == 'M' ? 'Masculin' : 'Féminin'} • Né(e) le: ${widget.patient.birthDate ?? 'Inconnu'}',
+                      style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const Divider(height: 32),
+          if (widget.patient.phone != null && widget.patient.phone!.isNotEmpty) ...[
+            _buildInfoRow(Icons.phone_outlined, 'Téléphone', widget.patient.phone!),
+            const SizedBox(height: 12),
+          ],
+          if (widget.patient.address != null && widget.patient.address!.isNotEmpty) ...[
+            _buildInfoRow(Icons.map_outlined, 'Adresse', widget.patient.address!),
+            const SizedBox(height: 12),
+          ],
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              if (widget.patient.consentForAi)
+                _buildConsentBadge('IA Agréé', Colors.green)
+              else
+                _buildConsentBadge('IA Refusé', Colors.red),
+              const SizedBox(width: 8),
+              if (widget.patient.consentForTeleExpertise)
+                _buildConsentBadge('Expertise OK', Colors.blue)
+              else
+                _buildConsentBadge('Expertise NO', Colors.grey),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInfoRow(IconData icon, String label, String value) {
+    return Row(
+      children: [
+        Icon(icon, size: 18, color: Colors.grey.shade500),
+        const SizedBox(width: 10),
+        Text('$label : ', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey.shade700, fontSize: 13)),
+        Expanded(
+          child: Text(value, style: const TextStyle(color: Color(0xFF334155), fontSize: 13)),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildConsentBadge(String label, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.bold),
+      ),
+    );
+  }
+
+  Widget _buildConsultationCard(AdminConsultation consult) {
+    final urgencyColor = _getUrgencyColor(consult.urgency);
+    return Card(
+      margin: EdgeInsets.zero,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      elevation: 0,
+      color: Colors.white,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: Container(
+          decoration: BoxDecoration(
+            border: Border(
+              left: BorderSide(color: urgencyColor, width: 5),
+            ),
+          ),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(16),
+            onTap: () => showConsultationDetail(context, consult, () => deleteConsult(consult)),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Text(
+                              formatDate(consult.createdAt),
+                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Color(0xFF1E293B)),
+                            ),
+                            const Spacer(),
+                            _buildBadge(consult.urgency, _getUrgencyColor(consult.urgency)),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          consult.clinicalNarrative.isNotEmpty
+                              ? consult.clinicalNarrative
+                              : 'Aucune description',
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Icon(Icons.chevron_right, color: Colors.grey.shade400),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTimelineItem(AdminConsultation consult, int index, int total) {
+    final urgencyColor = _getUrgencyColor(consult.urgency);
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SizedBox(
+            width: 24,
+            child: Column(
+              children: [
+                Expanded(
+                  child: Container(
+                    width: 2,
+                    color: index == 0 ? Colors.transparent : Colors.grey.shade300,
+                  ),
+                ),
+                Container(
+                  width: 12,
+                  height: 12,
+                  decoration: BoxDecoration(
+                    color: urgencyColor,
+                    shape: BoxShape.circle,
+                    border: Border.all(color: Colors.white, width: 2),
+                    boxShadow: [
+                      BoxShadow(
+                        color: urgencyColor.withValues(alpha: 0.3),
+                        blurRadius: 4,
+                        spreadRadius: 1,
+                      ),
+                    ],
+                  ),
+                ),
+                Expanded(
+                  child: Container(
+                    width: 2,
+                    color: index == total - 1 ? Colors.transparent : Colors.grey.shade300,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: _buildConsultationCard(consult),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// --- CONSULTATION DETAILS BOTTOM SHEET ---
+
+void showConsultationDetail(BuildContext context, AdminConsultation consultation, VoidCallback onDelete) {
+  showModalBottomSheet(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: Colors.transparent,
+    builder: (sheetContext) {
+      final media = MediaQuery.of(sheetContext);
+      return ConstrainedBox(
+        constraints: BoxConstraints(
+          maxHeight: media.size.height * 0.85,
+        ),
+        child: Container(
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+          child: SafeArea(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      'Détails Consultation',
+                      style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Color(0xFF1E293B)),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close),
+                      onPressed: () => Navigator.pop(sheetContext),
+                    ),
+                  ],
+                ),
+                const Divider(height: 24),
+                Flexible(
+                  child: SingleChildScrollView(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Row(
+                          children: [
+                            _buildBadge(consultation.status, _getStatusColor(consultation.status)),
+                            const SizedBox(width: 8),
+                            _buildBadge(consultation.urgency, _getUrgencyColor(consultation.urgency)),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                        const Text(
+                          'Date de création',
+                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.grey),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          formatDate(consultation.createdAt),
+                          style: const TextStyle(fontSize: 14, color: Color(0xFF334155)),
+                        ),
+                        const SizedBox(height: 16),
+                        const Text(
+                          'Symptômes déclarés',
+                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.grey),
+                        ),
+                        const SizedBox(height: 8),
+                        consultation.symptomLabels.isEmpty
+                            ? const Text('Aucun symptôme déclaré', style: TextStyle(color: Colors.grey, fontStyle: FontStyle.italic))
+                            : Wrap(
+                                spacing: 6,
+                                runSpacing: 6,
+                                children: consultation.symptomLabels
+                                    .map((label) => Chip(
+                                          label: Text(label, style: const TextStyle(fontSize: 11)),
+                                          backgroundColor: Colors.grey.shade100,
+                                          padding: EdgeInsets.zero,
+                                          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                        ))
+                                    .toList(),
+                              ),
+                        const SizedBox(height: 16),
+                        const Text(
+                          'Description clinique',
+                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.grey),
+                        ),
+                        const SizedBox(height: 6),
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.grey.shade50,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: Colors.grey.shade200),
+                          ),
+                          child: Text(
+                            consultation.clinicalNarrative.isNotEmpty
+                                ? consultation.clinicalNarrative
+                                : 'Aucune description clinique fournie.',
+                            style: const TextStyle(fontSize: 13, height: 1.4, color: Color(0xFF334155)),
+                          ),
+                        ),
+                        if (consultation.otoscopicImages.isNotEmpty) ...[
+                          const SizedBox(height: 20),
+                          const Text(
+                            'Images ORL & Descriptions',
+                            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.grey),
+                          ),
+                          const SizedBox(height: 8),
+                          ...consultation.otoscopicImages.map((img) => Container(
+                            margin: const EdgeInsets.only(bottom: 8),
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: Colors.grey.shade50,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: Colors.grey.shade200),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Icon(Icons.image_outlined, color: Colors.indigo.shade400, size: 20),
+                                    const SizedBox(width: 8),
+                                    Text(
+                                      'Oreille ${img.earSide == "LEFT" ? "Gauche" : img.earSide == "RIGHT" ? "Droite" : "Bilatérale"}',
+                                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                                    ),
+                                  ],
+                                ),
+                                if (img.description != null && img.description!.isNotEmpty) ...[
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    img.description!,
+                                    style: const TextStyle(fontSize: 13, height: 1.4, color: Color(0xFF334155)),
+                                  ),
+                                ] else ...[
+                                  const SizedBox(height: 8),
+                                  const Text(
+                                    'Aucune description fournie',
+                                    style: TextStyle(fontSize: 13, fontStyle: FontStyle.italic, color: Colors.grey),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          )),
+                        ],
+                        const SizedBox(height: 20),
+                        Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              colors: [Colors.amber.shade50, Colors.orange.shade50],
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                            ),
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(color: Colors.amber.shade200),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(Icons.psychology_rounded, color: Colors.amber.shade800, size: 28),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'Diagnostic IA Vraisemblable',
+                                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.amber.shade900),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      consultation.likelyDiagnosis ?? 'Aucun diagnostic généré',
+                                      style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Color(0xFF1E293B)),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 24),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: OutlinedButton.icon(
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: Colors.red.shade600,
+                                  side: BorderSide(color: Colors.red.shade200),
+                                  padding: const EdgeInsets.symmetric(vertical: 12),
+                                ),
+                                icon: const Icon(Icons.delete_outline_rounded),
+                                label: const Text('Supprimer la consultation', style: TextStyle(fontWeight: FontWeight.bold)),
+                                onPressed: () {
+                                  Navigator.pop(sheetContext);
+                                  onDelete();
+                                },
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    },
+  );
+}
+
+Widget _buildBadge(String label, Color color) {
+  return Container(
+    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+    decoration: BoxDecoration(
+      color: color.withValues(alpha: 0.1),
+      borderRadius: BorderRadius.circular(8),
+    ),
+    child: Text(
+      label,
+      style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.bold),
+    ),
+  );
+}
+
+Color _getStatusColor(String status) {
+  switch (status.toUpperCase()) {
+    case 'COMPLETED':
+      return Colors.green.shade700;
+    case 'IN_PROGRESS':
+      return Colors.blue.shade700;
+    case 'PENDING':
+      return Colors.orange.shade700;
+    default:
+      return Colors.grey.shade700;
+  }
+}
+
+Color _getUrgencyColor(String urgency) {
+  switch (urgency.toUpperCase()) {
+    case 'HIGH':
+    case 'EMERGENCY':
+    case 'CRITICAL':
+      return Colors.red.shade700;
+    case 'MEDIUM':
+      return Colors.orange.shade700;
+    case 'LOW':
+      return Colors.green.shade700;
+    default:
+      return Colors.grey.shade700;
+  }
+}
+
+String formatDate(String isoString) {
+  try {
+    final date = DateTime.parse(isoString).toLocal();
+    final day = date.day.toString().padLeft(2, '0');
+    final month = date.month.toString().padLeft(2, '0');
+    final year = date.year;
+    final hour = date.hour.toString().padLeft(2, '0');
+    final minute = date.minute.toString().padLeft(2, '0');
+    return '$day/$month/$year $hour:$minute';
+  } catch (_) {
+    return isoString;
+  }
+}
+
 
 class ClinicalItemsTab extends StatefulWidget {
   const ClinicalItemsTab({
@@ -1034,11 +1860,15 @@ class _ClinicalItemsTabState extends State<ClinicalItemsTab> {
                 title: Text(item.label,
                     style: const TextStyle(fontWeight: FontWeight.bold)),
                 subtitle: Text(
-                    item.description ?? 'Ordre d\'affichage: ${item.sortOrder}',
+                    item.description ?? 'Aucune description',
                     style: const TextStyle(fontSize: 12)),
                 trailing: Wrap(
                   spacing: 4,
+                  crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
+                    if (item.type == 'SYMPTOM' ||
+                        item.type == 'MEDICAL_HISTORY')
+                      dangerScoreBadge(item.dangerScore),
                     IconButton(
                       tooltip: 'Modifier',
                       icon: const Icon(Icons.edit_outlined, color: Colors.blue),
@@ -1519,15 +2349,20 @@ class _ClinicalItemFormDialogState extends State<ClinicalItemFormDialog> {
   late final label = TextEditingController(text: widget.item?.label);
   late final description =
       TextEditingController(text: widget.item?.description);
-  late final sortOrder =
-      TextEditingController(text: '${widget.item?.sortOrder ?? 0}');
   late bool isActive = widget.item?.isActive ?? true;
+  late int dangerScore = widget.item?.dangerScore ?? 0;
+
+  static const _dangerLabels = {
+    0: '0 — Bénin',
+    1: '1 — À surveiller',
+    2: '2 — Préoccupant',
+    3: '3 — Critique',
+  };
 
   @override
   void dispose() {
     label.dispose();
     description.dispose();
-    sortOrder.dispose();
     super.dispose();
   }
 
@@ -1579,19 +2414,29 @@ class _ClinicalItemFormDialogState extends State<ClinicalItemFormDialog> {
                       const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 ),
               ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: sortOrder,
-                keyboardType: TextInputType.number,
-                decoration: InputDecoration(
-                  labelText: 'Ordre de tri / Affichage',
-                  prefixIcon: const Icon(Icons.sort_rounded),
-                  border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12)),
-                  contentPadding:
-                      const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              if (widget.type == 'SYMPTOM' ||
+                  widget.type == 'MEDICAL_HISTORY') ...[
+                const SizedBox(height: 12),
+                DropdownButtonFormField<int>(
+                  initialValue: dangerScore,
+                  decoration: InputDecoration(
+                    labelText: 'Score de danger (urgence)',
+                    prefixIcon: const Icon(Icons.priority_high_rounded),
+                    border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12)),
+                    contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 12),
+                  ),
+                  items: _dangerLabels.entries
+                      .map((e) => DropdownMenuItem<int>(
+                            value: e.key,
+                            child: Text(e.value),
+                          ))
+                      .toList(),
+                  onChanged: (value) =>
+                      setState(() => dangerScore = value ?? 0),
                 ),
-              ),
+              ],
               const SizedBox(height: 8),
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
@@ -1628,7 +2473,7 @@ class _ClinicalItemFormDialogState extends State<ClinicalItemFormDialog> {
               'label': label.text,
               if (description.text.isNotEmpty) 'description': description.text,
               'isActive': isActive,
-              'sortOrder': int.tryParse(sortOrder.text) ?? 0,
+              'dangerScore': dangerScore,
             });
           },
           child: const Text('Enregistrer',
@@ -1637,6 +2482,34 @@ class _ClinicalItemFormDialogState extends State<ClinicalItemFormDialog> {
       ],
     );
   }
+}
+
+/// Petit badge coloré du score de danger (0–3) d'un élément clinique.
+Widget dangerScoreBadge(int score) {
+  final color = switch (score) {
+    >= 3 => const Color(0xFFEF4444),
+    2 => const Color(0xFFF59E0B),
+    1 => const Color(0xFFCA8A04),
+    _ => Colors.grey,
+  };
+  return Tooltip(
+    message: 'Score de danger : $score / 3',
+    child: Container(
+      width: 26,
+      height: 26,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        shape: BoxShape.circle,
+        border: Border.all(color: color.withValues(alpha: 0.5)),
+      ),
+      child: Text(
+        '$score',
+        style: TextStyle(
+            fontSize: 12, fontWeight: FontWeight.bold, color: color),
+      ),
+    ),
+  );
 }
 
 Future<bool> confirmDelete(BuildContext context, String message) async {

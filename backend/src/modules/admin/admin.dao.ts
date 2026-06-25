@@ -3,7 +3,7 @@ import { prisma } from '../../common/prisma.js';
 
 export const adminDao = {
   countConsultationsForPatient(patientId: string) {
-    return prisma.consultation.count({ where: { patientId } });
+    return prisma.consultation.count({ where: { patientId, deletedAt: null } });
   },
 
   async deleteClinicalItem(id: string) {
@@ -20,6 +20,7 @@ export const adminDao = {
     description?: string;
     isActive: boolean;
     sortOrder: number;
+    dangerScore?: number;
   }) {
     return prisma.clinicalReferenceItem.create({ data });
   },
@@ -32,12 +33,13 @@ export const adminDao = {
       description?: string;
       isActive: boolean;
       sortOrder: number;
+      dangerScore: number;
     }>
   ) {
     return prisma.clinicalReferenceItem.update({ where: { id }, data });
   },
 
   async countUsersByRole(role: Role) {
-    return prisma.user.count({ where: { role } });
+    return prisma.user.count({ where: { role, deletedAt: null } });
   }
 };

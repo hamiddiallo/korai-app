@@ -32,7 +32,9 @@ export const createClinicalItemSchema = z.object({
   label: z.string().min(1),
   description: z.string().optional(),
   isActive: z.boolean().default(true),
-  sortOrder: z.number().int().default(0)
+  sortOrder: z.number().int().default(0),
+  /** Score de danger 0–3 (alimente le calcul automatique d'urgence). */
+  dangerScore: z.number().int().min(0).max(3).default(0)
 });
 
 export const updateClinicalItemSchema = createClinicalItemSchema.partial();

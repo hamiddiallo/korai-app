@@ -41,6 +41,7 @@ class AdminPatient {
     this.sex,
     this.phone,
     this.address,
+    this.deletedAt,
   });
 
   final String id;
@@ -52,6 +53,7 @@ class AdminPatient {
   final String? address;
   final bool consentForAi;
   final bool consentForTeleExpertise;
+  final String? deletedAt;
 
   String get fullName => '$firstName $lastName';
 
@@ -66,9 +68,88 @@ class AdminPatient {
       address: json['address']?.toString(),
       consentForAi: json['consentForAi'] == true,
       consentForTeleExpertise: json['consentForTeleExpertise'] == true,
+      deletedAt: json['deletedAt']?.toString(),
     );
   }
 }
+
+class AdminConsultation {
+  const AdminConsultation({
+    required this.id,
+    required this.patientId,
+    required this.status,
+    required this.urgency,
+    required this.clinicalNarrative,
+    required this.symptomLabels,
+    required this.createdAt,
+    required this.otoscopicImages,
+    this.likelyDiagnosis,
+    this.deletedAt,
+  });
+
+  final String id;
+  final String patientId;
+  final String status;
+  final String urgency;
+  final String clinicalNarrative;
+  final List<String> symptomLabels;
+  final String createdAt;
+  final List<AdminOtoscopicImage> otoscopicImages;
+  final String? likelyDiagnosis;
+  final String? deletedAt;
+
+  factory AdminConsultation.fromJson(Map<String, dynamic> json) {
+    final aiResp = json['aiResponse'] as Map<String, dynamic>?;
+    final likelyDiag = aiResp != null ? aiResp['likelyDiagnosis']?.toString() : null;
+
+    final rawSymptoms = json['symptomLabels'];
+    final List<String> symptoms = rawSymptoms is List
+        ? rawSymptoms.map((e) => e.toString()).toList()
+        : [];
+
+    final rawImages = json['otoscopicImages'];
+    final List<AdminOtoscopicImage> images = rawImages is List
+        ? rawImages.map((e) => AdminOtoscopicImage.fromJson(e as Map<String, dynamic>)).toList()
+        : [];
+
+    return AdminConsultation(
+      id: json['id'].toString(),
+      patientId: json['patientId'].toString(),
+      status: json['status'].toString(),
+      urgency: json['urgency'].toString(),
+      clinicalNarrative: json['clinicalNarrative']?.toString() ?? '',
+      symptomLabels: symptoms,
+      createdAt: json['createdAt'].toString(),
+      otoscopicImages: images,
+      likelyDiagnosis: likelyDiag,
+      deletedAt: json['deletedAt']?.toString(),
+    );
+  }
+}
+
+class AdminOtoscopicImage {
+  const AdminOtoscopicImage({
+    required this.id,
+    required this.earSide,
+    required this.mimeType,
+    this.description,
+  });
+
+  final String id;
+  final String earSide;
+  final String mimeType;
+  final String? description;
+
+  factory AdminOtoscopicImage.fromJson(Map<String, dynamic> json) {
+    return AdminOtoscopicImage(
+      id: json['id'].toString(),
+      earSide: json['earSide'].toString(),
+      mimeType: json['mimeType'].toString(),
+      description: json['description']?.toString(),
+    );
+  }
+}
+
 
 class ClinicalReferenceItem {
   const ClinicalReferenceItem({
@@ -78,6 +159,7 @@ class ClinicalReferenceItem {
     required this.isActive,
     required this.sortOrder,
     this.description,
+    this.dangerScore = 0,
   });
 
   final String id;
@@ -87,6 +169,9 @@ class ClinicalReferenceItem {
   final bool isActive;
   final int sortOrder;
 
+  /// Score de danger 0–3 (alimente le calcul automatique d'urgence).
+  final int dangerScore;
+
   factory ClinicalReferenceItem.fromJson(Map<String, dynamic> json) {
     return ClinicalReferenceItem(
       id: json['id'].toString(),
@@ -95,6 +180,7 @@ class ClinicalReferenceItem {
       description: json['description']?.toString(),
       isActive: json['isActive'] == true,
       sortOrder: int.tryParse(json['sortOrder']?.toString() ?? '') ?? 0,
+      dangerScore: int.tryParse(json['dangerScore']?.toString() ?? '') ?? 0,
     );
   }
 }

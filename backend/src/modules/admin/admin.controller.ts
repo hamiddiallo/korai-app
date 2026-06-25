@@ -24,12 +24,33 @@ export class AdminController {
     res.json({ patients: await adminService.listPatients() });
   }
 
+  async listDeletedPatients(_req: Request, res: Response) {
+    res.json({ patients: await adminService.listDeletedPatients() });
+  }
+
   async updatePatient(req: Request, res: Response) {
     res.json({ patient: await adminService.updatePatient(String(req.params.id), req.body) });
   }
 
   async deletePatient(req: Request, res: Response) {
     res.json(await adminService.deletePatient(String(req.params.id)));
+  }
+
+  async restorePatient(req: Request, res: Response) {
+    res.json({ patient: await adminService.restorePatient(String(req.params.id)) });
+  }
+
+  async listPatientConsultations(req: Request, res: Response) {
+    const includeDeleted = req.query.includeDeleted === 'true';
+    res.json({ consultations: await adminService.listPatientConsultations(String(req.params.id), includeDeleted) });
+  }
+
+  async deleteConsultation(req: Request, res: Response) {
+    res.json(await adminService.deleteConsultation(String(req.params.id)));
+  }
+
+  async restoreConsultation(req: Request, res: Response) {
+    res.json(await adminService.restoreConsultation(String(req.params.id)));
   }
 
   async listClinicalItems(req: Request, res: Response) {

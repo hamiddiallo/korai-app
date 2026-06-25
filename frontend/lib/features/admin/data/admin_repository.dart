@@ -49,6 +49,36 @@ class AdminRepository {
     await apiClient.deleteJson('/admin/patients/$id');
   }
 
+  Future<List<AdminPatient>> listDeletedPatients() async {
+    final response = await apiClient.getJson('/admin/patients/deleted');
+    return (response['patients'] as List<dynamic>)
+        .map((item) => AdminPatient.fromJson(item as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<AdminPatient> restorePatient(String id) async {
+    final response = await apiClient.postJson('/admin/patients/$id/restore', {});
+    return AdminPatient.fromJson(response['patient'] as Map<String, dynamic>);
+  }
+
+  Future<List<AdminConsultation>> listPatientConsultations(String patientId,
+      {bool includeDeleted = false}) async {
+    final response = await apiClient.getJson(
+        '/admin/patients/$patientId/consultations?includeDeleted=$includeDeleted');
+    return (response['consultations'] as List<dynamic>)
+        .map((item) => AdminConsultation.fromJson(item as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<void> deleteConsultation(String id) async {
+    await apiClient.deleteJson('/admin/consultations/$id');
+  }
+
+  Future<void> restoreConsultation(String id) async {
+    await apiClient.postJson('/admin/consultations/$id/restore', {});
+  }
+
+
   Future<List<ClinicalReferenceItem>> listClinicalItems(String type) async {
     final response =
         await apiClient.getJson('/admin/clinical-items?type=$type');
