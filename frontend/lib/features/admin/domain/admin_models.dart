@@ -184,3 +184,26 @@ class ClinicalReferenceItem {
     );
   }
 }
+
+class Medecin {
+  const Medecin({
+    required this.id,
+    required this.matricule,
+    required this.nom,
+    required this.prenom,
+  });
+
+  final String id;
+  final String matricule;
+  final String nom;
+  final String prenom;
+
+  factory Medecin.fromJson(Map<String, dynamic> json) {
+    return Medecin(
+      id: json['id'].toString(),
+      matricule: json['matricule'].toString(),
+      nom: json['nom'].toString(),
+      prenom: json['prenom'].toString(),
+    );
+  }
+}

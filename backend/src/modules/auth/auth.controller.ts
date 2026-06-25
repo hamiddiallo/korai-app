@@ -14,6 +14,10 @@ export class AuthController {
     res.status(201).json(await authService.registerNurse(req.body));
   }
 
+  async registerSpecialist(req: Request, res: Response) {
+    res.status(201).json(await authService.registerSpecialist(req.body));
+  }
+
   async register(req: Request, res: Response) {
     res.status(201).json(await authService.register(req.body));
   }

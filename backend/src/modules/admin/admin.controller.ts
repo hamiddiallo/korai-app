@@ -76,6 +76,22 @@ export class AdminController {
   async deleteClinicalItem(req: Request, res: Response) {
     res.json(await adminService.deleteClinicalItem(String(req.params.id)));
   }
+
+  async listMedecins(_req: Request, res: Response) {
+    res.json({ medecins: await adminService.listMedecins() });
+  }
+
+  async createMedecin(req: Request, res: Response) {
+    res.status(201).json({ medecin: await adminService.createMedecin(req.body) });
+  }
+
+  async updateMedecin(req: Request, res: Response) {
+    res.json({ medecin: await adminService.updateMedecin(String(req.params.id), req.body) });
+  }
+
+  async deleteMedecin(req: Request, res: Response) {
+    res.json(await adminService.deleteMedecin(String(req.params.id)));
+  }
 }
 
 export const adminController = new AdminController();

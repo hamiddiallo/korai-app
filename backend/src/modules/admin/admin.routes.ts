@@ -5,9 +5,11 @@ import { validateBody } from '../../common/middleware/validate.middleware.js';
 import {
   createAdminUserSchema,
   createClinicalItemSchema,
+  createMedecinSchema,
   updateAdminPatientSchema,
   updateAdminUserSchema,
-  updateClinicalItemSchema
+  updateClinicalItemSchema,
+  updateMedecinSchema
 } from './admin.schemas.js';
 import { adminController } from './admin.controller.js';
 
@@ -34,3 +36,8 @@ adminRouter.get('/clinical-items', asyncHandler((req, res) => adminController.li
 adminRouter.post('/clinical-items', validateBody(createClinicalItemSchema), asyncHandler((req, res) => adminController.createClinicalItem(req, res)));
 adminRouter.patch('/clinical-items/:id', validateBody(updateClinicalItemSchema), asyncHandler((req, res) => adminController.updateClinicalItem(req, res)));
 adminRouter.delete('/clinical-items/:id', asyncHandler((req, res) => adminController.deleteClinicalItem(req, res)));
+
+adminRouter.get('/medecins', asyncHandler((req, res) => adminController.listMedecins(req, res)));
+adminRouter.post('/medecins', validateBody(createMedecinSchema), asyncHandler((req, res) => adminController.createMedecin(req, res)));
+adminRouter.patch('/medecins/:id', validateBody(updateMedecinSchema), asyncHandler((req, res) => adminController.updateMedecin(req, res)));
+adminRouter.delete('/medecins/:id', asyncHandler((req, res) => adminController.deleteMedecin(req, res)));

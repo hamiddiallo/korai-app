@@ -1,5 +1,5 @@
 import bcrypt from 'bcryptjs';
-import type { Role } from '@prisma/client';
+import type { AccountStatus, Prisma, Role } from '@prisma/client';
 import { prisma } from '../../common/prisma.js';
 import { normalizeRole } from '../../common/types.js';
 import type { PublicUser, UserRecord } from './user.types.js';
@@ -12,6 +12,10 @@ const mapUser = (user: {
   email: string;
   passwordHash: string;
   role: Role;
+  accountStatus: AccountStatus;
+  matricule: string | null;
+  supervisorMatricule: string | null;
+  rejectionReason: string | null;
   phone: string | null;
   healthFacility: string | null;
   professionalId: string | null;
@@ -23,6 +27,10 @@ const mapUser = (user: {
   email: user.email,
   passwordHash: user.passwordHash,
   role: normalizeRole(String(user.role)),
+  accountStatus: user.accountStatus,
+  matricule: nullable(user.matricule),
+  supervisorMatricule: nullable(user.supervisorMatricule),
+  rejectionReason: nullable(user.rejectionReason),
   phone: nullable(user.phone),
   healthFacility: nullable(user.healthFacility),
   professionalId: nullable(user.professionalId),
@@ -65,6 +73,9 @@ export const userDao = {
     email: string;
     password: string;
     role: Role;
+    accountStatus?: AccountStatus;
+    matricule?: string;
+    supervisorMatricule?: string;
     phone?: string;
     healthFacility?: string;
     professionalId?: string;
@@ -79,12 +90,60 @@ export const userDao = {
         email: input.email.toLowerCase(),
         passwordHash: await bcrypt.hash(input.password, 10),
         role: input.role,
+        accountStatus: input.accountStatus,
+        matricule: input.matricule,
+        supervisorMatricule: input.supervisorMatricule,
         phone: input.phone,
         healthFacility: input.healthFacility,
         professionalId: input.professionalId,
         linkedPatientId: input.linkedPatientId
       }
     });
+    return mapUser(user);
+  },
+
+  /** Compte SPECIALIST (non supprimé) lié à un matricule du registre. */
+  async findSpecialistByMatricule(matricule: string) {
+    const user = await prisma.user.findFirst({
+      where: { matricule, role: 'SPECIALIST', deletedAt: null }
+    });
+    return user ? mapUser(user) : undefined;
+  },
+
+  /** Infirmiers rattachés à un matricule encadrant (filtre statut optionnel). */
+  async listNursesBySupervisorMatricule(
+    supervisorMatricule: string,
+    accountStatus?: AccountStatus
+  ) {
+    const users = await prisma.user.findMany({
+      where: {
+        role: 'NURSE',
+        supervisorMatricule,
+        deletedAt: null,
+        ...(accountStatus ? { accountStatus } : {})
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+    return users.map(mapUser);
+  },
+
+  /** Tous les infirmiers d'un statut donné (vue admin). */
+  async listNursesByStatus(accountStatus: AccountStatus) {
+    const users = await prisma.user.findMany({
+      where: { role: 'NURSE', accountStatus, deletedAt: null },
+      orderBy: { createdAt: 'desc' }
+    });
+    return users.map(mapUser);
+  },
+
+  async setAccountStatus(
+    id: string,
+    accountStatus: AccountStatus,
+    rejectionReason?: string | null
+  ) {
+    const data: Prisma.UserUpdateInput = { accountStatus };
+    if (rejectionReason !== undefined) data.rejectionReason = rejectionReason;
+    const user = await prisma.user.update({ where: { id }, data });
     return mapUser(user);
   },
 

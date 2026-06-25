@@ -6,6 +6,8 @@ import type { AuthenticatedUser, Role } from '../../common/types.js';
 import { userDao, toPublicUser } from '../users/user.dao.js';
 import type { UserRecord } from '../users/user.types.js';
 import { patientDao } from '../patients/patient.dao.js';
+import { medecinDao } from '../medecins/medecin.dao.js';
+import { notificationService } from '../notifications/notification.service.js';
 
 type JwtPayload = {
   sub: string;
@@ -29,6 +31,9 @@ const toAuthenticatedUser = (user: UserRecord): AuthenticatedUser => ({
   fullName: user.fullName,
   email: user.email,
   role: user.role,
+  accountStatus: user.accountStatus,
+  matricule: user.matricule,
+  supervisorMatricule: user.supervisorMatricule,
   phone: user.phone,
   healthFacility: user.healthFacility,
   professionalId: user.professionalId,
@@ -77,6 +82,62 @@ export const authService = {
     return authPayload(user);
   },
 
+  /**
+   * Inscription d'un spécialiste : son matricule doit exister dans le registre
+   * Medecin et ne pas être déjà rattaché à un compte. Le compte est actif
+   * immédiatement (vérification par le registre).
+   */
+  async registerSpecialist(input: {
+    fullName: string;
+    email: string;
+    password: string;
+    matricule: string;
+    phone?: string;
+    healthFacility?: string;
+  }) {
+    const matricule = input.matricule.trim();
+    const medecin = await medecinDao.findByMatricule(matricule);
+    if (!medecin) {
+      throw new HttpError(
+        422,
+        'MATRICULE_NOT_FOUND',
+        'Matricule introuvable dans le registre des médecins.'
+      );
+    }
+
+    const claimed = await userDao.findSpecialistByMatricule(matricule);
+    if (claimed) {
+      throw new HttpError(
+        409,
+        'MATRICULE_ALREADY_USED',
+        'Ce matricule est déjà associé à un compte spécialiste.'
+      );
+    }
+
+    const existingEmail = await userDao.findByEmail(input.email);
+    if (existingEmail) {
+      throw new HttpError(409, 'EMAIL_ALREADY_EXISTS', 'Un utilisateur existe deja avec cet email');
+    }
+
+    const user = await userDao.create({
+      fullName: input.fullName,
+      email: input.email,
+      password: input.password,
+      role: 'SPECIALIST',
+      accountStatus: 'ACTIVE',
+      matricule,
+      phone: input.phone,
+      healthFacility: input.healthFacility
+    });
+    return authPayload(user);
+  },
+
+  /**
+   * Inscription d'un infirmier : le matricule de l'encadrant doit exister dans
+   * le registre Medecin. Le compte est créé en attente (PENDING) et l'expert
+   * correspondant (s'il a un compte) est notifié. L'infirmier ne reçoit pas de
+   * jeton tant que son inscription n'est pas validée.
+   */
   async registerNurse(input: {
     fullName: string;
     email: string;
@@ -84,12 +145,52 @@ export const authService = {
     phone?: string;
     healthFacility: string;
     professionalId?: string;
+    supervisorMatricule: string;
   }) {
     const existing = await userDao.findByEmail(input.email);
     if (existing) throw new HttpError(409, 'EMAIL_ALREADY_EXISTS', 'Un utilisateur existe deja avec cet email');
 
-    const user = await userDao.create({ ...input, role: 'NURSE' });
-    return authPayload(user);
+    const supervisorMatricule = input.supervisorMatricule.trim();
+    const medecin = await medecinDao.findByMatricule(supervisorMatricule);
+    if (!medecin) {
+      throw new HttpError(
+        422,
+        'SUPERVISOR_MATRICULE_NOT_FOUND',
+        "Le matricule de l'encadrant est introuvable dans le registre des médecins."
+      );
+    }
+
+    const user = await userDao.create({
+      fullName: input.fullName,
+      email: input.email,
+      password: input.password,
+      role: 'NURSE',
+      accountStatus: 'PENDING',
+      supervisorMatricule,
+      phone: input.phone,
+      healthFacility: input.healthFacility,
+      professionalId: input.professionalId
+    });
+
+    // Notifie l'expert encadrant s'il dispose déjà d'un compte.
+    const supervisor = await userDao.findSpecialistByMatricule(supervisorMatricule);
+    if (supervisor) {
+      void notificationService.emit({
+        recipientUserId: supervisor.id,
+        type: 'NURSE_REGISTRATION_REQUEST',
+        title: "Demande d'inscription infirmier",
+        body: `${user.fullName} demande à rejoindre votre équipe.`,
+        data: { nurseUserId: user.id }
+      });
+    }
+
+    return {
+      pending: true as const,
+      fullName: user.fullName,
+      email: user.email,
+      message:
+        "Inscription enregistrée. Votre encadrant doit valider votre compte avant que vous puissiez vous connecter."
+    };
   },
 
   async registerPatient(input: {
@@ -143,6 +244,23 @@ export const authService = {
 
     const passwordOk = await bcrypt.compare(input.password, user.passwordHash);
     if (!passwordOk) throw unauthorized('Email ou mot de passe incorrect');
+
+    if (user.accountStatus === 'PENDING') {
+      throw new HttpError(
+        403,
+        'ACCOUNT_PENDING',
+        "Votre inscription est en attente de validation par votre encadrant."
+      );
+    }
+    if (user.accountStatus === 'REJECTED') {
+      throw new HttpError(
+        403,
+        'ACCOUNT_REJECTED',
+        user.rejectionReason
+          ? `Votre inscription a été refusée : ${user.rejectionReason}`
+          : 'Votre inscription a été refusée.'
+      );
+    }
 
     return authPayload(user);
   },

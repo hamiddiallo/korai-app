@@ -356,6 +356,14 @@ class _AdminHomePageState extends State<AdminHomePage> {
             color: Colors.deepOrange,
             onTap: () => _navigateTo('TOUCHES'),
           ),
+          const SizedBox(height: 10),
+          _buildLauncherItem(
+            title: 'Registre des Médecins',
+            subtitle: 'Matricules de référence (inscription des praticiens).',
+            icon: Icons.badge_outlined,
+            color: Colors.teal,
+            onTap: () => _navigateTo('MEDECINS'),
+          ),
           const SizedBox(height: 24),
 
           // System Health Card
@@ -563,6 +571,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
       'SYMPTOMS' => 'Dictionnaire Symptômes',
       'HISTORIES' => 'Antécédents Médicaux',
       'TOUCHES' => 'Verifications Toucher',
+      'MEDECINS' => 'Registre des Médecins',
       _ => 'Administration',
     };
 
@@ -608,6 +617,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
                 repository: repository,
                 type: 'TOUCH_CHECK',
                 title: 'verification au toucher'),
+            'MEDECINS' => MedecinsTab(repository: repository),
             _ => const SizedBox(),
           },
         ),
@@ -2545,4 +2555,228 @@ Future<bool> confirmDelete(BuildContext context, String message) async {
         ),
       ) ??
       false;
+}
+
+/// Registre des médecins (matricules de référence pour l'inscription).
+class MedecinsTab extends StatefulWidget {
+  const MedecinsTab({super.key, required this.repository});
+
+  final AdminRepository repository;
+
+  @override
+  State<MedecinsTab> createState() => _MedecinsTabState();
+}
+
+class _MedecinsTabState extends State<MedecinsTab> {
+  List<Medecin> items = const [];
+  bool loading = true;
+  String? error;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() {
+      loading = true;
+      error = null;
+    });
+    try {
+      final list = await widget.repository.listMedecins();
+      if (mounted) setState(() => items = list);
+    } catch (e) {
+      if (mounted) setState(() => error = e.toString());
+    } finally {
+      if (mounted) setState(() => loading = false);
+    }
+  }
+
+  Future<void> _openForm([Medecin? medecin]) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final result = await showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (_) => _MedecinFormDialog(medecin: medecin),
+    );
+    if (result == null) return;
+    try {
+      if (medecin == null) {
+        await widget.repository.createMedecin(result);
+      } else {
+        await widget.repository.updateMedecin(medecin.id, result);
+      }
+      await _load();
+    } catch (e) {
+      messenger.showSnackBar(
+        SnackBar(content: Text('Erreur : $e'), backgroundColor: Colors.red),
+      );
+    }
+  }
+
+  Future<void> _delete(Medecin medecin) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final ok = await confirmDelete(
+      context,
+      'Retirer ${medecin.prenom} ${medecin.nom} (${medecin.matricule}) du registre ?',
+    );
+    if (!ok) return;
+    try {
+      await widget.repository.deleteMedecin(medecin.id);
+      await _load();
+    } catch (e) {
+      messenger.showSnackBar(
+        SnackBar(content: Text('Erreur : $e'), backgroundColor: Colors.red),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (loading) return const Center(child: CircularProgressIndicator());
+    if (error != null) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Text(error!, textAlign: TextAlign.center),
+        ),
+      );
+    }
+    return Scaffold(
+      floatingActionButton: FloatingActionButton.extended(
+        backgroundColor: Colors.teal,
+        onPressed: () => _openForm(),
+        icon: const Icon(Icons.add),
+        label: const Text('Ajouter'),
+      ),
+      body: RefreshIndicator(
+        onRefresh: _load,
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 90),
+          children: [
+            if (items.isEmpty)
+              const Padding(
+                padding: EdgeInsets.only(top: 60),
+                child: Center(child: Text('Aucun médecin enregistré.')),
+              ),
+            ...items.map(
+              (m) => Container(
+                margin: const EdgeInsets.only(bottom: 12),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: Colors.grey.shade200),
+                ),
+                child: ListTile(
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                  leading: const CircleAvatar(
+                    backgroundColor: Color(0x1A009688),
+                    child: Icon(Icons.badge_outlined, color: Colors.teal),
+                  ),
+                  title: Text('${m.prenom} ${m.nom}',
+                      style: const TextStyle(fontWeight: FontWeight.bold)),
+                  subtitle: Text('Matricule : ${m.matricule}',
+                      style: const TextStyle(fontSize: 12.5)),
+                  trailing: Wrap(
+                    children: [
+                      IconButton(
+                        icon:
+                            const Icon(Icons.edit_outlined, color: Colors.blue),
+                        onPressed: () => _openForm(m),
+                      ),
+                      IconButton(
+                        icon: Icon(Icons.delete_outline_rounded,
+                            color: Colors.red.shade400),
+                        onPressed: () => _delete(m),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _MedecinFormDialog extends StatefulWidget {
+  const _MedecinFormDialog({this.medecin});
+
+  final Medecin? medecin;
+
+  @override
+  State<_MedecinFormDialog> createState() => _MedecinFormDialogState();
+}
+
+class _MedecinFormDialogState extends State<_MedecinFormDialog> {
+  late final matricule =
+      TextEditingController(text: widget.medecin?.matricule ?? '');
+  late final nom = TextEditingController(text: widget.medecin?.nom ?? '');
+  late final prenom = TextEditingController(text: widget.medecin?.prenom ?? '');
+
+  @override
+  void dispose() {
+    matricule.dispose();
+    nom.dispose();
+    prenom.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      title: Text(widget.medecin == null ? 'Nouveau médecin' : 'Modifier'),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _input(matricule, 'Matricule', Icons.key_outlined),
+            const SizedBox(height: 12),
+            _input(prenom, 'Prénom', Icons.person_outline),
+            const SizedBox(height: 12),
+            _input(nom, 'Nom', Icons.badge_outlined),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Annuler')),
+        FilledButton(
+          style: FilledButton.styleFrom(backgroundColor: Colors.teal),
+          onPressed: () {
+            if (matricule.text.trim().isEmpty ||
+                nom.text.trim().isEmpty ||
+                prenom.text.trim().isEmpty) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Tous les champs sont requis.')),
+              );
+              return;
+            }
+            Navigator.pop(context, {
+              'matricule': matricule.text.trim(),
+              'nom': nom.text.trim(),
+              'prenom': prenom.text.trim(),
+            });
+          },
+          child: const Text('Enregistrer'),
+        ),
+      ],
+    );
+  }
+
+  Widget _input(TextEditingController c, String label, IconData icon) {
+    return TextField(
+      controller: c,
+      decoration: InputDecoration(
+        labelText: label,
+        prefixIcon: Icon(icon),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+      ),
+    );
+  }
 }

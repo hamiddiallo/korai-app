@@ -203,6 +203,71 @@ class AuthCubit extends Cubit<AuthState> {
     }
   }
 
+  /// Inscription infirmier : compte créé en attente de validation (pas de
+  /// connexion immédiate). Retourne le message de confirmation si l'inscription
+  /// a réussi, sinon `null` (et `errorMessage` est renseigné).
+  Future<String?> registerNurse({
+    required String fullName,
+    required String email,
+    required String password,
+    required String healthFacility,
+    required String supervisorMatricule,
+    String? phone,
+    String? professionalId,
+  }) async {
+    emit(state.copyWith(isSubmitting: true, errorMessage: null));
+    try {
+      final response = await apiClient.postJson('/auth/register/nurse', {
+        'fullName': fullName.trim(),
+        'email': email.trim(),
+        'password': password,
+        'healthFacility': healthFacility.trim(),
+        'supervisorMatricule': supervisorMatricule.trim(),
+        if (phone != null && phone.isNotEmpty) 'phone': phone.trim(),
+        if (professionalId != null && professionalId.isNotEmpty)
+          'professionalId': professionalId.trim(),
+      });
+      return response['message']?.toString() ??
+          'Inscription enregistrée. En attente de validation de votre encadrant.';
+    } catch (error) {
+      emit(state.copyWith(errorMessage: error.toString()));
+      return null;
+    } finally {
+      emit(state.copyWith(isSubmitting: false));
+    }
+  }
+
+  /// Inscription spécialiste : vérifiée par le matricule, connectée directement.
+  /// Retourne `true` si l'inscription/connexion a réussi.
+  Future<bool> registerSpecialist({
+    required String fullName,
+    required String email,
+    required String password,
+    required String matricule,
+    String? phone,
+    String? healthFacility,
+  }) async {
+    emit(state.copyWith(isSubmitting: true, errorMessage: null));
+    try {
+      final response = await apiClient.postJson('/auth/register/specialist', {
+        'fullName': fullName.trim(),
+        'email': email.trim(),
+        'password': password,
+        'matricule': matricule.trim(),
+        if (phone != null && phone.isNotEmpty) 'phone': phone.trim(),
+        if (healthFacility != null && healthFacility.isNotEmpty)
+          'healthFacility': healthFacility.trim(),
+      });
+      await _persistAuthPayload(response);
+      return true;
+    } catch (error) {
+      emit(state.copyWith(errorMessage: error.toString()));
+      return false;
+    } finally {
+      emit(state.copyWith(isSubmitting: false));
+    }
+  }
+
   Future<void> updateProfile({
     String? fullName,
     String? phone,

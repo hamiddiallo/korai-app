@@ -18,7 +18,17 @@ export const registerNurseSchema = z.object({
   password: z.string().min(8),
   phone: z.string().min(5).optional(),
   healthFacility: z.string().min(2),
-  professionalId: z.string().min(2).optional()
+  professionalId: z.string().min(2).optional(),
+  supervisorMatricule: z.string().min(1)
+});
+
+export const registerSpecialistSchema = z.object({
+  fullName: z.string().min(2),
+  email: z.string().email(),
+  password: z.string().min(8),
+  matricule: z.string().min(1),
+  phone: z.string().min(5).optional(),
+  healthFacility: z.string().min(2).optional()
 });
 
 export const registerPatientSchema = z.object({

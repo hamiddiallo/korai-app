@@ -1,5 +1,12 @@
 import { userDao } from '../modules/users/user.dao.js';
 import { clinicalReferenceDao } from '../modules/clinical-reference/clinical-reference.dao.js';
+import { medecinDao } from '../modules/medecins/medecin.dao.js';
+
+const MEDECINS_TO_SEED = [
+  { matricule: 'ORL001', nom: 'Demo', prenom: 'ORL' },
+  { matricule: 'ORL002', nom: 'Ndiaye', prenom: 'Awa' },
+  { matricule: 'ORL003', nom: 'Diop', prenom: 'Moussa' }
+];
 
 // dangerScore (0–3) : alimente le calcul automatique du niveau d'urgence.
 const CLINICAL_ITEMS_TO_SEED = [
@@ -46,7 +53,8 @@ export async function runSeed() {
       fullName: 'ORL Demo',
       email: 'orl@korai.local',
       password: 'Password123!',
-      role: 'SPECIALIST'
+      role: 'SPECIALIST',
+      matricule: 'ORL001'
     });
     await userDao.create({
       fullName: 'Admin Demo',
@@ -54,6 +62,11 @@ export async function runSeed() {
       password: 'Password123!',
       role: 'ADMIN'
     });
+  }
+
+  for (const medecin of MEDECINS_TO_SEED) {
+    const existing = await medecinDao.findByMatricule(medecin.matricule);
+    if (!existing) await medecinDao.create(medecin);
   }
 
   for (const item of CLINICAL_ITEMS_TO_SEED) {

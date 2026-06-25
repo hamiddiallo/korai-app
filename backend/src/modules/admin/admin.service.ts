@@ -4,6 +4,7 @@ import { userDao, toPublicUser } from '../users/user.dao.js';
 import { patientDao } from '../patients/patient.dao.js';
 import { consultationDao } from '../consultations/consultation.dao.js';
 import { clinicalReferenceDao } from '../clinical-reference/clinical-reference.dao.js';
+import { medecinDao } from '../medecins/medecin.dao.js';
 import { adminDao } from './admin.dao.js';
 import type { PatientRecord } from '../patients/patient.types.js';
 
@@ -169,6 +170,32 @@ export const adminService = {
     const existing = await clinicalReferenceDao.findById(id);
     if (!existing) throw notFound('Element clinique introuvable');
     await clinicalReferenceDao.delete(id);
+    return { deleted: true };
+  },
+
+  // --- Registre des médecins (source de vérité des matricules) ---
+
+  listMedecins() {
+    return medecinDao.list();
+  },
+
+  createMedecin(input: { matricule: string; nom: string; prenom: string }) {
+    return medecinDao.create(input);
+  },
+
+  async updateMedecin(
+    id: string,
+    input: Partial<{ matricule: string; nom: string; prenom: string }>
+  ) {
+    const existing = await medecinDao.findById(id);
+    if (!existing) throw notFound('Médecin introuvable');
+    return medecinDao.update(id, input);
+  },
+
+  async deleteMedecin(id: string) {
+    const existing = await medecinDao.findById(id);
+    if (!existing) throw notFound('Médecin introuvable');
+    await medecinDao.softDelete(id);
     return { deleted: true };
   }
 };

@@ -4,6 +4,7 @@ import '../../../core/auth/session_controller.dart';
 import '../../../core/domain/korai_enums.dart';
 import '../../../core/notifications/notification_center.dart';
 import '../../../core/utils/consultation_format.dart';
+import 'nurse_requests_page.dart';
 import '../../nurse/domain/ai_case.dart';
 import '../data/specialist_repository.dart';
 import 'widgets/specialist_consultation_sections.dart';
@@ -81,6 +82,16 @@ class _SpecialistHomePageState extends State<SpecialistHomePage> {
       appBar: AppBar(
         title: const Text('Expertise ORL'),
         actions: [
+          IconButton(
+            tooltip: "Demandes d'inscription",
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) =>
+                    NurseRequestsPage(apiClient: widget.session.apiClient),
+              ),
+            ),
+            icon: const Icon(Icons.group_add_outlined),
+          ),
           NotificationBell(onTapNotification: (_) => _loadInbox()),
           IconButton(onPressed: _loadInbox, icon: const Icon(Icons.refresh)),
           IconButton(

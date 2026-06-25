@@ -6,6 +6,7 @@ import {
   adminRegisterSchema,
   loginSchema,
   registerNurseSchema,
+  registerSpecialistSchema,
   registerPatientSchema,
   updateProfileSchema,
   updatePasswordSchema
@@ -26,6 +27,12 @@ authRouter.post(
   '/register/nurse',
   validateBody(registerNurseSchema),
   asyncHandler((req, res) => authController.registerNurse(req, res))
+);
+
+authRouter.post(
+  '/register/specialist',
+  validateBody(registerSpecialistSchema),
+  asyncHandler((req, res) => authController.registerSpecialist(req, res))
 );
 
 authRouter.post(

@@ -1,4 +1,4 @@
-import type { Role } from '../../common/types.js';
+import type { AccountStatus, Role } from '@prisma/client';
 
 export type UserRecord = {
   id: string;
@@ -6,6 +6,10 @@ export type UserRecord = {
   email: string;
   passwordHash: string;
   role: Role;
+  accountStatus: AccountStatus;
+  matricule?: string;
+  supervisorMatricule?: string;
+  rejectionReason?: string;
   phone?: string;
   healthFacility?: string;
   professionalId?: string;

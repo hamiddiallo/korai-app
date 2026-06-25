@@ -106,4 +106,23 @@ class AdminRepository {
   Future<void> deleteClinicalItem(String id) async {
     await apiClient.deleteJson('/admin/clinical-items/$id');
   }
+
+  Future<List<Medecin>> listMedecins() async {
+    final response = await apiClient.getJson('/admin/medecins');
+    return (response['medecins'] as List<dynamic>? ?? const [])
+        .map((e) => Medecin.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<void> createMedecin(Map<String, dynamic> input) async {
+    await apiClient.postJson('/admin/medecins', input);
+  }
+
+  Future<void> updateMedecin(String id, Map<String, dynamic> input) async {
+    await apiClient.patchJson('/admin/medecins/$id', input);
+  }
+
+  Future<void> deleteMedecin(String id) async {
+    await apiClient.deleteJson('/admin/medecins/$id');
+  }
 }

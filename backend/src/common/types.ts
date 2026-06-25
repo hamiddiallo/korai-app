@@ -17,6 +17,9 @@ export type AuthenticatedUser = {
   fullName: string;
   email: string;
   role: Role;
+  accountStatus: import('@prisma/client').AccountStatus;
+  matricule?: string;
+  supervisorMatricule?: string;
   phone?: string;
   healthFacility?: string;
   professionalId?: string;

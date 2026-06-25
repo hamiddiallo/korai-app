@@ -38,3 +38,11 @@ export const createClinicalItemSchema = z.object({
 });
 
 export const updateClinicalItemSchema = createClinicalItemSchema.partial();
+
+export const createMedecinSchema = z.object({
+  matricule: z.string().min(1),
+  nom: z.string().min(1),
+  prenom: z.string().min(1)
+});
+
+export const updateMedecinSchema = createMedecinSchema.partial();

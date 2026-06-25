@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../core/auth/session_controller.dart';
+import 'professional_register_page.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key, required this.session});
@@ -214,6 +215,23 @@ class _LoginPageState extends State<LoginPage>
                             ),
                           ),
                         ],
+                        const SizedBox(height: 12),
+                        TextButton.icon(
+                          onPressed: () => Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => ProfessionalRegisterPage(
+                                  session: widget.session),
+                            ),
+                          ),
+                          icon: const Icon(Icons.badge_outlined,
+                              size: 18, color: Color(0xFF006D77)),
+                          label: const Text(
+                            'Professionnel de santé ? S\'inscrire ici',
+                            style: TextStyle(
+                                color: Color(0xFF006D77),
+                                fontWeight: FontWeight.w600),
+                          ),
+                        ),
                       ],
                     ),
                   ),
