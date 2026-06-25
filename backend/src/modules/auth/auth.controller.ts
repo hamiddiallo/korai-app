@@ -21,6 +21,16 @@ export class AuthController {
   me(req: Request, res: Response) {
     res.json({ user: req.user });
   }
+
+  async updateProfile(req: Request, res: Response) {
+    const updated = await authService.updateProfile(req.user!.id, req.body);
+    res.json({ user: updated });
+  }
+
+  async updatePassword(req: Request, res: Response) {
+    await authService.updatePassword(req.user!.id, req.body.currentPassword, req.body.newPassword);
+    res.json({ success: true });
+  }
 }
 
 export const authController = new AuthController();

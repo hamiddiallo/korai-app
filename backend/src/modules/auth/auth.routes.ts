@@ -6,7 +6,9 @@ import {
   adminRegisterSchema,
   loginSchema,
   registerNurseSchema,
-  registerPatientSchema
+  registerPatientSchema,
+  updateProfileSchema,
+  updatePasswordSchema
 } from './auth.schemas.js';
 import { authController } from './auth.controller.js';
 
@@ -35,3 +37,17 @@ authRouter.post(
 );
 
 authRouter.get('/me', requireAuth, (req, res) => authController.me(req, res));
+
+authRouter.patch(
+  '/me',
+  requireAuth,
+  validateBody(updateProfileSchema),
+  asyncHandler((req, res) => authController.updateProfile(req, res))
+);
+
+authRouter.patch(
+  '/me/password',
+  requireAuth,
+  validateBody(updatePasswordSchema),
+  asyncHandler((req, res) => authController.updatePassword(req, res))
+);

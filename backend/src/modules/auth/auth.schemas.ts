@@ -33,3 +33,18 @@ export const registerPatientSchema = z.object({
   consentForAi: z.boolean().default(false),
   consentForTeleExpertise: z.boolean().default(false)
 });
+
+const emptyToUndefined = (val: unknown) => (val === '' ? undefined : val);
+
+export const updateProfileSchema = z.object({
+  fullName: z.preprocess(emptyToUndefined, z.string().min(2).optional()),
+  phone: z.preprocess(emptyToUndefined, z.string().min(5).optional()),
+  healthFacility: z.preprocess(emptyToUndefined, z.string().min(2).optional()),
+  professionalId: z.preprocess(emptyToUndefined, z.string().min(2).optional())
+});
+
+
+export const updatePasswordSchema = z.object({
+  currentPassword: z.string().min(8),
+  newPassword: z.string().min(8)
+});

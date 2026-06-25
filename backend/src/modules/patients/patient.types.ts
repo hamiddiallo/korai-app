@@ -17,4 +17,5 @@ export type PatientRecord = {
   clientMutationId?: string;
   createdAt: string;
   updatedAt: string;
+  deletedAt?: string;
 };

@@ -145,5 +145,38 @@ export const authService = {
     if (!passwordOk) throw unauthorized('Email ou mot de passe incorrect');
 
     return authPayload(user);
+  },
+
+  async updateProfile(
+    userId: string,
+    data: {
+      fullName?: string;
+      phone?: string;
+      healthFacility?: string;
+      professionalId?: string;
+    }
+  ) {
+    const user = await userDao.findById(userId);
+    if (!user) throw new HttpError(404, 'USER_NOT_FOUND', 'Utilisateur introuvable');
+
+    const updated = await userDao.update(userId, {
+      fullName: data.fullName ?? user.fullName,
+      phone: data.phone ?? user.phone,
+      healthFacility: data.healthFacility ?? user.healthFacility,
+      professionalId: data.professionalId ?? user.professionalId
+    });
+
+    return toAuthenticatedUser(updated!);
+  },
+
+  async updatePassword(userId: string, currentPassword: string, newPassword: string) {
+    const user = await userDao.findById(userId);
+    if (!user) throw new HttpError(404, 'USER_NOT_FOUND', 'Utilisateur introuvable');
+
+    const passwordOk = await bcrypt.compare(currentPassword, user.passwordHash);
+    if (!passwordOk) throw new HttpError(400, 'INVALID_PASSWORD', 'Le mot de passe actuel est incorrect');
+
+    const newHash = await bcrypt.hash(newPassword, 10);
+    await userDao.updatePassword(userId, newHash);
   }
 };

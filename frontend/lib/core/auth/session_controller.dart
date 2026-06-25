@@ -13,6 +13,8 @@ class SessionUser {
     required this.role,
     this.linkedPatientId,
     this.phone,
+    this.healthFacility,
+    this.professionalId,
   });
 
   final String id;
@@ -21,6 +23,8 @@ class SessionUser {
   final String role;
   final String? linkedPatientId;
   final String? phone;
+  final String? healthFacility;
+  final String? professionalId;
 
   static String _normalizeRole(String raw) {
     final role = raw.trim().toUpperCase();
@@ -36,6 +40,8 @@ class SessionUser {
       role: _normalizeRole(json['role'].toString()),
       linkedPatientId: json['linkedPatientId']?.toString(),
       phone: json['phone']?.toString(),
+      healthFacility: json['healthFacility']?.toString(),
+      professionalId: json['professionalId']?.toString(),
     );
   }
 
@@ -46,6 +52,8 @@ class SessionUser {
         'role': role,
         if (linkedPatientId != null) 'linkedPatientId': linkedPatientId,
         if (phone != null) 'phone': phone,
+        if (healthFacility != null) 'healthFacility': healthFacility,
+        if (professionalId != null) 'professionalId': professionalId,
       };
 }
 
@@ -190,6 +198,58 @@ class AuthCubit extends Cubit<AuthState> {
       await _persistAuthPayload(response);
     } catch (error) {
       emit(state.copyWith(errorMessage: error.toString()));
+    } finally {
+      emit(state.copyWith(isSubmitting: false));
+    }
+  }
+
+  Future<void> updateProfile({
+    String? fullName,
+    String? phone,
+    String? healthFacility,
+    String? professionalId,
+  }) async {
+    // Treat empty strings as "no change" — don't send them to the API
+    String? clean(String? v) => (v == null || v.trim().isEmpty) ? null : v.trim();
+
+    final cleanName = clean(fullName);
+    final cleanPhone = clean(phone);
+    final cleanFacility = clean(healthFacility);
+    final cleanProId = clean(professionalId);
+
+    emit(state.copyWith(isSubmitting: true, errorMessage: null));
+    try {
+      final response = await apiClient.patchJson('/auth/me', {
+        if (cleanName != null) 'fullName': cleanName,
+        if (cleanPhone != null) 'phone': cleanPhone,
+        if (cleanFacility != null) 'healthFacility': cleanFacility,
+        if (cleanProId != null) 'professionalId': cleanProId,
+      });
+      final user = SessionUser.fromJson(response['user'] as Map<String, dynamic>);
+      await _cacheUser(user);
+      emit(state.copyWith(user: user, errorMessage: null));
+    } catch (error) {
+      emit(state.copyWith(errorMessage: error.toString()));
+      rethrow;
+    } finally {
+      emit(state.copyWith(isSubmitting: false));
+    }
+  }
+
+
+  Future<void> changePassword({
+    required String currentPassword,
+    required String newPassword,
+  }) async {
+    emit(state.copyWith(isSubmitting: true, errorMessage: null));
+    try {
+      await apiClient.patchJson('/auth/me/password', {
+        'currentPassword': currentPassword,
+        'newPassword': newPassword,
+      });
+    } catch (error) {
+      emit(state.copyWith(errorMessage: error.toString()));
+      rethrow;
     } finally {
       emit(state.copyWith(isSubmitting: false));
     }
