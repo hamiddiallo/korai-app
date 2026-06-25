@@ -10,3 +10,7 @@ coverage/
 backend/prisma/*.db
 backend/prisma/*.db-journal
 PROJET_REPERE.md
+classe.sql
+classse.md
+use_case.md
+docs
