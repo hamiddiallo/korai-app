@@ -16,6 +16,9 @@ import 'nurse_consultation_view_model.dart';
 import 'widgets/consultation_history_list.dart';
 import 'widgets/expertise_request_panel.dart';
 import '../../chatbot/presentation/korai_chatbot_screen.dart';
+import '../../../core/notifications/notification_center.dart';
+import '../../../core/notifications/notification_models.dart';
+import '../../../core/widgets/sync_failed_panel.dart';
 import '../../../core/widgets/sync_status_banner.dart';
 
 class NurseHomePage extends StatefulWidget {
@@ -327,6 +330,75 @@ class _NurseHomePageState extends State<NurseHomePage> {
     });
   }
 
+  /// Au tap sur une notification : ouvre le dossier patient concerné si connu.
+  void _onNotificationTap(AppNotification notification) {
+    final patientId = notification.patientId;
+    if (patientId == null) return;
+    for (final patient in _patients) {
+      if (patient.id == patientId) {
+        _showPatientDossierSheet(patient);
+        return;
+      }
+    }
+  }
+
+  /// En-tête épinglé du centre de notifications : raccourci vers les patients
+  /// en attente de validation (conserve l'ancien flux infirmier).
+  Widget _patientsToValidateHeader(BuildContext sheetContext) {
+    final unvalidated = _patients.where((p) => !p.isValidated).toList();
+    if (unvalidated.isEmpty) return const SizedBox.shrink();
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      elevation: 0,
+      color: const Color(0xFFFFF7ED),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: const BorderSide(color: Color(0xFFFB923C)),
+      ),
+      child: ListTile(
+        leading: const CircleAvatar(
+          backgroundColor: Color(0x22FB923C),
+          child: Icon(Icons.fact_check_outlined, color: Color(0xFFEA580C)),
+        ),
+        title: Text(
+          '${unvalidated.length} patient${unvalidated.length > 1 ? 's' : ''} à valider',
+          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+        ),
+        subtitle: const Text('Appuyez pour ouvrir la liste'),
+        trailing: const Icon(Icons.chevron_right),
+        onTap: () {
+          Navigator.pop(sheetContext);
+          _showNotificationBottomSheet(context, unvalidated);
+        },
+      ),
+    );
+  }
+
+  /// Relance l'analyse IA d'une consultation en échec depuis l'historique.
+  Future<void> _retryFailedConsultation(AiCase consultation) async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final updated = await repository.retryDiagnosis(consultation.id);
+      _onConsultationUpdated(updated);
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            updated.isAiFailed
+                ? 'Analyse toujours indisponible. Réessayez plus tard.'
+                : 'Analyse IA relancée avec succès.',
+          ),
+        ),
+      );
+    } catch (e) {
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('Échec de la relance : $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
   void _showPatientDossierSheet(Patient patient) {
     final consultations = _consultationsForPatient(patient.id);
 
@@ -391,6 +463,7 @@ class _NurseHomePageState extends State<NurseHomePage> {
                     },
                     onRequestExpertise: _requestExpertise,
                     onConsultationUpdated: _onConsultationUpdated,
+                    onRetryFailed: _retryFailedConsultation,
                   ),
                 ],
               ),
@@ -775,25 +848,10 @@ class _NurseHomePageState extends State<NurseHomePage> {
                     ),
                     Row(
                       children: [
-                        Builder(
-                          builder: (context) {
-                            final unvalidatedPatients =
-                                _patients.where((p) => !p.isValidated).toList();
-                            final count = unvalidatedPatients.length;
-                            return IconButton(
-                              onPressed: () => _showNotificationBottomSheet(
-                                  context, unvalidatedPatients),
-                              icon: count > 0
-                                  ? Badge(
-                                      label: Text('$count'),
-                                      child: const Icon(
-                                          Icons.notifications_active,
-                                          color: Color(0xFF006D77)),
-                                    )
-                                  : const Icon(Icons.notifications_none,
-                                      color: Color(0xFF006D77)),
-                            );
-                          },
+                        NotificationBell(
+                          color: const Color(0xFF006D77),
+                          onTapNotification: _onNotificationTap,
+                          pinnedHeader: _patientsToValidateHeader,
                         ),
                         IconButton(
                           onPressed: () => setState(() => _currentTab = 4),
@@ -835,6 +893,9 @@ class _NurseHomePageState extends State<NurseHomePage> {
 
           // 2. Bandeau statut synchronisation (visible uniquement si nécessaire)
           const SyncStatusBanner(),
+
+          // 2b. Détail des éléments en échec (retry ciblé / global)
+          const SyncFailedPanel(),
 
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
@@ -1425,6 +1486,8 @@ class _NurseHomePageState extends State<NurseHomePage> {
                   aiCase: viewModel.aiCase!,
                   onRequestExpertise: _requestExpertise,
                   onUpdated: _onConsultationUpdated,
+                  onRetry: viewModel.retryCurrentDiagnosis,
+                  isRetrying: viewModel.isSubmitting,
                   summaryNote: notesController.text.trim(),
                 ),
               ],
@@ -1482,6 +1545,8 @@ class _NurseHomePageState extends State<NurseHomePage> {
           isEditing: viewModel.isEditingImage,
           earSide: viewModel.earSide,
           onEarSideChanged: viewModel.setEarSide,
+          description: viewModel.imageDescription,
+          onDescriptionChanged: viewModel.setImageDescription,
           onCamera: () => viewModel.pickImage(ImageSource.camera),
           onGallery: () => viewModel.pickImage(ImageSource.gallery),
           onRotateLeft: () => viewModel.rotateImage(clockwise: false),
@@ -1506,6 +1571,7 @@ class _NurseHomePageState extends State<NurseHomePage> {
               viewModel.medicalHistories, viewModel.selectedMedicalHistoryIds),
           selectedTouchChecks: viewModel.touchCheckSummaries(),
           image: viewModel.image,
+          urgency: viewModel.computedUrgency(),
         ),
     };
   }
@@ -1572,6 +1638,7 @@ class _NurseHomePageState extends State<NurseHomePage> {
                       patientNameFor: _patientNameForCase,
                       onRequestExpertise: _requestExpertise,
                       onConsultationUpdated: _onConsultationUpdated,
+                      onRetryFailed: _retryFailedConsultation,
                     ),
                   ),
           ),
@@ -1625,11 +1692,36 @@ class _NurseHomePageState extends State<NurseHomePage> {
                       label: 'Rôle', value: user?.role ?? 'NURSE'),
                   const Divider(),
                   _ProfileDetailRow(
-                      label: 'Identifiant Patient Lié',
-                      value: user?.linkedPatientId ?? 'Aucun'),
+                      label: 'Téléphone', value: user?.phone ?? 'Non renseigné'),
+                  const Divider(),
+                  _ProfileDetailRow(
+                      label: 'Établissement', value: user?.healthFacility ?? 'Non renseigné'),
+                  const Divider(),
+                  _ProfileDetailRow(
+                      label: 'N° Professionnel', value: user?.professionalId ?? 'Non renseigné'),
                 ],
               ),
             ),
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: _showEditProfileDialog,
+                  icon: const Icon(Icons.edit),
+                  label: const Text('Éditer profil'),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: _showChangePasswordDialog,
+                  icon: const Icon(Icons.lock_reset),
+                  label: const Text('Mot de passe'),
+                ),
+              ),
+            ],
           ),
           const Spacer(),
           FilledButton.icon(
@@ -1643,6 +1735,234 @@ class _NurseHomePageState extends State<NurseHomePage> {
           ),
         ],
       ),
+    );
+  }
+
+  void _showEditProfileDialog() {
+    final user = widget.session.user;
+    if (user == null) return;
+
+    final nameController = TextEditingController(text: user.fullName);
+    final phoneController = TextEditingController(text: user.phone);
+    final facilityController = TextEditingController(text: user.healthFacility);
+    final proIdController = TextEditingController(text: user.professionalId);
+    bool isLoading = false;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        return StatefulBuilder(builder: (context, setState) {
+          return AlertDialog(
+            title: const Text('Éditer le profil'),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: nameController,
+                    decoration: const InputDecoration(labelText: 'Nom complet'),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: phoneController,
+                    decoration: const InputDecoration(labelText: 'Téléphone'),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: facilityController,
+                    decoration: const InputDecoration(labelText: 'Établissement de santé'),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: proIdController,
+                    decoration: const InputDecoration(labelText: 'N° Professionnel'),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: isLoading ? null : () => Navigator.pop(context),
+                child: const Text('Annuler'),
+              ),
+              FilledButton(
+                onPressed: isLoading
+                    ? null
+                    : () async {
+                        final nav = Navigator.of(context);
+                        final messenger = ScaffoldMessenger.of(context);
+                        setState(() => isLoading = true);
+                        try {
+                          await widget.session.updateProfile(
+                            fullName: nameController.text.trim(),
+                            phone: phoneController.text.trim(),
+                            healthFacility: facilityController.text.trim(),
+                            professionalId: proIdController.text.trim(),
+                          );
+                          if (mounted) {
+                            nav.pop();
+                            messenger.showSnackBar(
+                              const SnackBar(content: Text('Profil mis à jour avec succès')),
+                            );
+                          }
+                        } catch (e) {
+                          if (mounted) {
+                            messenger.showSnackBar(
+                              SnackBar(content: Text('Erreur: $e'), backgroundColor: Colors.red),
+                            );
+                          }
+                        } finally {
+                          if (mounted) setState(() => isLoading = false);
+                        }
+                      },
+                child: isLoading
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                      )
+                    : const Text('Enregistrer'),
+              ),
+            ],
+          );
+        });
+      },
+    );
+  }
+
+  void _showChangePasswordDialog() {
+    final currentController = TextEditingController();
+    final newController = TextEditingController();
+    final confirmController = TextEditingController();
+    bool isLoading = false;
+    bool obscureCurrent = true;
+    bool obscureNew = true;
+    bool obscureConfirm = true;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        return StatefulBuilder(builder: (context, setState) {
+          return AlertDialog(
+            title: const Text('Changer le mot de passe'),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: currentController,
+                    obscureText: obscureCurrent,
+                    decoration: InputDecoration(
+                      labelText: 'Mot de passe actuel',
+                      suffixIcon: IconButton(
+                        icon: Icon(obscureCurrent ? Icons.visibility : Icons.visibility_off),
+                        onPressed: () => setState(() => obscureCurrent = !obscureCurrent),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: newController,
+                    obscureText: obscureNew,
+                    decoration: InputDecoration(
+                      labelText: 'Nouveau mot de passe',
+                      helperText: 'Minimum 8 caractères',
+                      suffixIcon: IconButton(
+                        icon: Icon(obscureNew ? Icons.visibility : Icons.visibility_off),
+                        onPressed: () => setState(() => obscureNew = !obscureNew),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: confirmController,
+                    obscureText: obscureConfirm,
+                    decoration: InputDecoration(
+                      labelText: 'Confirmer le nouveau mot de passe',
+                      suffixIcon: IconButton(
+                        icon: Icon(obscureConfirm ? Icons.visibility : Icons.visibility_off),
+                        onPressed: () => setState(() => obscureConfirm = !obscureConfirm),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: isLoading ? null : () => Navigator.pop(context),
+                child: const Text('Annuler'),
+              ),
+              FilledButton(
+                onPressed: isLoading
+                    ? null
+                    : () async {
+                        if (currentController.text.isEmpty) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Veuillez saisir votre mot de passe actuel'),
+                              backgroundColor: Colors.orange,
+                            ),
+                          );
+                          return;
+                        }
+                        if (newController.text.length < 8) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Le nouveau mot de passe doit contenir au moins 8 caractères'),
+                              backgroundColor: Colors.orange,
+                            ),
+                          );
+                          return;
+                        }
+                        if (newController.text != confirmController.text) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Les mots de passe ne correspondent pas'),
+                              backgroundColor: Colors.red,
+                            ),
+                          );
+                          return;
+                        }
+
+                        final nav = Navigator.of(context);
+                        final messenger = ScaffoldMessenger.of(context);
+                        setState(() => isLoading = true);
+                        try {
+                          await widget.session.changePassword(
+                            currentPassword: currentController.text,
+                            newPassword: newController.text,
+                          );
+                          if (mounted) {
+                            nav.pop();
+                            messenger.showSnackBar(
+                              const SnackBar(content: Text('Mot de passe mis à jour avec succès')),
+                            );
+                          }
+                        } catch (e) {
+                          if (mounted) {
+                            messenger.showSnackBar(
+                              SnackBar(content: Text('Erreur: $e'), backgroundColor: Colors.red),
+                            );
+                          }
+                        } finally {
+                          if (mounted) setState(() => isLoading = false);
+                        }
+                      },
+                child: isLoading
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                      )
+                    : const Text('Enregistrer'),
+              ),
+            ],
+          );
+        });
+      },
     );
   }
 
@@ -2367,6 +2687,7 @@ class RecapStep extends StatelessWidget {
     required this.selectedHistories,
     required this.selectedTouchChecks,
     required this.image,
+    required this.urgency,
   });
 
   final String firstName;
@@ -2381,14 +2702,53 @@ class RecapStep extends StatelessWidget {
   final List<String> selectedHistories;
   final List<String> selectedTouchChecks;
   final File? image;
+  final UrgencyLevel urgency;
 
   bool get hasImage => image != null;
 
+  ({Color color, String label}) get _urgencyStyle => switch (urgency) {
+        UrgencyLevel.high => (color: const Color(0xFFEF4444), label: 'Élevé'),
+        UrgencyLevel.medium => (
+            color: const Color(0xFFF59E0B),
+            label: 'Modéré'
+          ),
+        UrgencyLevel.low => (color: const Color(0xFF059669), label: 'Faible'),
+      };
+
   @override
   Widget build(BuildContext context) {
+    final urgencyStyle = _urgencyStyle;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        Container(
+          margin: const EdgeInsets.only(bottom: 12),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            color: urgencyStyle.color.withValues(alpha: 0.10),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: urgencyStyle.color.withValues(alpha: 0.5)),
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.priority_high_rounded,
+                  size: 18, color: urgencyStyle.color),
+              const SizedBox(width: 8),
+              Text(
+                'Niveau d\'urgence (calculé) : ',
+                style: TextStyle(fontSize: 13, color: Colors.grey.shade800),
+              ),
+              Text(
+                urgencyStyle.label,
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.bold,
+                  color: urgencyStyle.color,
+                ),
+              ),
+            ],
+          ),
+        ),
         SummaryLine(label: 'Patient', value: '$firstName $lastName'.trim()),
         SummaryLine(
             label: 'Âge', value: age.isEmpty ? 'Non renseigné' : '$age ans'),
@@ -2593,16 +2953,28 @@ class AiResultCard extends StatelessWidget {
     required this.aiCase,
     this.onRequestExpertise,
     this.onUpdated,
+    this.onRetry,
+    this.isRetrying = false,
     this.summaryNote,
   });
 
   final AiCase aiCase;
   final ExpertiseRequestCallback? onRequestExpertise;
   final ValueChanged<AiCase>? onUpdated;
+  final VoidCallback? onRetry;
+  final bool isRetrying;
   final String? summaryNote;
 
   @override
   Widget build(BuildContext context) {
+    if (aiCase.isAiFailed) {
+      return _AiFailureCard(
+        message: aiCase.aiErrorDisplay,
+        onRetry: onRetry,
+        isRetrying: isRetrying,
+      );
+    }
+
     final summary = aiCase.summary;
     final colorScheme = Theme.of(context).colorScheme;
 
@@ -2684,6 +3056,79 @@ class AiResultCard extends StatelessWidget {
                 onUpdated: onUpdated,
                 summaryNote: summaryNote,
               ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Carte affichée quand l'analyse IA a échoué (service indisponible/timeout).
+/// La consultation reste enregistrée ; un bouton permet de relancer l'analyse.
+class _AiFailureCard extends StatelessWidget {
+  const _AiFailureCard({
+    required this.message,
+    required this.onRetry,
+    required this.isRetrying,
+  });
+
+  final String message;
+  final VoidCallback? onRetry;
+  final bool isRetrying;
+
+  @override
+  Widget build(BuildContext context) {
+    const amber = Color(0xFFF59E0B);
+    return Card(
+      elevation: 0,
+      margin: const EdgeInsets.only(top: 16),
+      color: const Color(0xFFFFFBEB),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: const BorderSide(color: amber, width: 1.5),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.cloud_off_rounded, color: amber, size: 26),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'Analyse IA indisponible',
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.bold,
+                          color: const Color(0xFFB45309),
+                        ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Text(
+              message,
+              style: const TextStyle(fontSize: 13, color: Colors.black87),
+            ),
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                onPressed: isRetrying ? null : onRetry,
+                icon: isRetrying
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                            strokeWidth: 2, color: Colors.white),
+                      )
+                    : const Icon(Icons.refresh_rounded, size: 18),
+                label: Text(
+                    isRetrying ? 'Analyse en cours…' : 'Relancer l\'analyse'),
+              ),
+            ),
           ],
         ),
       ),

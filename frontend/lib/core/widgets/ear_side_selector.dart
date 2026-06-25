@@ -35,12 +35,12 @@ class EarSideSelector extends StatelessWidget {
                 value: EarSide.right,
                 label: Text('Droite'),
                 icon: Icon(Icons.hearing)),
-            ButtonSegment(
-                value: EarSide.both,
-                label: Text('Les deux'),
-                icon: Icon(Icons.surround_sound)),
           ],
-          selected: {value},
+          // Une ancienne consultation en « both » n'a aucune option : on
+          // n'affiche aucune sélection (et on invite à choisir une oreille)
+          // plutôt que de faire échouer le SegmentedButton.
+          emptySelectionAllowed: true,
+          selected: value == EarSide.both ? <EarSide>{} : {value},
           onSelectionChanged: (selection) {
             if (selection.isNotEmpty) onChanged(selection.first);
           },

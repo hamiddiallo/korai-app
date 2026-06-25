@@ -21,6 +21,7 @@ class ConsultationHistoryList extends StatelessWidget {
     this.forPatient = false,
     this.onRequestExpertise,
     this.onConsultationUpdated,
+    this.onRetryFailed,
   });
 
   final List<AiCase> consultations;
@@ -33,6 +34,9 @@ class ConsultationHistoryList extends StatelessWidget {
   final bool forPatient;
   final ExpertiseRequestCallback? onRequestExpertise;
   final void Function(AiCase updated)? onConsultationUpdated;
+
+  /// Relance l'analyse IA d'une consultation en échec (AI_FAILED).
+  final Future<void> Function(AiCase consultation)? onRetryFailed;
 
   @override
   Widget build(BuildContext context) {
@@ -90,6 +94,7 @@ class ConsultationHistoryList extends StatelessWidget {
             forPatient: forPatient,
             onRequestExpertise: onRequestExpertise,
             onConsultationUpdated: onConsultationUpdated,
+            onRetryFailed: onRetryFailed,
           );
         }),
         if (showStartButton && onStartNew != null) ...[
@@ -114,6 +119,7 @@ class ConsultationHistoryEntry extends StatelessWidget {
     this.forPatient = false,
     this.onRequestExpertise,
     this.onConsultationUpdated,
+    this.onRetryFailed,
   });
 
   final AiCase consultation;
@@ -122,6 +128,7 @@ class ConsultationHistoryEntry extends StatelessWidget {
   final bool forPatient;
   final ExpertiseRequestCallback? onRequestExpertise;
   final void Function(AiCase updated)? onConsultationUpdated;
+  final Future<void> Function(AiCase consultation)? onRetryFailed;
 
   @override
   Widget build(BuildContext context) {
@@ -171,9 +178,13 @@ class ConsultationHistoryEntry extends StatelessWidget {
       );
     }
 
+    final isAiFailed = consultation.isAiFailed;
     final hasAiDetails = consultation.isCompleted ||
         consultation.status == ConsultationStatus.pendingAi.value ||
         consultation.status == ConsultationStatus.pendingSpecialistReview.value;
+    // Une consultation en échec est dépliable : on y montre le récap clinique
+    // et le bouton de relance.
+    final canExpand = hasAiDetails || isAiFailed;
 
     return Card(
       margin: const EdgeInsets.only(bottom: 10),
@@ -213,14 +224,16 @@ class ConsultationHistoryEntry extends StatelessWidget {
               ),
               const SizedBox(height: 2),
               Text(
-                hasAiDetails
-                    ? 'Déplier pour voir le compte-rendu'
-                    : 'Aucun diagnostic IA disponible',
+                isAiFailed
+                    ? 'Déplier pour voir les infos cliniques et relancer'
+                    : hasAiDetails
+                        ? 'Déplier pour voir le compte-rendu'
+                        : 'Aucun diagnostic IA disponible',
                 style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
               ),
             ],
           ),
-          children: hasAiDetails
+          children: canExpand
               ? [
                   ConsultationDiagnosticDetails(
                     consultation: consultation,
@@ -228,6 +241,7 @@ class ConsultationHistoryEntry extends StatelessWidget {
                     forPatient: forPatient,
                     onRequestExpertise: onRequestExpertise,
                     onConsultationUpdated: onConsultationUpdated,
+                    onRetryFailed: onRetryFailed,
                   ),
                 ]
               : [
@@ -247,6 +261,7 @@ class ConsultationHistoryEntry extends StatelessWidget {
 
   Color _statusColor(AiCase consultation) {
     if (consultation.isDraft) return Colors.orange;
+    if (consultation.isAiFailed) return const Color(0xFFB45309);
     if (consultation.isCompleted) return Colors.green;
     return const Color(0xFF006D77);
   }
@@ -261,6 +276,7 @@ class ConsultationDiagnosticDetails extends StatelessWidget {
     this.forPatient = false,
     this.onRequestExpertise,
     this.onConsultationUpdated,
+    this.onRetryFailed,
   });
 
   final AiCase consultation;
@@ -268,6 +284,7 @@ class ConsultationDiagnosticDetails extends StatelessWidget {
   final bool forPatient;
   final ExpertiseRequestCallback? onRequestExpertise;
   final void Function(AiCase updated)? onConsultationUpdated;
+  final Future<void> Function(AiCase consultation)? onRetryFailed;
 
   @override
   Widget build(BuildContext context) {
@@ -288,6 +305,8 @@ class ConsultationDiagnosticDetails extends StatelessWidget {
 
     final summary = consultation.summary;
     final expertise = consultation.expertiseReview;
+    final isFailed = consultation.isAiFailed;
+
     final sections = <Widget>[
       _ExpandableDetailSection(
         title: 'Informations patient',
@@ -301,28 +320,37 @@ class ConsultationDiagnosticDetails extends StatelessWidget {
         icon: Icons.medical_information_outlined,
         children: _clinicalInfoChildren(),
       ),
-      _ExpandableDetailSection(
-        title: 'Réponse de l\'IA',
-        subtitle: summary.likelyDiagnosis?.trim().isNotEmpty == true
-            ? summary.likelyDiagnosis!
-            : 'Voir le détail',
-        icon: Icons.psychology_outlined,
-        children: _aiResponseChildren(summary),
-      ),
-      if (expertise != null)
-        _ExpandableDetailSection(
-          title: 'Réponse de l\'expert',
-          subtitle: _expertSubtitle(expertise),
-          icon: Icons.verified_user_outlined,
-          iconColor: const Color(0xFF006D77),
-          children: _expertResponseChildren(expertise),
-        ),
-      if (!forPatient && onRequestExpertise != null)
-        ExpertiseRequestPanel(
+      // Consultation en échec : encart d'échec + relance à la place de la
+      // section « Réponse de l'IA ». L'expertise est masquée (pas de diagnostic).
+      if (isFailed)
+        _AiFailureSection(
           consultation: consultation,
-          onRequest: onRequestExpertise!,
-          onUpdated: onConsultationUpdated,
+          onRetry: onRetryFailed,
+        )
+      else ...[
+        _ExpandableDetailSection(
+          title: 'Réponse de l\'IA',
+          subtitle: summary.likelyDiagnosis?.trim().isNotEmpty == true
+              ? summary.likelyDiagnosis!
+              : 'Voir le détail',
+          icon: Icons.psychology_outlined,
+          children: _aiResponseChildren(summary),
         ),
+        if (expertise != null)
+          _ExpandableDetailSection(
+            title: 'Réponse de l\'expert',
+            subtitle: _expertSubtitle(expertise),
+            icon: Icons.verified_user_outlined,
+            iconColor: const Color(0xFF006D77),
+            children: _expertResponseChildren(expertise),
+          ),
+        if (!forPatient && onRequestExpertise != null)
+          ExpertiseRequestPanel(
+            consultation: consultation,
+            onRequest: onRequestExpertise!,
+            onUpdated: onConsultationUpdated,
+          ),
+      ],
     ];
 
     return Column(children: sections);
@@ -501,6 +529,99 @@ class ConsultationDiagnosticDetails extends StatelessWidget {
       };
 
   bool _hasText(String? value) => value != null && value.trim().isNotEmpty;
+}
+
+/// Encart d'échec d'analyse IA affiché dans le détail d'une consultation en
+/// échec, avec un bouton de relance directe.
+class _AiFailureSection extends StatelessWidget {
+  const _AiFailureSection({required this.consultation, this.onRetry});
+
+  final AiCase consultation;
+  final Future<void> Function(AiCase consultation)? onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    const amber = Color(0xFFB45309);
+    return Container(
+      margin: const EdgeInsets.fromLTRB(8, 6, 8, 4),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFFBEB),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFF59E0B)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: const [
+              Icon(Icons.cloud_off_rounded, size: 20, color: amber),
+              SizedBox(width: 8),
+              Text(
+                'Analyse IA indisponible',
+                style: TextStyle(
+                    fontWeight: FontWeight.bold, fontSize: 13, color: amber),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            consultation.aiErrorDisplay,
+            style: const TextStyle(fontSize: 12.5, color: Colors.black87),
+          ),
+          if (onRetry != null) ...[
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: _RetryFailedButton(
+                consultation: consultation,
+                onRetry: onRetry!,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _RetryFailedButton extends StatefulWidget {
+  const _RetryFailedButton({required this.consultation, required this.onRetry});
+
+  final AiCase consultation;
+  final Future<void> Function(AiCase consultation) onRetry;
+
+  @override
+  State<_RetryFailedButton> createState() => _RetryFailedButtonState();
+}
+
+class _RetryFailedButtonState extends State<_RetryFailedButton> {
+  bool _loading = false;
+
+  Future<void> _run() async {
+    setState(() => _loading = true);
+    try {
+      await widget.onRetry(widget.consultation);
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FilledButton.icon(
+      onPressed: _loading ? null : _run,
+      icon: _loading
+          ? const SizedBox(
+              width: 16,
+              height: 16,
+              child:
+                  CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+            )
+          : const Icon(Icons.refresh_rounded, size: 18),
+      label: Text(_loading ? 'Analyse en cours…' : 'Relancer l\'analyse'),
+    );
+  }
 }
 
 class _ExpandableDetailSection extends StatelessWidget {

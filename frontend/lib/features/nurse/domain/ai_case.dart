@@ -21,6 +21,8 @@ class AiCase {
     this.touchObservations = const {},
     this.expertiseReview,
     this.effectiveSummary,
+    this.aiErrorCode,
+    this.aiErrorMessage,
   });
 
   final String id;
@@ -42,8 +44,19 @@ class AiCase {
   final Map<String, String> touchObservations;
   final ExpertiseReview? expertiseReview;
   final EffectiveSummary? effectiveSummary;
+  final String? aiErrorCode;
+  final String? aiErrorMessage;
 
   bool get isDraft => status == ConsultationStatus.draft.value;
+
+  /// L'analyse IA a échoué côté serveur (service indisponible/timeout). La
+  /// consultation est enregistrée ; l'analyse peut être relancée.
+  bool get isAiFailed => status == ConsultationStatus.aiFailed.value;
+
+  /// Message d'échec IA prêt à afficher.
+  String get aiErrorDisplay =>
+      aiErrorMessage ??
+      "L'analyse IA n'a pas pu aboutir. Vous pouvez la relancer.";
   bool get isCompleted =>
       status == ConsultationStatus.aiCompleted.value ||
       status == ConsultationStatus.specialistCompleted.value;
@@ -121,6 +134,8 @@ class AiCase {
           ? EffectiveSummary.fromJson(
               json['effectiveSummary'] as Map<String, dynamic>)
           : null,
+      aiErrorCode: json['aiErrorCode']?.toString(),
+      aiErrorMessage: json['aiErrorMessage']?.toString(),
     );
   }
 

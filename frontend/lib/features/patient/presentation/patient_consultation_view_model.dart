@@ -45,7 +45,9 @@ class PatientConsultationViewModel extends Cubit<PatientConsultationState> {
   bool isLoading = false;
   bool isSubmitting = false;
   bool isEditingImage = false;
-  EarSide earSide = EarSide.both;
+  // Défaut sur une oreille concrète : l'option « les deux » a été retirée du
+  // workflow (le service IA analyse une image à la fois).
+  EarSide earSide = EarSide.left;
   String? errorMessage;
 
   List<ClinicalReferenceItem> symptoms = [];

@@ -8,6 +8,7 @@ class ConsultationCreatePayload {
     required this.patientId,
     required this.symptoms,
     this.clinicalNotes,
+    this.imageDescription,
     this.urgency = UrgencyLevel.medium,
     this.earSide = EarSide.both,
     this.showSources = true,
@@ -19,11 +20,13 @@ class ConsultationCreatePayload {
     this.touchCheckIds = const [],
     this.touchCheckLabels = const [],
     this.touchObservations = const {},
+    this.clinicalFingerprint,
   });
 
   final String patientId;
   final String symptoms;
   final String? clinicalNotes;
+  final String? imageDescription;
   final UrgencyLevel urgency;
   final EarSide earSide;
   final bool showSources;
@@ -36,11 +39,16 @@ class ConsultationCreatePayload {
   final List<String> touchCheckLabels;
   final Map<String, String> touchObservations;
 
+  /// Empreinte clinique (consultations sans image) pour la déduplication IA.
+  final String? clinicalFingerprint;
+
   Map<String, dynamic> toJsonBody() => {
         'patientId': patientId,
         'symptoms': symptoms,
         if (clinicalNotes != null && clinicalNotes!.isNotEmpty)
           'clinicalNotes': clinicalNotes,
+        if (imageDescription != null && imageDescription!.isNotEmpty)
+          'imageDescription': imageDescription,
         'urgency': urgency.value,
         'earSide': earSide.value,
         'showSources': showSources,
@@ -55,6 +63,8 @@ class ConsultationCreatePayload {
         if (touchCheckLabels.isNotEmpty) 'touchCheckLabels': touchCheckLabels,
         if (touchObservations.isNotEmpty)
           'touchObservations': touchObservations,
+        if (clinicalFingerprint != null && clinicalFingerprint!.isNotEmpty)
+          'clinicalFingerprint': clinicalFingerprint,
       };
 
   /// Champs multipart : tableaux/objets encodés en JSON pour le parseur backend.
@@ -63,6 +73,8 @@ class ConsultationCreatePayload {
         'symptoms': symptoms,
         if (clinicalNotes != null && clinicalNotes!.isNotEmpty)
           'clinicalNotes': clinicalNotes!,
+        if (imageDescription != null && imageDescription!.isNotEmpty)
+          'imageDescription': imageDescription!,
         'urgency': urgency.value,
         'earSide': earSide.value,
         'showSources': showSources.toString(),
@@ -80,5 +92,7 @@ class ConsultationCreatePayload {
           'touchCheckLabels': jsonEncode(touchCheckLabels),
         if (touchObservations.isNotEmpty)
           'touchObservations': jsonEncode(touchObservations),
+        if (clinicalFingerprint != null && clinicalFingerprint!.isNotEmpty)
+          'clinicalFingerprint': clinicalFingerprint!,
       };
 }

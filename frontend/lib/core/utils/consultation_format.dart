@@ -5,6 +5,7 @@ class ConsultationFormat {
     return switch (ConsultationStatus.tryFromApi(status)) {
       ConsultationStatus.draft => 'Brouillon',
       ConsultationStatus.pendingAi => 'IA en cours',
+      ConsultationStatus.aiFailed => 'Analyse IA échouée',
       ConsultationStatus.aiCompleted => 'Diagnostic IA terminé',
       ConsultationStatus.pendingSpecialistReview => 'En attente ORL',
       ConsultationStatus.specialistCompleted => 'Avis spécialiste reçu',

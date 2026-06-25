@@ -24,6 +24,7 @@ enum EarSide {
 enum ConsultationStatus {
   draft('DRAFT'),
   pendingAi('PENDING_AI'),
+  aiFailed('AI_FAILED'),
   aiCompleted('AI_COMPLETED'),
   pendingSpecialistReview('PENDING_SPECIALIST_REVIEW'),
   specialistCompleted('SPECIALIST_COMPLETED');

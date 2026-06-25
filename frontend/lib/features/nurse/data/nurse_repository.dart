@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import '../../../core/api/api_client.dart';
@@ -194,7 +195,11 @@ class NurseRepository {
       }
       return AiCase.fromJson(caseJson);
     } on ApiException catch (error) {
-      if (localConsultationId != null) {
+      // Seuls les échecs définitifs (refus serveur 4xx) sont mis en échec.
+      // Une panne réseau reste PENDING_SYNC pour être rejouée par l'outbox.
+      if (localConsultationId != null &&
+          error.isPermanentClientFailure &&
+          !error.isNetworkFailure) {
         await _localDao.markDiagnosisFailed(
           consultationLocalId: localConsultationId,
           error: error,
@@ -202,6 +207,78 @@ class NurseRepository {
       }
       rethrow;
     }
+  }
+
+  /// Relance l'analyse IA d'une consultation en échec (statut AI_FAILED).
+  Future<AiCase> retryDiagnosis(String consultationId) async {
+    final response =
+        await apiClient.postJson('/cases/$consultationId/diagnose/retry', {});
+    return AiCase.fromJson(response['case'] as Map<String, dynamic>);
+  }
+
+  /// Réutilisation hors-ligne : si le cache local contient une réponse IA pour
+  /// une consultation de même empreinte clinique, on l'applique à la nouvelle
+  /// consultation et on construit l'AiCase correspondant — sans réseau ni IA.
+  /// Retourne `null` si aucune correspondance.
+  Future<AiCase?> tryReuseCachedDiagnosis({
+    required String localConsultationId,
+    required String fingerprint,
+    required Patient patient,
+    required ConsultationCreatePayload payload,
+  }) async {
+    final cached = await _localDao.findCachedAiResponseByFingerprint(fingerprint);
+    if (cached == null) return null;
+
+    await _localDao.applyReusedAiResponse(
+      consultationLocalId: localConsultationId,
+      cached: cached,
+    );
+    return _buildReusedAiCase(localConsultationId, patient, payload, cached);
+  }
+
+  AiCase _buildReusedAiCase(
+    String localConsultationId,
+    Patient patient,
+    ConsultationCreatePayload payload,
+    LocalCachedAiResponse cached,
+  ) {
+    const reuseWarning =
+        "Réponse IA réutilisée d'une consultation clinique identique (sans nouvelle analyse IA).";
+
+    Map<String, dynamic> caseJson;
+    try {
+      final decoded = jsonDecode(cached.rawJson);
+      caseJson = decoded is Map<String, dynamic>
+          ? Map<String, dynamic>.from(decoded)
+          : <String, dynamic>{};
+    } catch (_) {
+      caseJson = <String, dynamic>{};
+    }
+
+    final summary = Map<String, dynamic>.from(
+      (caseJson['organizedAiSummary'] as Map?) ?? const {},
+    );
+    final warnings = [...cached.warnings];
+    if (!warnings.contains(reuseWarning)) warnings.insert(0, reuseWarning);
+    summary['warnings'] = warnings;
+    summary['likelyDiagnosis'] ??= cached.likelyDiagnosis;
+    summary['imageOpinion'] ??= cached.imageOpinion;
+    summary['ragOpinion'] ??= cached.ragOpinion;
+    summary['confidenceLabel'] ??= cached.confidenceLabel;
+    summary['sources'] ??= cached.sources;
+
+    // Réécrit l'identité pour la NOUVELLE consultation et neutralise les
+    // données spécifiques au cas source (expertise, résumé effectif).
+    caseJson['organizedAiSummary'] = summary;
+    caseJson['id'] = localConsultationId;
+    caseJson['patientId'] = patient.id;
+    caseJson['status'] = 'AI_COMPLETED';
+    caseJson['symptoms'] = payload.symptoms;
+    caseJson['earSide'] = payload.earSide.value;
+    caseJson.remove('expertiseReview');
+    caseJson.remove('effectiveSummary');
+
+    return AiCase.fromJson(caseJson);
   }
 
   Future<List<AiCase>> listCases() async {

@@ -12,6 +12,8 @@ class OrlImageCaptureStep extends StatelessWidget {
     required this.isEditing,
     required this.earSide,
     required this.onEarSideChanged,
+    required this.description,
+    required this.onDescriptionChanged,
     required this.onCamera,
     required this.onGallery,
     required this.onRotateLeft,
@@ -26,6 +28,8 @@ class OrlImageCaptureStep extends StatelessWidget {
   final bool isEditing;
   final EarSide earSide;
   final ValueChanged<EarSide> onEarSideChanged;
+  final String description;
+  final ValueChanged<String> onDescriptionChanged;
   final VoidCallback onCamera;
   final VoidCallback onGallery;
   final VoidCallback onRotateLeft;
@@ -45,6 +49,18 @@ class OrlImageCaptureStep extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         EarSideSelector(value: earSide, onChanged: onEarSideChanged),
+        const SizedBox(height: 16),
+        TextFormField(
+          initialValue: description,
+          onChanged: onDescriptionChanged,
+          decoration: InputDecoration(
+            labelText: 'Description de l\'image (optionnel)',
+            hintText: 'Décrivez l\'état de l\'oreille si nécessaire...',
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+            alignLabelWithHint: true,
+          ),
+          maxLines: 3,
+        ),
         const SizedBox(height: 16),
         if (!hasImage) ...[
           Container(

@@ -46,7 +46,7 @@ class ClinicalReferenceLocalDao {
       'clinical_reference_items',
       where: 'type = ? AND is_active = 1',
       whereArgs: [type],
-      orderBy: 'sort_order ASC, label ASC',
+      orderBy: 'label ASC',
     );
 
     return rows.map((row) {

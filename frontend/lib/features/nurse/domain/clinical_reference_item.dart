@@ -6,6 +6,7 @@ class ClinicalReferenceItem {
     required this.isActive,
     required this.sortOrder,
     this.description,
+    this.dangerScore = 0,
   });
 
   final String id;
@@ -15,6 +16,9 @@ class ClinicalReferenceItem {
   final int sortOrder;
   final String? description;
 
+  /// Score de danger 0–3 (alimente le calcul d'urgence).
+  final int dangerScore;
+
   factory ClinicalReferenceItem.fromJson(Map<String, dynamic> json) {
     return ClinicalReferenceItem(
       id: json['id'].toString(),
@@ -23,6 +27,7 @@ class ClinicalReferenceItem {
       description: json['description']?.toString(),
       isActive: json['isActive'] == true,
       sortOrder: int.tryParse(json['sortOrder']?.toString() ?? '') ?? 0,
+      dangerScore: int.tryParse(json['dangerScore']?.toString() ?? '') ?? 0,
     );
   }
 }

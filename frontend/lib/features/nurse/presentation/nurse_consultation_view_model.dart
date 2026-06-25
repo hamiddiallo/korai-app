@@ -4,7 +4,9 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../../core/api/api_client.dart';
+import '../../../core/domain/clinical_fingerprint.dart';
 import '../../../core/domain/clinical_snapshot.dart';
+import '../../../core/domain/clinical_urgency.dart';
 import '../../../core/domain/consultation_create_payload.dart';
 import '../../../core/domain/korai_enums.dart';
 import '../../../core/utils/orl_image_editor.dart';
@@ -39,7 +41,9 @@ class NurseConsultationViewModel extends Cubit<NurseConsultationState> {
   bool isLoading = false;
   bool isSubmitting = false;
   bool isEditingImage = false;
-  EarSide earSide = EarSide.both;
+  // Défaut sur une oreille concrète : l'option « les deux » a été retirée du
+  // workflow (le service IA analyse une image à la fois).
+  EarSide earSide = EarSide.left;
   String? errorMessage;
   String? infoMessage;
   List<ClinicalReferenceItem> symptoms = [];
@@ -311,6 +315,13 @@ class NurseConsultationViewModel extends Cubit<NurseConsultationState> {
     });
   }
 
+  String imageDescription = '';
+
+  void setImageDescription(String value) {
+    imageDescription = value;
+    _emitState();
+  }
+
   Future<void> pickImage(ImageSource source) async {
     final picked = await _imagePicker.pickImage(
       source: source,
@@ -325,6 +336,7 @@ class NurseConsultationViewModel extends Cubit<NurseConsultationState> {
 
   void clearImage() {
     image = null;
+    imageDescription = '';
     errorMessage = null;
     infoMessage = null;
     _emitState();
@@ -440,11 +452,33 @@ class NurseConsultationViewModel extends Cubit<NurseConsultationState> {
           localConsultationId: localDraft.localId,
         );
       } on ApiException catch (error) {
-        errorMessage =
-            'Consultation enregistree localement, mais le serveur a refuse la synchronisation: ${error.message}';
+        if (error.isNetworkFailure) {
+          final reused = await _tryOfflineReuse(
+            localConsultationId: localDraft.localId,
+            patient: currentPatient,
+            payload: localPayload,
+            hasImage: selectedImage != null,
+          );
+          if (reused != null) {
+            aiCase = reused;
+            infoMessage =
+                'Réponse IA réutilisée hors-ligne (cas clinique identique). '
+                'La consultation sera synchronisée au retour du réseau.';
+          } else {
+            infoMessage =
+                'Consultation enregistree localement. L\'analyse IA sera synchronisee des que le reseau revient.';
+          }
+        } else if (error.isPermanentClientFailure) {
+          errorMessage =
+              'Consultation enregistree localement, mais le serveur a refuse la synchronisation : ${error.message}';
+        } else {
+          // 5xx / service indisponible : l\'entree reste en file et sera rejouee.
+          infoMessage =
+              'Consultation enregistree. ${error.message}';
+        }
       } catch (_) {
         infoMessage =
-            'Consultation enregistree localement. L analyse IA sera synchronisee des que le reseau revient.';
+            'Consultation enregistree localement. L\'analyse IA sera synchronisee des que le reseau revient.';
       }
     } catch (error) {
       errorMessage = error.toString();
@@ -464,48 +498,95 @@ class NurseConsultationViewModel extends Cubit<NurseConsultationState> {
     required String sex,
     required String notes,
   }) async {
-    await _run(() async {
-      aiCase = null;
-      final currentPatient = patient ??
-          Patient(
-            id: patientId,
-            firstName: firstName,
-            lastName: lastName,
-            phone: phone,
-            address: address,
-            birthDate: age.isEmpty ? null : 'Age: $age',
-            sex: sex,
-          );
-      final payload = buildConsultationPayload(
-        patientId: currentPatient.id,
-        firstName: firstName,
-        lastName: lastName,
-        phone: phone,
-        address: address,
-        age: age,
-        sex: sex,
-        notes: notes,
-      );
-      final localDraft = await _repository.savePendingDiagnosisDraft(
-        patient: currentPatient,
-        payload: payload,
-        image: image,
-      );
-      aiCase = await _repository.diagnose(
-        payload: buildConsultationPayload(
-          patientId: patientId,
+    isLoading = true;
+    errorMessage = null;
+    infoMessage = null;
+    aiCase = null;
+    _emitState();
+
+    final selectedImage = image;
+    final currentPatient = patient ??
+        Patient(
+          id: patientId,
           firstName: firstName,
           lastName: lastName,
           phone: phone,
           address: address,
-          age: age,
+          birthDate: age.isEmpty ? null : 'Age: $age',
           sex: sex,
-          notes: notes,
-        ),
-        image: image,
-        localConsultationId: localDraft.localId,
+        );
+    final payload = buildConsultationPayload(
+      patientId: currentPatient.id,
+      firstName: firstName,
+      lastName: lastName,
+      phone: phone,
+      address: address,
+      age: age,
+      sex: sex,
+      notes: notes,
+    );
+
+    try {
+      final localDraft = await _repository.savePendingDiagnosisDraft(
+        patient: currentPatient,
+        payload: payload,
+        image: selectedImage,
       );
-    });
+      try {
+        aiCase = await _repository.diagnose(
+          payload: payload,
+          image: selectedImage,
+          localConsultationId: localDraft.localId,
+        );
+      } on ApiException catch (error) {
+        if (error.isNetworkFailure) {
+          final reused = await _tryOfflineReuse(
+            localConsultationId: localDraft.localId,
+            patient: currentPatient,
+            payload: payload,
+            hasImage: selectedImage != null,
+          );
+          if (reused != null) {
+            aiCase = reused;
+            infoMessage =
+                'Réponse IA réutilisée hors-ligne (cas clinique identique). '
+                'La consultation sera synchronisée au retour du réseau.';
+          } else {
+            infoMessage =
+                'Consultation enregistree localement. L\'analyse IA sera synchronisee des que le reseau revient.';
+          }
+        } else {
+          errorMessage = error.message;
+        }
+      }
+    } catch (error) {
+      errorMessage = error.toString();
+    } finally {
+      isLoading = false;
+      _emitState();
+    }
+  }
+
+  /// Tente de réutiliser une réponse IA en cache local (consultations sans
+  /// image). Retourne l'AiCase réutilisé, ou `null` si aucune correspondance.
+  Future<AiCase?> _tryOfflineReuse({
+    required String localConsultationId,
+    required Patient patient,
+    required ConsultationCreatePayload payload,
+    required bool hasImage,
+  }) async {
+    final fingerprint = payload.clinicalFingerprint;
+    if (hasImage || fingerprint == null || fingerprint.isEmpty) return null;
+    try {
+      return await _repository.tryReuseCachedDiagnosis(
+        localConsultationId: localConsultationId,
+        fingerprint: fingerprint,
+        patient: patient,
+        payload: payload,
+      );
+    } catch (_) {
+      return null;
+    }
   }
 
   ConsultationCreatePayload buildConsultationPayload({
@@ -518,8 +599,22 @@ class NurseConsultationViewModel extends Cubit<NurseConsultationState> {
     required String sex,
     required String notes,
   }) {
+    final touchSnapshot = {
+      for (final id in selectedTouchCheckIds)
+        id: touchCheckObservations[id] ?? '',
+    };
     return ConsultationCreatePayload(
       patientId: patientId,
+      imageDescription: imageDescription.trim(),
+      // Empreinte clinique pour la déduplication IA (consultations sans image).
+      clinicalFingerprint: ClinicalFingerprint.compute(
+        earSide: earSide.value,
+        sex: sex,
+        age: age,
+        symptomIds: ClinicalSnapshot.ids(selectedSymptomIds),
+        medicalHistoryIds: ClinicalSnapshot.ids(selectedMedicalHistoryIds),
+        touchObservations: touchSnapshot,
+      ),
       symptoms: buildClinicalNarrative(
         firstName: firstName,
         lastName: lastName,
@@ -530,6 +625,7 @@ class NurseConsultationViewModel extends Cubit<NurseConsultationState> {
         notes: notes,
       ),
       clinicalNotes: notes.isEmpty ? null : notes,
+      urgency: computedUrgency(),
       earSide: earSide,
       requestSpecialistReview: false,
       symptomIds: ClinicalSnapshot.ids(selectedSymptomIds),
@@ -542,6 +638,35 @@ class NurseConsultationViewModel extends Cubit<NurseConsultationState> {
           ClinicalSnapshot.labels(touchChecks, selectedTouchCheckIds),
       touchObservations: Map<String, String>.from(touchCheckObservations),
     );
+  }
+
+  /// Relance l'analyse IA de la consultation courante en échec (AI_FAILED).
+  Future<void> retryCurrentDiagnosis() async {
+    final current = aiCase;
+    if (current == null || !current.isAiFailed) return;
+
+    isSubmitting = true;
+    errorMessage = null;
+    infoMessage = null;
+    _emitState();
+    try {
+      final retried = await _repository.retryDiagnosis(current.id);
+      aiCase = retried;
+      if (retried.isAiFailed) {
+        errorMessage = retried.aiErrorDisplay;
+      } else {
+        infoMessage = 'Analyse IA relancée avec succès.';
+      }
+    } on ApiException catch (error) {
+      errorMessage = error.isNetworkFailure
+          ? 'Pas de connexion : impossible de relancer l\'analyse pour le moment.'
+          : error.message;
+    } catch (error) {
+      errorMessage = error.toString();
+    } finally {
+      isSubmitting = false;
+      _emitState();
+    }
   }
 
   Future<AiCase?> requestExpertiseForCurrentCase({String? summaryNote}) async {
@@ -587,6 +712,23 @@ class NurseConsultationViewModel extends Cubit<NurseConsultationState> {
       'Verifications au toucher:',
       ...touchCheckSummaries().map((line) => '- $line'),
     ];
+  }
+
+  /// Niveau d'urgence calculé automatiquement à partir des scores de danger
+  /// des symptômes et antécédents cochés (aperçu ; le serveur fait autorité).
+  UrgencyLevel computedUrgency() {
+    final symptomScores = symptoms
+        .where((s) => selectedSymptomIds.contains(s.id))
+        .map((s) => s.dangerScore)
+        .toList();
+    final historyScores = medicalHistories
+        .where((h) => selectedMedicalHistoryIds.contains(h.id))
+        .map((h) => h.dangerScore)
+        .toList();
+    return ClinicalUrgency.compute(
+      symptomScores: symptomScores,
+      historyScores: historyScores,
+    );
   }
 
   List<String> labelsFor(
