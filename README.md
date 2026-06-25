@@ -2,7 +2,6 @@
 
 Application mobile intelligente pour consultations ORL en soins primaires.
 
-Voir [PROJET_REPERE.md](/Users/hamid/Downloads/Korai-app/PROJET_REPERE.md) pour l'architecture, les bonnes pratiques et la feuille de route.
 
 ## Structure
 
