@@ -119,9 +119,38 @@ const mergeAiHeaders = (init: RequestInit): HeadersInit => {
   return base;
 };
 
+/**
+ * Codes d'erreur IA exposés au frontend. Permettent d'afficher le bon message
+ * (timeout vs service injoignable vs erreur applicative) et de décider d'un retry.
+ */
+export type AiErrorCode =
+  | 'AI_TIMEOUT'
+  | 'AI_UNREACHABLE'
+  | 'AI_SERVICE_ERROR'
+  | 'AI_BAD_REQUEST';
+
+/** Toute erreur IA est retryable sauf une requête invalide (4xx applicatif). */
+export const isRetryableAiError = (code: string | undefined): boolean =>
+  code === 'AI_TIMEOUT' || code === 'AI_UNREACHABLE' || code === 'AI_SERVICE_ERROR';
+
+/**
+ * Normalise n'importe quelle erreur (HttpError IA, abort, réseau) en
+ * `{ code, message }` réutilisable pour la persistance (consultation AI_FAILED).
+ */
+export const describeAiError = (error: unknown): { code: AiErrorCode; message: string } => {
+  if (error instanceof HttpError && error.code.startsWith('AI_')) {
+    return { code: error.code as AiErrorCode, message: error.message };
+  }
+  return { code: 'AI_UNREACHABLE', message: 'Le service IA est injoignable.' };
+};
+
 const callAiService = async (path: string, init: RequestInit): Promise<unknown> => {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), env.AI_SERVICE_TIMEOUT_MS);
+  let timedOut = false;
+  const timeout = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, env.AI_SERVICE_TIMEOUT_MS);
 
   try {
     const response = await fetch(`${env.AI_SERVICE_BASE_URL}${path}`, {
@@ -132,18 +161,39 @@ const callAiService = async (path: string, init: RequestInit): Promise<unknown> 
 
     if (!response.ok) {
       const errorText = await response.text();
+      // 4xx applicatif (hors 408/429) = requête invalide, inutile de réessayer.
+      const isClientError =
+        response.status >= 400 &&
+        response.status < 500 &&
+        response.status !== 408 &&
+        response.status !== 429;
       throw new HttpError(
-        502,
-        'AI_SERVICE_ERROR',
-        `Service IA indisponible (${response.status})`,
+        isClientError ? 422 : 502,
+        isClientError ? 'AI_BAD_REQUEST' : 'AI_SERVICE_ERROR',
+        isClientError
+          ? "Le service IA a refusé la requête d'analyse."
+          : `Le service d'analyse IA est temporairement indisponible (${response.status}).`,
         errorText
       );
     }
 
-    return response.json();
+    return await response.json();
   } catch (error) {
     if (error instanceof HttpError) throw error;
-    throw new HttpError(502, 'AI_SERVICE_ERROR', 'Impossible de joindre le service IA', String(error));
+    if (timedOut || (error instanceof Error && error.name === 'AbortError')) {
+      throw new HttpError(
+        504,
+        'AI_TIMEOUT',
+        "Le service d'analyse IA met trop de temps à répondre. Réessayez dans un instant.",
+        String(error)
+      );
+    }
+    throw new HttpError(
+      503,
+      'AI_UNREACHABLE',
+      "Impossible de joindre le service d'analyse IA. Vérifiez votre connexion ou réessayez plus tard.",
+      String(error)
+    );
   } finally {
     clearTimeout(timeout);
   }

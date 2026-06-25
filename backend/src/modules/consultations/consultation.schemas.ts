@@ -53,5 +53,7 @@ export const createConsultationSchema = z.object({
   touchCheckLabels: multipartStringArray,
   touchObservations: multipartTouchObservations,
   clientLocalId: z.string().min(1).optional(),
-  clientMutationId: z.string().min(1).optional()
+  clientMutationId: z.string().min(1).optional(),
+  imageDescription: z.string().optional(),
+  clinicalFingerprint: z.string().min(1).optional()
 });

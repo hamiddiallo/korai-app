@@ -22,6 +22,7 @@ enum Sex {
 enum ConsultationStatus {
   DRAFT
   PENDING_AI
+  AI_FAILED
   AI_COMPLETED
   PENDING_SPECIALIST_REVIEW
   SPECIALIST_COMPLETED
@@ -84,6 +85,7 @@ model User {
   professionalId  String?
   linkedPatientId String?
   createdAt       DateTime @default(now())
+  deletedAt       DateTime?
 
   patientProfile        Patient?       @relation("PatientAccount")
   createdPatients       Patient[]      @relation("PatientCreator")
@@ -92,6 +94,32 @@ model User {
   expertiseRequested    ExpertiseRequest[] @relation("ExpertiseRequester")
   expertiseAssigned     ExpertiseRequest[] @relation("ExpertiseAssignee")
   chatConversations     ChatConversation[]
+  notifications         Notification[]     @relation("UserNotifications")
+}
+
+enum NotificationType {
+  EXPERTISE_REQUESTED
+  EXPERTISE_ASSIGNED
+  EXPERTISE_COMPLETED
+  PATIENT_VALIDATED
+}
+
+model Notification {
+  id              String           @id @default(uuid())
+  recipientUserId String
+  type            NotificationType
+  title           String
+  body            String
+  consultationId  String?
+  patientId       String?
+  data            Json?
+  isRead          Boolean          @default(false)
+  readAt          DateTime?
+  createdAt       DateTime         @default(now())
+
+  recipient User @relation("UserNotifications", fields: [recipientUserId], references: [id])
+
+  @@index([recipientUserId, isRead, createdAt])
 }
 
 model Patient {
@@ -111,6 +139,7 @@ model Patient {
   clientMutationId        String?
   createdAt               DateTime @default(now())
   updatedAt               DateTime @updatedAt
+  deletedAt               DateTime?
 
   account       User?          @relation("PatientAccount", fields: [userId], references: [id])
   creator       User           @relation("PatientCreator", fields: [createdByUserId], references: [id])
@@ -138,10 +167,14 @@ model Consultation {
   clinicalNarrative    String
   status               ConsultationStatus @default(DRAFT)
   urgency              UrgencyLevel       @default(MEDIUM)
+  aiErrorCode          String?
+  aiErrorMessage       String?
+  clinicalFingerprint  String?
   clientLocalId        String?
   clientMutationId     String?
   createdAt            DateTime           @default(now())
   updatedAt            DateTime           @updatedAt
+  deletedAt            DateTime?
 
   patient            Patient            @relation(fields: [patientId], references: [id])
   creator            User               @relation("ConsultationCreator", fields: [createdByUserId], references: [id])
@@ -152,6 +185,7 @@ model Consultation {
 
   @@unique([createdByUserId, clientLocalId])
   @@unique([createdByUserId, clientMutationId])
+  @@index([clinicalFingerprint])
 }
 
 model OtoscopicImage {
@@ -161,7 +195,9 @@ model OtoscopicImage {
   mimeType       String
   fileName       String?
   byteSize       Int?
+  description    String?
   createdAt      DateTime @default(now())
+  deletedAt      DateTime?
 
   consultation Consultation @relation(fields: [consultationId], references: [id], onDelete: Cascade)
 }
@@ -177,6 +213,7 @@ model AiResponse {
   warnings         String[]
   sources          String[]
   createdAt        DateTime @default(now())
+  deletedAt        DateTime?
 
   consultation Consultation @relation(fields: [consultationId], references: [id], onDelete: Cascade)
 }
@@ -200,6 +237,7 @@ model ExpertiseRequest {
   reviewedAt                DateTime?
   createdAt                 DateTime         @default(now())
   updatedAt                 DateTime         @updatedAt
+  deletedAt                 DateTime?
 
   consultation     Consultation @relation(fields: [consultationId], references: [id], onDelete: Cascade)
   requester        User         @relation("ExpertiseRequester", fields: [requestedByUserId], references: [id])
@@ -213,8 +251,10 @@ model ClinicalReferenceItem {
   description String?
   isActive    Boolean               @default(true)
   sortOrder   Int                   @default(0)
+  dangerScore Int                   @default(0)
   createdAt   DateTime              @default(now())
   updatedAt   DateTime              @updatedAt
+  deletedAt   DateTime?
 
   @@index([type, isActive])
 }
@@ -230,6 +270,7 @@ model ChatConversation {
   archivedAt             DateTime?
   createdAt              DateTime               @default(now())
   updatedAt              DateTime               @updatedAt
+  deletedAt              DateTime?
 
   user     User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   messages ChatMessage[]
@@ -250,6 +291,7 @@ model ChatMessage {
   externalRawJson Json?
   createdAt       DateTime           @default(now())
   updatedAt       DateTime           @updatedAt
+  deletedAt       DateTime?
 
   conversation ChatConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
 

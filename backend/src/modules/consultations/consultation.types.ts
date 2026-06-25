@@ -20,10 +20,14 @@ export type ConsultationRecord = {
   clinicalNarrative: string;
   status: ConsultationStatus;
   urgency: UrgencyLevel;
+  aiErrorCode?: string;
+  aiErrorMessage?: string;
+  clinicalFingerprint?: string;
   clientLocalId?: string;
   clientMutationId?: string;
   createdAt: string;
   updatedAt: string;
+  deletedAt?: string;
   aiResponse?: {
     rawJson: unknown;
     imageOpinion?: string | null;
@@ -33,6 +37,15 @@ export type ConsultationRecord = {
     warnings: string[];
     sources: string[];
   };
+  otoscopicImages?: {
+    id: string;
+    earSide: EarSide;
+    mimeType: string;
+    fileName?: string;
+    byteSize?: number;
+    description?: string;
+    createdAt: string;
+  }[];
 };
 
 export const toLegacyOrlCase = (

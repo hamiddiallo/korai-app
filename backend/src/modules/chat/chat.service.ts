@@ -207,12 +207,18 @@ export const chatService = {
         conversation,
         messages: [created.userMessage, finalized.assistantMessage]
       };
-    } catch {
+    } catch (error) {
+      const err = error as Error;
+      const detail = (err as any).details || err.message;
+      let cleanDetail = String(detail);
+      if (cleanDetail.includes('<!DOCTYPE html>') || cleanDetail.includes('<html')) {
+        cleanDetail = "Le serveur d'analyse a renvoyé une page d'erreur (502).";
+      }
       const finalized = await chatDao.createAssistantMessageAndFinalize({
         userId: user.id,
         conversationId,
         sequence: created.userMessage.sequence + 1,
-        content: defaultAssistantFailure,
+        content: `${defaultAssistantFailure}\n\nCause : ${cleanDetail}`,
         sources: [],
         deliveryStatus: 'FAILED',
         errorCode: 'AI_UNAVAILABLE'
@@ -277,10 +283,16 @@ export const chatService = {
       });
 
       return { conversation, message };
-    } catch {
+    } catch (error) {
+      const err = error as Error;
+      const detail = (err as any).details || err.message;
+      let cleanDetail = String(detail);
+      if (cleanDetail.includes('<!DOCTYPE html>') || cleanDetail.includes('<html')) {
+        cleanDetail = "Le serveur d'analyse a renvoyé une page d'erreur (502).";
+      }
       const message = await chatDao.updateAssistantMessage({
         messageId,
-        content: defaultAssistantFailure,
+        content: `${defaultAssistantFailure}\n\nCause : ${cleanDetail}`,
         sources: [],
         deliveryStatus: 'FAILED',
         errorCode: 'AI_UNAVAILABLE',

@@ -8,19 +8,29 @@ export const clinicalReferenceDao = {
         isActive: true,
         ...(type ? { type } : {})
       },
-      orderBy: [{ sortOrder: 'asc' }, { label: 'asc' }]
+      orderBy: [{ label: 'asc' }]
     });
   },
 
   async listAll(type?: ClinicalReferenceType) {
     return prisma.clinicalReferenceItem.findMany({
       where: type ? { type } : undefined,
-      orderBy: [{ type: 'asc' }, { sortOrder: 'asc' }, { label: 'asc' }]
+      orderBy: [{ type: 'asc' }, { label: 'asc' }]
     });
   },
 
   async findById(id: string) {
     return prisma.clinicalReferenceItem.findUnique({ where: { id } });
+  },
+
+  /** Scores de danger (0–3) indexés par id, pour les ids fournis. */
+  async dangerScoresByIds(ids: string[]): Promise<Map<string, number>> {
+    if (ids.length === 0) return new Map();
+    const rows = await prisma.clinicalReferenceItem.findMany({
+      where: { id: { in: ids } },
+      select: { id: true, dangerScore: true }
+    });
+    return new Map(rows.map((row) => [row.id, row.dangerScore]));
   },
 
   async create(data: {
@@ -29,6 +39,7 @@ export const clinicalReferenceDao = {
     description?: string;
     isActive: boolean;
     sortOrder: number;
+    dangerScore?: number;
   }) {
     return prisma.clinicalReferenceItem.create({ data });
   },
@@ -41,6 +52,7 @@ export const clinicalReferenceDao = {
       description?: string;
       isActive: boolean;
       sortOrder: number;
+      dangerScore: number;
     }>
   ) {
     return prisma.clinicalReferenceItem.update({ where: { id }, data });
@@ -55,6 +67,7 @@ export const clinicalReferenceDao = {
     label: string;
     description?: string;
     sortOrder: number;
+    dangerScore?: number;
   }) {
     const existing = await prisma.clinicalReferenceItem.findFirst({
       where: { type: item.type, label: item.label }
@@ -66,7 +79,8 @@ export const clinicalReferenceDao = {
       where: { id: existing.id },
       data: {
         description: item.description,
-        sortOrder: item.sortOrder
+        sortOrder: item.sortOrder,
+        dangerScore: item.dangerScore
       }
     });
   }

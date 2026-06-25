@@ -111,6 +111,8 @@ export const toLegacyOrlCaseFromRecord = (
     }),
     status: consultation.status,
     urgency: consultation.urgency,
+    aiErrorCode: consultation.aiErrorCode,
+    aiErrorMessage: consultation.aiErrorMessage,
     createdAt: consultation.createdAt,
     updatedAt: consultation.updatedAt
   };

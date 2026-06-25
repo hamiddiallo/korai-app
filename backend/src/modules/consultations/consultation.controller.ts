@@ -25,7 +25,9 @@ export class ConsultationController {
       touchCheckLabels: body.touchCheckLabels,
       touchObservations: body.touchObservations,
       clientLocalId: body.clientLocalId,
-      clientMutationId: body.clientMutationId
+      clientMutationId: body.clientMutationId,
+      imageDescription: body.imageDescription,
+      clinicalFingerprint: body.clinicalFingerprint
     };
 
     if (req.user!.role === 'PATIENT') {
@@ -49,6 +51,14 @@ export class ConsultationController {
     });
 
     res.status(201).json({ case: orlCase });
+  }
+
+  async retryDiagnosis(req: Request, res: Response) {
+    const orlCase = await consultationService.retryDiagnosis(
+      String(req.params.id),
+      req.user!
+    );
+    res.json({ case: orlCase });
   }
 
   async requestSpecialistReview(req: Request, res: Response) {

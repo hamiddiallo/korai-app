@@ -41,6 +41,12 @@ consultationRouter.post(
   asyncHandler((req, res) => consultationController.diagnose(req, res))
 );
 
+consultationRouter.post(
+  '/:id/diagnose/retry',
+  requireRoles('NURSE', 'ADMIN', 'PATIENT'),
+  asyncHandler((req, res) => consultationController.retryDiagnosis(req, res))
+);
+
 consultationRouter.use('/:id/expertise', caseExpertiseRouter);
 
 /** @deprecated Utiliser POST /:id/expertise/request */

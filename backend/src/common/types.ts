@@ -59,6 +59,8 @@ export type LegacyOrlCase = {
   effectiveSummary?: EffectiveSummary;
   status: string;
   urgency: string;
+  aiErrorCode?: string;
+  aiErrorMessage?: string;
   createdAt: string;
   updatedAt: string;
 };
