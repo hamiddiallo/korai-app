@@ -104,6 +104,13 @@ class NotificationLocalDao {
     await db.update('notifications', {'is_read': 1}, where: 'is_read = 0');
   }
 
+  /// Purge complète du cache (à la déconnexion : le cache est global à
+  /// l'appareil, il ne doit pas fuiter d'un utilisateur à l'autre).
+  Future<void> clearAll() async {
+    final db = await _database.database;
+    await db.delete('notifications');
+  }
+
   /// Purge les notifications serveur (is_local=0) anciennes pour borner le cache.
   Future<void> pruneServerOlderThan(int keep) async {
     final db = await _database.database;

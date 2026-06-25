@@ -57,6 +57,9 @@ class NotificationRepository {
     }
   }
 
+  /// Vide le cache local (déconnexion / changement d'utilisateur).
+  Future<void> clearLocal() => _localDao.clearAll();
+
   /// Génère une notification locale (ex. résultat de synchronisation offline).
   Future<void> addLocal({
     required NotificationType type,

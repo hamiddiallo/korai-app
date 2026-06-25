@@ -58,6 +58,14 @@ class NotificationCubit extends Cubit<NotificationState> {
     _started = false;
     _pollTimer?.cancel();
     _pollTimer = null;
+    // Vide le cache local : le cache de notifications est global à l'appareil,
+    // il ne doit pas réapparaître pour l'utilisateur suivant (changement de compte).
+    try {
+      await _repository.clearLocal();
+    } catch (_) {
+      // Base indisponible : on ignore.
+    }
+    if (!isClosed) emit(const NotificationState());
   }
 
   Future<void> _loadCached() async {
