@@ -10,6 +10,7 @@ import { consultationRouter } from './modules/consultations/consultation.routes.
 import { aiRouter } from './modules/ai/ai.routes.js';
 import { expertiseRouter } from './modules/expertise/expertise.routes.js';
 import { chatRouter } from './modules/chat/chat.routes.js';
+import { notificationRouter } from './modules/notifications/notification.routes.js';
 
 export const createApp = () => {
   const app = express();
@@ -29,6 +30,7 @@ export const createApp = () => {
   app.use('/expertise', expertiseRouter);
   app.use('/ai', aiRouter);
   app.use('/chat', chatRouter);
+  app.use('/notifications', notificationRouter);
 
   app.use(errorMiddleware);
 

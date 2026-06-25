@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/auth/session_controller.dart';
 import '../../../core/domain/korai_enums.dart';
+import '../../../core/notifications/notification_center.dart';
 import '../../../core/utils/consultation_format.dart';
 import '../../nurse/domain/ai_case.dart';
 import '../data/specialist_repository.dart';
@@ -80,6 +81,7 @@ class _SpecialistHomePageState extends State<SpecialistHomePage> {
       appBar: AppBar(
         title: const Text('Expertise ORL'),
         actions: [
+          NotificationBell(onTapNotification: (_) => _loadInbox()),
           IconButton(onPressed: _loadInbox, icon: const Icon(Icons.refresh)),
           IconButton(
             onPressed: () => widget.session.logout(),

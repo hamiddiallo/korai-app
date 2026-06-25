@@ -5,6 +5,8 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import 'core/api/api_client.dart';
 import 'core/auth/session_controller.dart';
+import 'core/notifications/notification_cubit.dart';
+import 'core/notifications/notification_repository.dart';
 import 'core/sync/sync_cubit.dart';
 import 'core/sync/sync_service.dart';
 import 'core/theme/app_theme.dart';
@@ -39,6 +41,7 @@ class _KoraiAppState extends State<KoraiApp> {
   late final ApiClient apiClient;
   late final AuthCubit session;
   late final SyncCubit syncCubit;
+  late final NotificationCubit notificationCubit;
   StreamSubscription<AuthState>? _authSubscription;
 
   @override
@@ -47,6 +50,9 @@ class _KoraiAppState extends State<KoraiApp> {
     apiClient = ApiClient();
     session = AuthCubit(apiClient: apiClient);
     syncCubit = SyncCubit(syncService: SyncService(apiClient: apiClient));
+    notificationCubit = NotificationCubit(
+      repository: NotificationRepository(apiClient),
+    );
     _authSubscription = session.stream.listen(_handleAuthState);
     session.restore();
   }
@@ -55,6 +61,7 @@ class _KoraiAppState extends State<KoraiApp> {
   void dispose() {
     _authSubscription?.cancel();
     syncCubit.close();
+    notificationCubit.close();
     session.close();
     super.dispose();
   }
@@ -62,8 +69,10 @@ class _KoraiAppState extends State<KoraiApp> {
   void _handleAuthState(AuthState state) {
     if (state.isAuthenticated && !state.isRestoring) {
       syncCubit.start();
+      notificationCubit.start();
     } else if (!state.isAuthenticated && !state.isRestoring) {
       syncCubit.stop();
+      notificationCubit.stop();
     }
   }
 
@@ -73,6 +82,7 @@ class _KoraiAppState extends State<KoraiApp> {
       providers: [
         BlocProvider<AuthCubit>.value(value: session),
         BlocProvider<SyncCubit>.value(value: syncCubit),
+        BlocProvider<NotificationCubit>.value(value: notificationCubit),
       ],
       child: BlocBuilder<AuthCubit, AuthState>(
         bloc: session,

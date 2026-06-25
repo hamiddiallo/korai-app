@@ -41,17 +41,22 @@ export const userDao = {
   },
 
   async findByEmail(email: string) {
-    const user = await prisma.user.findUnique({ where: { email: email.toLowerCase() } });
+    const user = await prisma.user.findFirst({
+      where: { email: email.toLowerCase(), deletedAt: null }
+    });
     return user ? mapUser(user) : undefined;
   },
 
   async findById(id: string) {
-    const user = await prisma.user.findUnique({ where: { id } });
+    const user = await prisma.user.findFirst({ where: { id, deletedAt: null } });
     return user ? mapUser(user) : undefined;
   },
 
   async list() {
-    const users = await prisma.user.findMany({ orderBy: { createdAt: 'desc' } });
+    const users = await prisma.user.findMany({
+      where: { deletedAt: null },
+      orderBy: { createdAt: 'desc' }
+    });
     return users.map(mapUser);
   },
 
@@ -110,21 +115,44 @@ export const userDao = {
     return mapUser(user);
   },
 
+  async updatePassword(id: string, passwordHash: string) {
+    await prisma.user.update({
+      where: { id },
+      data: { passwordHash }
+    });
+  },
+
   async delete(id: string) {
-    await prisma.user.delete({ where: { id } });
+    await prisma.user.update({ where: { id }, data: { deletedAt: new Date() } });
+  },
+
+  async restore(id: string) {
+    const user = await prisma.user.update({
+      where: { id },
+      data: { deletedAt: null }
+    });
+    return mapUser(user);
   },
 
   async countByRole(role: Role) {
-    return prisma.user.count({ where: { role } });
+    return prisma.user.count({ where: { role, deletedAt: null } });
+  },
+
+  async listIdsByRole(role: Role) {
+    const rows = await prisma.user.findMany({
+      where: { role, deletedAt: null },
+      select: { id: true }
+    });
+    return rows.map((row) => row.id);
   },
 
   async countLinkedClinicalData(userId: string) {
     const [linkedPatients, linkedConsultations] = await Promise.all([
       prisma.patient.count({
-        where: { OR: [{ userId }, { createdByUserId: userId }] }
+        where: { deletedAt: null, OR: [{ userId }, { createdByUserId: userId }] }
       }),
       prisma.consultation.count({
-        where: { OR: [{ createdByUserId: userId }, { assignedSpecialistId: userId }] }
+        where: { deletedAt: null, OR: [{ createdByUserId: userId }, { assignedSpecialistId: userId }] }
       })
     ]);
     return { linkedPatients, linkedConsultations };

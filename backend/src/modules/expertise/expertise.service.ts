@@ -2,6 +2,8 @@ import { ConsultationStatus, ExpertDecision, ExpertiseStatus } from '@prisma/cli
 import { forbidden, notFound } from '../../common/errors/http-error.js';
 import { HttpError } from '../../common/errors/http-error.js';
 import { consultationDao } from '../consultations/consultation.dao.js';
+import { notificationService } from '../notifications/notification.service.js';
+import { userDao } from '../users/user.dao.js';
 import { expertiseDao } from './expertise.dao.js';
 import { buildAiSummarySnapshot } from './expertise.types.js';
 
@@ -43,6 +45,19 @@ export const expertiseService = {
       status: ConsultationStatus.PENDING_SPECIALIST_REVIEW
     });
 
+    // Notifie tous les spécialistes qu'un nouveau cas attend une prise en charge.
+    const specialistIds = await userDao.listIdsByRole('SPECIALIST');
+    void notificationService.emit(
+      specialistIds.map((id) => ({
+        recipientUserId: id,
+        type: 'EXPERTISE_REQUESTED' as const,
+        title: 'Nouveau cas en télé-expertise',
+        body: 'Un infirmier demande un avis spécialisé sur une consultation ORL.',
+        consultationId,
+        patientId: consultation.patientId
+      }))
+    );
+
     return expertise;
   },
 
@@ -78,7 +93,20 @@ export const expertiseService = {
     }
 
     const updated = await expertiseDao.assignToReview(consultationId, specialistId);
-    await consultationDao.update(consultationId, { assignedSpecialistId: specialistId });
+    const consultation = await consultationDao.update(consultationId, {
+      assignedSpecialistId: specialistId
+    });
+
+    // Notifie l'infirmier créateur que son cas est pris en charge.
+    void notificationService.emit({
+      recipientUserId: consultation.createdByUserId,
+      type: 'EXPERTISE_ASSIGNED',
+      title: 'Cas pris en charge',
+      body: 'Votre demande de télé-expertise est prise en charge par un spécialiste.',
+      consultationId,
+      patientId: consultation.patientId
+    });
+
     return updated;
   },
 
@@ -110,9 +138,19 @@ export const expertiseService = {
 
     const completed = await expertiseDao.completeReview(consultationId, specialistId, input);
 
-    await consultationDao.update(consultationId, {
+    const consultation = await consultationDao.update(consultationId, {
       assignedSpecialistId: specialistId,
       status: ConsultationStatus.SPECIALIST_COMPLETED
+    });
+
+    // Notifie l'infirmier créateur que l'avis du spécialiste est disponible.
+    void notificationService.emit({
+      recipientUserId: consultation.createdByUserId,
+      type: 'EXPERTISE_COMPLETED',
+      title: 'Avis spécialiste disponible',
+      body: "L'avis du spécialiste sur votre consultation est disponible.",
+      consultationId,
+      patientId: consultation.patientId
     });
 
     return completed;

@@ -5,6 +5,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../core/auth/session_controller.dart';
 import '../../../core/domain/korai_enums.dart';
+import '../../../core/notifications/notification_center.dart';
 import '../../../core/utils/consultation_format.dart';
 import '../../../core/widgets/ear_side_selector.dart';
 import '../../chatbot/presentation/korai_chatbot_screen.dart';
@@ -140,6 +141,7 @@ class _PatientHomePageState extends State<PatientHomePage> {
                     ],
                   ),
                   actions: [
+                    const NotificationBell(),
                     IconButton(
                       tooltip: 'Déconnexion',
                       onPressed: widget.session.logout,

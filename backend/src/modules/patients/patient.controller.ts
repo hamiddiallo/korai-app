@@ -1,5 +1,6 @@
 import type { Request, Response } from 'express';
 import { forbidden, notFound } from '../../common/errors/http-error.js';
+import { notificationService } from '../notifications/notification.service.js';
 import { patientService } from './patient.service.js';
 
 export class PatientController {
@@ -39,6 +40,18 @@ export class PatientController {
     }
 
     const updated = await patientService.update(String(req.params.id), req.body);
+
+    // Notifie le patient lié lorsque son dossier vient d'être validé.
+    if (!patient.isValidated && updated.isValidated && updated.userId) {
+      void notificationService.emit({
+        recipientUserId: updated.userId,
+        type: 'PATIENT_VALIDATED',
+        title: 'Dossier validé',
+        body: 'Votre dossier a été validé par un professionnel de santé.',
+        patientId: updated.id
+      });
+    }
+
     res.json({ patient: updated });
   }
 }
