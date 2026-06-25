@@ -4,8 +4,25 @@ import 'package:flutter/services.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../offline/offline_models.dart';
 import 'sync_outbox_dao.dart';
 import 'sync_service.dart';
+
+/// Élément en échec de synchronisation, présenté à l'utilisateur (libellé +
+/// cause), avec son identifiant d'outbox pour le réessai ciblé.
+class FailedSyncItem {
+  const FailedSyncItem({
+    required this.localId,
+    required this.title,
+    required this.subtitle,
+    this.error,
+  });
+
+  final String localId;
+  final String title;
+  final String subtitle;
+  final String? error;
+}
 
 class SyncState {
   const SyncState({
@@ -13,6 +30,7 @@ class SyncState {
     this.isSyncing = false,
     this.pendingCount = 0,
     this.failedCount = 0,
+    this.failedItems = const [],
     this.lastSyncedAt,
     this.errorMessage,
   });
@@ -21,6 +39,7 @@ class SyncState {
   final bool isSyncing;
   final int pendingCount;
   final int failedCount;
+  final List<FailedSyncItem> failedItems;
   final DateTime? lastSyncedAt;
   final String? errorMessage;
 
@@ -29,6 +48,7 @@ class SyncState {
     bool? isSyncing,
     int? pendingCount,
     int? failedCount,
+    List<FailedSyncItem>? failedItems,
     Object? lastSyncedAt = _unset,
     Object? errorMessage = _unset,
   }) {
@@ -37,6 +57,7 @@ class SyncState {
       isSyncing: isSyncing ?? this.isSyncing,
       pendingCount: pendingCount ?? this.pendingCount,
       failedCount: failedCount ?? this.failedCount,
+      failedItems: failedItems ?? this.failedItems,
       lastSyncedAt: identical(lastSyncedAt, _unset)
           ? this.lastSyncedAt
           : lastSyncedAt as DateTime?,
@@ -64,7 +85,12 @@ class SyncCubit extends Cubit<SyncState> {
   final SyncOutboxDao _outboxDao;
 
   StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
+  Timer? _retryTimer;
   bool _started = false;
+
+  /// Période de relance automatique : couvre les entrées dont le `next_retry_at`
+  /// arrive à échéance sans qu'un changement de connectivité ne se produise.
+  static const _retryInterval = Duration(seconds: 90);
 
   Future<void> start() async {
     if (_started) {
@@ -87,11 +113,23 @@ class SyncCubit extends Cubit<SyncState> {
       if (!isClosed) emit(state.copyWith(isOnline: false));
     }
 
+    _startRetryTimer();
     await refreshCounts();
+  }
+
+  void _startRetryTimer() {
+    _retryTimer?.cancel();
+    _retryTimer = Timer.periodic(_retryInterval, (_) {
+      if (state.isOnline && !state.isSyncing && state.pendingCount > 0) {
+        unawaited(synchronizeNow());
+      }
+    });
   }
 
   Future<void> stop() async {
     _started = false;
+    _retryTimer?.cancel();
+    _retryTimer = null;
     await _connectivitySubscription?.cancel();
     _connectivitySubscription = null;
     if (!isClosed) {
@@ -102,9 +140,13 @@ class SyncCubit extends Cubit<SyncState> {
   Future<void> refreshCounts() async {
     try {
       final pending = await _outboxDao.countPending();
-      final failed = await _outboxDao.countFailed();
+      final failedEntries = await _outboxDao.listFailed();
       if (!isClosed) {
-        emit(state.copyWith(pendingCount: pending, failedCount: failed));
+        emit(state.copyWith(
+          pendingCount: pending,
+          failedCount: failedEntries.length,
+          failedItems: failedEntries.map(_toFailedItem).toList(),
+        ));
       }
     } on MissingPluginException {
       // Base de données non disponible sur cette plateforme — on ignore.
@@ -113,19 +155,73 @@ class SyncCubit extends Cubit<SyncState> {
     }
   }
 
+  /// Remet en file un élément en échec précis, puis tente la synchronisation.
+  Future<void> retryItem(String localId) async {
+    await _outboxDao.requeueFailed(localId);
+    await synchronizeNow();
+    await refreshCounts();
+  }
+
+  /// Remet en file tous les éléments en échec, puis tente la synchronisation.
+  /// Sert aussi de relance générale (couvre les éléments en attente).
+  Future<void> retryAll() async {
+    await _outboxDao.requeueAllFailed();
+    await synchronizeNow();
+    await refreshCounts();
+  }
+
+  FailedSyncItem _toFailedItem(SyncOutboxEntry entry) {
+    String title;
+    String subtitle;
+    if (entry.operation == OutboxOperation.createPatient.value) {
+      final firstName = entry.payload['firstName']?.toString() ?? '';
+      final lastName = entry.payload['lastName']?.toString() ?? '';
+      final name = '$firstName $lastName'.trim();
+      title = name.isEmpty ? 'Patient' : name;
+      subtitle = 'Création de patient';
+    } else if (entry.operation == OutboxOperation.submitDiagnosis.value) {
+      final diagnosis = entry.payload['diagnosisPayload'];
+      final narrative =
+          diagnosis is Map ? diagnosis['symptoms']?.toString() ?? '' : '';
+      title = _patientNameFromNarrative(narrative) ?? 'Consultation';
+      subtitle = 'Analyse de consultation';
+    } else {
+      title = 'Élément à synchroniser';
+      subtitle = entry.operation;
+    }
+    return FailedSyncItem(
+      localId: entry.localId,
+      title: title,
+      subtitle: subtitle,
+      error: entry.lastError,
+    );
+  }
+
+  String? _patientNameFromNarrative(String narrative) {
+    for (final line in narrative.split('\n')) {
+      final trimmed = line.trim();
+      if (trimmed.startsWith('Patient:')) {
+        final value = trimmed.substring('Patient:'.length).trim();
+        if (value.isNotEmpty) return value;
+      }
+    }
+    return null;
+  }
+
   Future<void> synchronizeNow() async {
     if (state.isSyncing || !state.isOnline) return;
 
     emit(state.copyWith(isSyncing: true, errorMessage: null));
     try {
       final summary = await _syncService.synchronizePending();
-      final failed = await _outboxDao.countFailed();
+      final failedEntries = await _outboxDao.listFailed();
       if (!isClosed) {
         emit(
           state.copyWith(
             isSyncing: false,
             pendingCount: summary.pending,
-            failedCount: failed,
+            failedCount: failedEntries.length,
+            failedItems: failedEntries.map(_toFailedItem).toList(),
             lastSyncedAt: DateTime.now(),
             errorMessage: null,
           ),
@@ -158,6 +254,7 @@ class SyncCubit extends Cubit<SyncState> {
 
   @override
   Future<void> close() async {
+    _retryTimer?.cancel();
     await _connectivitySubscription?.cancel();
     return super.close();
   }

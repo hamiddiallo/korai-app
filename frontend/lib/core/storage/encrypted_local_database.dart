@@ -14,7 +14,7 @@ class EncryptedLocalDatabase {
   static final EncryptedLocalDatabase instance = EncryptedLocalDatabase();
 
   static const _databaseName = 'korai_offline.db';
-  static const _databaseVersion = 1;
+  static const _databaseVersion = 3;
   static const _cipherKeyName = 'korai_sqlcipher_key';
 
   final FlutterSecureStorage _secureStorage;
@@ -36,8 +36,48 @@ class EncryptedLocalDatabase {
         await db.execute('PRAGMA foreign_keys = ON');
       },
       onCreate: _createSchema,
+      onUpgrade: _upgradeSchema,
     );
     return _database!;
+  }
+
+  /// Migrations incrémentales de la base locale chiffrée.
+  Future<void> _upgradeSchema(Database db, int oldVersion, int newVersion) async {
+    // v1 → v2 : empreinte clinique pour la déduplication/réutilisation IA.
+    if (oldVersion < 2) {
+      await db.execute(
+        'ALTER TABLE local_consultations ADD COLUMN clinical_fingerprint TEXT',
+      );
+      await db.execute(
+        'CREATE INDEX IF NOT EXISTS local_consultations_fingerprint_idx '
+        'ON local_consultations(clinical_fingerprint, status)',
+      );
+    }
+
+    // v2 → v3 : cache des notifications (serveur + locales de synchronisation).
+    if (oldVersion < 3) {
+      await _createNotificationsTable(db);
+    }
+  }
+
+  Future<void> _createNotificationsTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE notifications (
+        id TEXT PRIMARY KEY,
+        type TEXT NOT NULL,
+        title TEXT NOT NULL,
+        body TEXT NOT NULL,
+        consultation_id TEXT,
+        patient_id TEXT,
+        is_read INTEGER NOT NULL DEFAULT 0,
+        is_local INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL
+      )
+    ''');
+    await db.execute(
+      'CREATE INDEX notifications_read_idx '
+      'ON notifications(is_read, created_at)',
+    );
   }
 
   Future<String> _getOrCreateCipherKey() async {
@@ -123,6 +163,7 @@ class EncryptedLocalDatabase {
         status TEXT NOT NULL,
         sync_status TEXT NOT NULL,
         last_sync_error TEXT,
+        clinical_fingerprint TEXT,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL,
         FOREIGN KEY(local_patient_id) REFERENCES local_patients(local_id)
@@ -136,6 +177,10 @@ class EncryptedLocalDatabase {
     await db.execute(
       'CREATE INDEX local_consultations_sync_status_idx '
       'ON local_consultations(sync_status, updated_at)',
+    );
+    await db.execute(
+      'CREATE INDEX local_consultations_fingerprint_idx '
+      'ON local_consultations(clinical_fingerprint, status)',
     );
 
     await db.execute('''
@@ -230,5 +275,9 @@ class EncryptedLocalDatabase {
       'CREATE INDEX sync_outbox_status_idx '
       'ON sync_outbox(status, priority, next_retry_at, created_at)',
     );
+
+    // Table notifications : indispensable dès la première installation
+    // (sinon NotificationCubit/SyncService échouent sur « no such table »).
+    await _createNotificationsTable(db);
   }
 }

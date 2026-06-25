@@ -123,6 +123,29 @@ class LocalDiagnosisSyncRecord {
       };
 }
 
+/// Réponse IA mise en cache localement, candidate à la réutilisation pour une
+/// nouvelle consultation de même empreinte clinique (sans appeler le modèle).
+class LocalCachedAiResponse {
+  const LocalCachedAiResponse({
+    required this.rawJson,
+    required this.warnings,
+    required this.sources,
+    this.imageOpinion,
+    this.ragOpinion,
+    this.likelyDiagnosis,
+    this.confidenceLabel,
+  });
+
+  /// JSON complet du cas source (sert de base à l'AiCase réutilisé).
+  final String rawJson;
+  final String? imageOpinion;
+  final String? ragOpinion;
+  final String? likelyDiagnosis;
+  final String? confidenceLabel;
+  final List<String> warnings;
+  final List<String> sources;
+}
+
 class NurseLocalDao {
   NurseLocalDao({
     EncryptedLocalDatabase? database,
@@ -364,6 +387,9 @@ class NurseLocalDao {
           'touch_observations_json': jsonEncode(payload.touchObservations),
           'status': 'PENDING_AI',
           'sync_status': SyncStatus.pendingSync.value,
+          // Empreinte uniquement pour les consultations SANS image (dédup IA).
+          'clinical_fingerprint':
+              image == null ? payload.clinicalFingerprint : null,
           'created_at': now,
           'updated_at': now,
         },
@@ -445,6 +471,14 @@ class NurseLocalDao {
         whereArgs: [consultationLocalId],
       );
 
+      // Idempotence : remplace toute réponse existante (ex. réutilisation
+      // hors-ligne) par la version serveur canonique.
+      await txn.delete(
+        'local_ai_responses',
+        where: 'local_consultation_id = ?',
+        whereArgs: [consultationLocalId],
+      );
+
       await txn.insert(
         'local_ai_responses',
         {
@@ -490,6 +524,106 @@ class NurseLocalDao {
       entityLocalId: consultationLocalId,
       error: error,
     );
+  }
+
+  /// Cherche dans le cache local une réponse IA exploitable (consultation
+  /// AI_COMPLETED, sans image, avec un diagnostic) partageant l'empreinte donnée.
+  Future<LocalCachedAiResponse?> findCachedAiResponseByFingerprint(
+    String fingerprint,
+  ) async {
+    if (fingerprint.isEmpty) return null;
+    final db = await _database.database;
+    final rows = await db.rawQuery(
+      '''
+      SELECT r.raw_json, r.image_opinion, r.rag_opinion, r.likely_diagnosis,
+             r.confidence_label, r.warnings_json, r.sources_json
+      FROM local_consultations c
+      JOIN local_ai_responses r ON r.local_consultation_id = c.local_id
+      WHERE c.clinical_fingerprint = ?
+        AND c.status = 'AI_COMPLETED'
+        AND r.likely_diagnosis IS NOT NULL AND r.likely_diagnosis <> ''
+      ORDER BY c.updated_at DESC
+      LIMIT 1
+      ''',
+      [fingerprint],
+    );
+    if (rows.isEmpty) return null;
+    final row = rows.first;
+    return LocalCachedAiResponse(
+      rawJson: row['raw_json']?.toString() ?? '{}',
+      imageOpinion: row['image_opinion']?.toString(),
+      ragOpinion: row['rag_opinion']?.toString(),
+      likelyDiagnosis: row['likely_diagnosis']?.toString(),
+      confidenceLabel: row['confidence_label']?.toString(),
+      warnings: _decodeStringList(row['warnings_json']),
+      sources: _decodeStringList(row['sources_json']),
+    );
+  }
+
+  /// Applique une réponse IA réutilisée à une consultation locale : statut
+  /// AI_COMPLETED + insertion de la réponse (avec avertissement de traçabilité).
+  /// La consultation reste `pendingSync` pour réconciliation serveur ultérieure.
+  Future<void> applyReusedAiResponse({
+    required String consultationLocalId,
+    required LocalCachedAiResponse cached,
+  }) async {
+    final db = await _database.database;
+    final now = DateTime.now().toUtc().toIso8601String();
+    const reuseWarning =
+        "Réponse IA réutilisée d'une consultation clinique identique (sans nouvelle analyse IA).";
+    final warnings = cached.warnings.contains(reuseWarning)
+        ? cached.warnings
+        : [reuseWarning, ...cached.warnings];
+
+    await db.transaction((txn) async {
+      await txn.update(
+        'local_consultations',
+        {
+          'status': 'AI_COMPLETED',
+          'last_sync_error': null,
+          'updated_at': now,
+        },
+        where: 'local_id = ?',
+        whereArgs: [consultationLocalId],
+      );
+      await txn.delete(
+        'local_ai_responses',
+        where: 'local_consultation_id = ?',
+        whereArgs: [consultationLocalId],
+      );
+      await txn.insert(
+        'local_ai_responses',
+        {
+          'local_id': '$localIdPrefix${_uuid.v4()}',
+          'local_consultation_id': consultationLocalId,
+          'server_consultation_id': null,
+          'raw_json': cached.rawJson,
+          'image_opinion': cached.imageOpinion,
+          'rag_opinion': cached.ragOpinion,
+          'likely_diagnosis': cached.likelyDiagnosis,
+          'confidence_label': cached.confidenceLabel,
+          'warnings_json': jsonEncode(warnings),
+          'sources_json': jsonEncode(cached.sources),
+          'created_at': now,
+        },
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+    });
+  }
+
+  /// Statut de synchronisation du patient (local ou serveur). `null` si inconnu.
+  /// Sert à détecter qu'une consultation dépend d'un patient durablement en échec.
+  Future<SyncStatus?> patientSyncStatus(String localPatientId) async {
+    final db = await _database.database;
+    final rows = await db.query(
+      'local_patients',
+      columns: ['sync_status'],
+      where: 'local_id = ? OR server_id = ?',
+      whereArgs: [localPatientId, localPatientId],
+      limit: 1,
+    );
+    if (rows.isEmpty) return null;
+    return SyncStatus.fromValue(rows.first['sync_status']?.toString());
   }
 
   Future<LocalDiagnosisSyncRecord?> getDiagnosisSyncRecord(

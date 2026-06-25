@@ -23,7 +23,8 @@ class SyncStatusBanner extends StatelessWidget {
           prev.isOnline != next.isOnline ||
           prev.isSyncing != next.isSyncing ||
           prev.pendingCount != next.pendingCount ||
-          prev.failedCount != next.failedCount,
+          prev.failedCount != next.failedCount ||
+          prev.lastSyncedAt != next.lastSyncedAt,
       builder: (context, state) {
         final config = _BannerConfig.from(state);
 
@@ -82,8 +83,7 @@ class _BannerConfig {
     // Hors ligne
     if (!state.isOnline) {
       final count = state.pendingCount;
-      final suffix =
-          count > 0 ? ' ($count en attente)' : '';
+      final suffix = count > 0 ? ' ($count en attente)' : '';
       return _BannerConfig(
         backgroundColor: const Color(0xFFFEF3C7),
         borderColor: const Color(0xFFF59E0B),
@@ -99,7 +99,8 @@ class _BannerConfig {
         backgroundColor: const Color(0xFFFEE2E2),
         borderColor: const Color(0xFFEF4444),
         icon: Icons.sync_problem_rounded,
-        label: '$n ${n == 1 ? 'élément a' : 'éléments ont'} échoué',
+        label: '$n ${n == 1 ? 'élément a' : 'éléments ont'} échoué'
+            '${_syncedSuffix(state)}',
       );
     }
 
@@ -110,11 +111,22 @@ class _BannerConfig {
         backgroundColor: const Color(0xFFEFF6FF),
         borderColor: const Color(0xFF60A5FA),
         icon: Icons.cloud_upload_outlined,
-        label: '$n ${n == 1 ? 'élément en' : 'éléments en'} attente d\'envoi',
+        label: '$n ${n == 1 ? 'élément en' : 'éléments en'} attente d\'envoi'
+            '${_syncedSuffix(state)}',
       );
     }
 
     return null;
+  }
+
+  /// Suffixe « · synchro HH:MM » rappelant la dernière synchro réussie.
+  static String _syncedSuffix(SyncState state) {
+    final at = state.lastSyncedAt;
+    if (at == null) return '';
+    final local = at.toLocal();
+    final hh = local.hour.toString().padLeft(2, '0');
+    final mm = local.minute.toString().padLeft(2, '0');
+    return ' · synchro $hh:$mm';
   }
 }
 
@@ -136,84 +148,85 @@ class _BannerContent extends StatelessWidget {
     final cubit = context.read<SyncCubit>();
     final canRetry = state.isOnline && !state.isSyncing;
 
-    return AnimatedSwitcher(
-      duration: const Duration(milliseconds: 200),
-      child: Container(
-        key: ValueKey(config.label),
-        margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        decoration: BoxDecoration(
-          color: config.backgroundColor,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: config.borderColor, width: 1.2),
-          boxShadow: [
-            BoxShadow(
-              color: config.borderColor.withValues(alpha: 0.12),
-              blurRadius: 6,
-              offset: const Offset(0, 2),
-            ),
-          ],
-        ),
-        child: Row(
-          children: [
-            // Icône / spinner
-            config.showSpinner
-                ? SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: config.borderColor,
-                    ),
-                  )
-                : Icon(config.icon, size: 16, color: config.borderColor),
+    // Pas d'AnimatedSwitcher ici : ses clés (ValueKey sur le libellé) peuvent
+    // se répéter et provoquer un crash « Duplicate keys » pendant une
+    // transition. L'AnimatedSize parent suffit pour l'apparition/disparition.
+    return Container(
+      key: ValueKey(config.label),
+      margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: config.backgroundColor,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: config.borderColor, width: 1.2),
+        boxShadow: [
+          BoxShadow(
+            color: config.borderColor.withValues(alpha: 0.12),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          // Icône / spinner
+          config.showSpinner
+              ? SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: config.borderColor,
+                  ),
+                )
+              : Icon(config.icon, size: 16, color: config.borderColor),
 
+          const SizedBox(width: 8),
+
+          // Message
+          Expanded(
+            child: Text(
+              config.label,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: config.borderColor,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+
+          // Bouton Réessayer (masqué pendant la sync ou si pas de retry utile)
+          if (!config.showSpinner &&
+              (state.failedCount > 0 || state.pendingCount > 0)) ...[
             const SizedBox(width: 8),
-
-            // Message
-            Expanded(
-              child: Text(
-                config.label,
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: config.borderColor,
+            GestureDetector(
+              onTap: canRetry ? cubit.retryAll : null,
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 150),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: canRetry
+                      ? config.borderColor
+                      : config.borderColor.withValues(alpha: 0.35),
+                  borderRadius: BorderRadius.circular(20),
                 ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
+                child: Text(
+                  'Réessayer',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: canRetry
+                        ? Colors.white
+                        : Colors.white.withValues(alpha: 0.6),
+                  ),
+                ),
               ),
             ),
-
-            // Bouton Réessayer (masqué pendant la sync ou si pas de retry utile)
-            if (!config.showSpinner && (state.failedCount > 0 || state.pendingCount > 0)) ...[
-              const SizedBox(width: 8),
-              GestureDetector(
-                onTap: canRetry ? cubit.synchronizeNow : null,
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 150),
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: canRetry
-                        ? config.borderColor
-                        : config.borderColor.withValues(alpha: 0.35),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Text(
-                    'Réessayer',
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                      color: canRetry
-                          ? Colors.white
-                          : Colors.white.withValues(alpha: 0.6),
-                    ),
-                  ),
-                ),
-              ),
-            ],
           ],
-        ),
+        ],
       ),
     );
   }
