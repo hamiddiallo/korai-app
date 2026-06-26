@@ -33,17 +33,10 @@ export PATH="$PATH:/chemin/vers/flutter/bin"
 | Appareil physique | `http://<IP-LAN-de-la-machine>:4000` |
 | Production | `https://api.votre-domaine.com` |
 
-> Le `.env` réel est **gitignoré** ; seul `.env.example` est versionné. Comme il est embarqué dans l'app, n'y mettez **que de la config non sensible** (l'URL) — jamais de secret.
 
-### Comment l'URL est résolue (ordre de priorité)
 
-`ApiConfig.baseUrl` cherche `KORAI_API_URL` dans cet ordre, et prend **la première valeur trouvée** :
 
-1. `--dart-define=KORAI_API_URL=...` passé à la commande de build *(prioritaire)* ;
-2. la clé `KORAI_API_URL` du fichier **`.env`** *(cas normal)* ;
-3. à défaut, une valeur par défaut selon la plateforme (dev local).
 
-En usage quotidien, **le `.env` suffit** : tu n'as rien d'autre à faire.
 
 ### Override ponctuel via `--dart-define` (optionnel)
 
