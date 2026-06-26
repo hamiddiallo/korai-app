@@ -14,7 +14,7 @@ npm run dev
 
 ### Service IA (ngrok)
 
-Le backend ne contacte **pas** `localhost:8000`. Il proxy vers l'URL definie dans `.env` :
+Il proxy vers l'URL definie dans `.env` :
 
 ```env
 AI_SERVICE_BASE_URL=https://votre-tunnel.ngrok-free.app
@@ -39,23 +39,30 @@ Comptes de demonstration crees au demarrage:
 
 - `POST /auth/login`
 - `POST /auth/register/patient`
-- `POST /auth/register/nurse`
+- `POST /auth/register/nurse` (compte en attente, lie a un matricule superviseur)
+- `POST /auth/register/specialist` (auto-actif via son matricule Medecin)
 - `POST /auth/register` reserve au role `ADMIN`
+- `GET /auth/me`
 - `GET|POST|PATCH|DELETE /admin/users`
 - `GET|PATCH|DELETE /admin/patients`
 - `GET|POST|PATCH|DELETE /admin/clinical-items`
-- `GET /auth/me`
+- `GET|POST|PATCH|DELETE /admin/medecins` (registre Medecin)
 - `GET /patients`
 - `POST /patients`
 - `GET /cases`
 - `POST /cases/diagnose` en `multipart/form-data`
 - `POST /cases/:id/request-specialist-review`
 - `POST /cases/:id/specialist-review`
+- `GET /expertise` (file d'attente specialiste)
 - `GET|POST /chat/conversations`
 - `GET|PATCH /chat/conversations/:id`
 - `GET|POST /chat/conversations/:id/messages`
 - `POST /chat/conversations/:id/messages/:messageId/retry`
 - `PATCH /chat/conversations/:id/read`
+- `GET /notifications`, `GET /notifications/unread-count`
+- `PATCH /notifications/:id/read`, `POST /notifications/read-all`
+- `GET /registrations/nurses` (demandes en attente, expert/admin)
+- `POST /registrations/nurses/:id/approve`, `POST /registrations/nurses/:id/reject`
 
 ## Creation de compte
 
