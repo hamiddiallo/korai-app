@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 import 'core/api/api_client.dart';
 import 'core/auth/session_controller.dart';
@@ -16,7 +17,15 @@ import 'features/nurse/presentation/nurse_home_page.dart';
 import 'features/patient/presentation/patient_home_page.dart';
 import 'features/specialist/presentation/specialist_home_page.dart';
 
-void main() {
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  // Charge le `.env` (URL backend, etc.). Absent ? On retombe sur
+  // --dart-define ou l'heuristique plateforme (cf. ApiConfig.baseUrl).
+  try {
+    await dotenv.load(fileName: '.env');
+  } catch (_) {
+    // `.env` introuvable : configuration assuree par les valeurs par defaut.
+  }
   runApp(const KoraiApp());
 }
 

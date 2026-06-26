@@ -1,3 +1,8 @@
+# Variables d'environnement (ne JAMAIS committer le vrai .env)
+.env
+.env.*
+!.env.example
+
 # Miscellaneous
 *.class
 *.log
