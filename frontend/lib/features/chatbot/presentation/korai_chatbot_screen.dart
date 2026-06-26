@@ -391,27 +391,30 @@ class _KoraiChatbotScreenState extends State<KoraiChatbotScreen> {
                 height: 1.4,
               ),
             ),
-            if (message.sources.isNotEmpty) ...[
-              const SizedBox(height: 10),
-              Wrap(
-                spacing: 6,
-                runSpacing: 6,
-                children: message.sources
-                    .take(4)
-                    .map(
-                      (source) => Chip(
-                        label: Text(
-                          source,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(fontSize: 11),
-                        ),
-                        visualDensity: VisualDensity.compact,
-                      ),
-                    )
-                    .toList(),
-              ),
-            ],
+            // TODO(sources): puce des sources masquée temporairement le temps des
+            // captures d'écran (affichait "[object Object]"). À corriger en
+            // profondeur puis réactiver.
+            // if (message.sources.isNotEmpty) ...[
+            //   const SizedBox(height: 10),
+            //   Wrap(
+            //     spacing: 6,
+            //     runSpacing: 6,
+            //     children: message.sources
+            //         .take(4)
+            //         .map(
+            //           (source) => Chip(
+            //             label: Text(
+            //               source,
+            //               maxLines: 1,
+            //               overflow: TextOverflow.ellipsis,
+            //               style: const TextStyle(fontSize: 11),
+            //             ),
+            //             visualDensity: VisualDensity.compact,
+            //           ),
+            //         )
+            //         .toList(),
+            //   ),
+            // ],
             if (message.isFailed && message.isAssistant) ...[
               const SizedBox(height: 8),
               TextButton.icon(
