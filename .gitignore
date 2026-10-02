@@ -14,3 +14,24 @@ classe.sql
 classse.md
 use_case.md
 docs
+# Photos chiffrées du serveur (jamais dans le dépôt)
+backend/storage/
+
+# Fichiers d'agents IA (Claude, Cursor, Copilot…) : toujours en local, jamais dans le dépôt
+.claude/
+**/.claude/
+CLAUDE.md
+**/CLAUDE.md
+CLAUDE.local.md
+**/CLAUDE.local.md
+AGENTS.md
+**/AGENTS.md
+GEMINI.md
+.gemini/
+.mcp.json
+.cursor/
+.cursorrules
+.windsurfrules
+.codex/
+.aider*
+.github/copilot-instructions.md
