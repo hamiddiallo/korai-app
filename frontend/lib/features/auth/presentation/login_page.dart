@@ -1,9 +1,15 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../core/auth/session_controller.dart';
+import '../../../core/design/design.dart';
+import '../../../core/utils/validators.dart';
+import 'patient_register_page.dart';
 import 'professional_register_page.dart';
 
+/// Connexion unique : le rôle (soignant, spécialiste, patient, admin) est
+/// déterminé par le serveur, l'utilisateur n'a rien à choisir.
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key, required this.session});
 
@@ -13,224 +19,163 @@ class LoginPage extends StatefulWidget {
   State<LoginPage> createState() => _LoginPageState();
 }
 
-class _LoginPageState extends State<LoginPage>
-    with SingleTickerProviderStateMixin {
-  late TabController _tabController;
-
-  // Login controllers
-  final emailController = TextEditingController(text: 'nurse@korai.local');
-  final passwordController = TextEditingController(text: 'Password123!');
-
-  // Register controllers
-  final regFirstNameController = TextEditingController();
-  final regLastNameController = TextEditingController();
-  final regEmailController = TextEditingController();
-  final regPhoneController = TextEditingController();
-  final regPasswordController = TextEditingController();
-
-  bool _isProfessionalMode = true;
-
-  @override
-  void initState() {
-    super.initState();
-    _tabController = TabController(length: 2, vsync: this);
-  }
+class _LoginPageState extends State<LoginPage> {
+  final _formKey = GlobalKey<FormState>();
+  final _email = TextEditingController();
+  final _password = TextEditingController();
+  bool _obscure = true;
 
   @override
   void dispose() {
-    _tabController.dispose();
-    emailController.dispose();
-    passwordController.dispose();
-    regFirstNameController.dispose();
-    regLastNameController.dispose();
-    regEmailController.dispose();
-    regPhoneController.dispose();
-    regPasswordController.dispose();
+    _email.dispose();
+    _password.dispose();
     super.dispose();
   }
 
-  void _handleLogin() {
-    widget.session.login(
-      emailController.text.trim(),
-      passwordController.text,
-    );
+  void _submit() {
+    FocusScope.of(context).unfocus();
+    widget.session.clearError();
+    if (!(_formKey.currentState?.validate() ?? false)) return;
+    widget.session.login(_email.text.trim(), _password.text);
   }
 
-  void _handleRegister() {
-    if (regFirstNameController.text.trim().isEmpty ||
-        regLastNameController.text.trim().isEmpty ||
-        regEmailController.text.trim().isEmpty ||
-        regPasswordController.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Veuillez remplir tous les champs obligatoires.'),
-          backgroundColor: Colors.red,
-        ),
-      );
-      return;
-    }
-
-    widget.session.registerPatient(
-      firstName: regFirstNameController.text.trim(),
-      lastName: regLastNameController.text.trim(),
-      email: regEmailController.text.trim(),
-      password: regPasswordController.text,
-      phone: regPhoneController.text.trim(),
-    );
+  void _openRegister(Widget page) {
+    widget.session.clearError();
+    Navigator.of(context).push(MaterialPageRoute(builder: (_) => page));
   }
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    final k = context.k;
     return BlocBuilder<AuthCubit, AuthState>(
       bloc: widget.session,
-      builder: (context, authState) {
+      builder: (context, state) {
+        final busy = state.isSubmitting;
         return Scaffold(
-          body: Container(
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  Color(0xFFE8F1F2),
-                  Color(0xFFB2F2BB), // Smooth minty clean medical look
-                ],
-              ),
-            ),
-            child: SafeArea(
+          body: SafeArea(
+            child: GestureDetector(
+              onTap: () => FocusScope.of(context).unfocus(),
               child: Center(
                 child: SingleChildScrollView(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                  padding: const EdgeInsets.fromLTRB(KSpace.lg, KSpace.lg, KSpace.lg, KSpace.xl),
                   child: ConstrainedBox(
                     constraints: const BoxConstraints(maxWidth: 440),
                     child: Column(
-                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        // Brand / Logo Header
-                        Container(
-                          padding: const EdgeInsets.all(16),
-                          decoration: BoxDecoration(
-                            color:
-                                const Color(0xFF006D77).withValues(alpha: 0.1),
-                            shape: BoxShape.circle,
-                          ),
-                          child: const Icon(
-                            Icons.hearing_rounded,
-                            size: 54,
-                            color: Color(0xFF006D77),
-                          ),
+                        const _BrandHeader(),
+                        const SizedBox(height: KSpace.xl),
+                        Text('Connexion', style: context.text.headlineSmall),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Un seul accès pour les soignants, les spécialistes et les patients.',
+                          style: context.text.bodyMedium?.copyWith(color: k.inkMuted),
                         ),
-                        const SizedBox(height: 12),
-                        const Text(
-                          'KORAI ORL',
-                          style: TextStyle(
-                            fontSize: 28,
-                            fontWeight: FontWeight.w900,
-                            color: Color(0xFF006D77),
-                            letterSpacing: 1.2,
-                          ),
-                        ),
-                        const SizedBox(height: 6),
-                        const Text(
-                          'Plateforme intelligente de pré-consultation ORL',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: Colors.black54,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                        const SizedBox(height: 24),
-
-                        // Modern card
-                        Container(
-                          decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: 0.95),
-                            borderRadius: BorderRadius.circular(28),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withValues(alpha: 0.08),
-                                blurRadius: 24,
-                                offset: const Offset(0, 12),
-                              ),
-                            ],
-                          ),
-                          child: ClipRRect(
-                            borderRadius: BorderRadius.circular(28),
+                        const SizedBox(height: KSpace.lg),
+                        AutofillGroup(
+                          child: Form(
+                            key: _formKey,
                             child: Column(
                               children: [
-                                // Custom Tab Bar
-                                Container(
-                                  color: Colors.grey.shade100,
-                                  child: TabBar(
-                                    controller: _tabController,
-                                    indicatorColor: const Color(0xFF006D77),
-                                    labelColor: const Color(0xFF006D77),
-                                    unselectedLabelColor: Colors.black54,
-                                    indicatorWeight: 3.5,
-                                    labelStyle: const TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 15),
-                                    tabs: const [
-                                      Tab(text: 'Connexion'),
-                                      Tab(text: 'Créer un compte'),
-                                    ],
+                                TextFormField(
+                                  controller: _email,
+                                  keyboardType: TextInputType.emailAddress,
+                                  textInputAction: TextInputAction.next,
+                                  autofillHints: const [AutofillHints.email, AutofillHints.username],
+                                  autocorrect: false,
+                                  enabled: !busy,
+                                  decoration: const InputDecoration(
+                                    labelText: 'Adresse e-mail',
+                                    prefixIcon: Icon(Icons.mail_outline_rounded),
                                   ),
+                                  validator: KValidators.email,
                                 ),
-
-                                Container(
-                                  padding: const EdgeInsets.all(24),
-                                  height: 430,
-                                  child: TabBarView(
-                                    controller: _tabController,
-                                    children: [
-                                      _buildLoginTab(theme),
-                                      _buildRegisterTab(theme),
-                                    ],
+                                const SizedBox(height: KSpace.sm),
+                                TextFormField(
+                                  controller: _password,
+                                  obscureText: _obscure,
+                                  textInputAction: TextInputAction.done,
+                                  autofillHints: const [AutofillHints.password],
+                                  enabled: !busy,
+                                  onFieldSubmitted: (_) => _submit(),
+                                  decoration: InputDecoration(
+                                    labelText: 'Mot de passe',
+                                    prefixIcon: const Icon(Icons.lock_outline_rounded),
+                                    suffixIcon: IconButton(
+                                      tooltip: _obscure ? 'Afficher le mot de passe' : 'Masquer le mot de passe',
+                                      icon: Icon(_obscure ? Icons.visibility_outlined : Icons.visibility_off_outlined),
+                                      onPressed: () => setState(() => _obscure = !_obscure),
+                                    ),
                                   ),
+                                  validator: (v) => KValidators.required(v, 'Mot de passe'),
                                 ),
                               ],
                             ),
                           ),
                         ),
-
-                        if (authState.errorMessage != null) ...[
-                          const SizedBox(height: 16),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 16, vertical: 10),
-                            decoration: BoxDecoration(
-                              color: Colors.red.shade50,
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(color: Colors.red.shade200),
-                            ),
-                            child: Text(
-                              authState.errorMessage!,
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                  color: Colors.red.shade900,
-                                  fontWeight: FontWeight.w600,
-                                  fontSize: 13),
-                            ),
+                        if (state.errorMessage != null) ...[
+                          const SizedBox(height: KSpace.md),
+                          _LoginError(message: state.errorMessage!),
+                        ],
+                        const SizedBox(height: KSpace.lg),
+                        FilledButton(
+                          onPressed: busy ? null : _submit,
+                          style: busy
+                              ? FilledButton.styleFrom(
+                                  disabledBackgroundColor: k.brand.withValues(alpha: 0.85),
+                                  disabledForegroundColor: k.onBrand,
+                                )
+                              : null,
+                          child: busy
+                              ? Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    SizedBox(
+                                      width: 18,
+                                      height: 18,
+                                      child: CircularProgressIndicator(strokeWidth: 2.4, color: k.onBrand),
+                                    ),
+                                    const SizedBox(width: 10),
+                                    const Text('Connexion…'),
+                                  ],
+                                )
+                              : const Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(Icons.login_rounded),
+                                    SizedBox(width: 8),
+                                    Text('Se connecter'),
+                                  ],
+                                ),
+                        ),
+                        if (kDebugMode) ...[
+                          const SizedBox(height: KSpace.md),
+                          _DemoAccounts(
+                            enabled: !busy,
+                            onPick: (email) {
+                              widget.session.clearError();
+                              setState(() {
+                                _email.text = email;
+                                _password.text = 'Password123!';
+                              });
+                            },
                           ),
                         ],
-                        const SizedBox(height: 12),
-                        TextButton.icon(
-                          onPressed: () => Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (_) => ProfessionalRegisterPage(
-                                  session: widget.session),
-                            ),
-                          ),
-                          icon: const Icon(Icons.badge_outlined,
-                              size: 18, color: Color(0xFF006D77)),
-                          label: const Text(
-                            'Professionnel de santé ? S\'inscrire ici',
-                            style: TextStyle(
-                                color: Color(0xFF006D77),
-                                fontWeight: FontWeight.w600),
-                          ),
+                        const SizedBox(height: KSpace.xl),
+                        Text('Pas encore de compte ?', style: context.text.titleMedium),
+                        const SizedBox(height: KSpace.sm),
+                        _RegisterChoice(
+                          icon: Icons.person_outline_rounded,
+                          title: 'Je suis patient',
+                          subtitle: 'Préparez votre consultation et retrouvez vos comptes-rendus.',
+                          onTap: busy ? null : () => _openRegister(PatientRegisterPage(session: widget.session)),
+                        ),
+                        const SizedBox(height: KSpace.xs),
+                        _RegisterChoice(
+                          icon: Icons.medical_services_outlined,
+                          title: 'Je suis professionnel de santé',
+                          subtitle: 'Infirmier·ère ou spécialiste ORL, avec votre matricule.',
+                          onTap: busy ? null : () => _openRegister(ProfessionalRegisterPage(session: widget.session)),
                         ),
                       ],
                     ),
@@ -243,228 +188,139 @@ class _LoginPageState extends State<LoginPage>
       },
     );
   }
+}
 
-  Widget _buildLoginTab(ThemeData theme) {
+class _BrandHeader extends StatelessWidget {
+  const _BrandHeader();
+
+  @override
+  Widget build(BuildContext context) {
+    final k = context.k;
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // Mode toggle: Professional vs Patient
         Container(
-          padding: const EdgeInsets.all(4),
-          decoration: BoxDecoration(
-            color: Colors.grey.shade100,
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Row(
-            children: [
-              Expanded(
-                child: _buildToggleOption(
-                  label: 'Professionnel',
-                  isSelected: _isProfessionalMode,
-                  onTap: () {
-                    setState(() {
-                      _isProfessionalMode = true;
-                      emailController.text = 'nurse@korai.local';
-                      passwordController.text = 'Password123!';
-                    });
-                  },
-                ),
-              ),
-              Expanded(
-                child: _buildToggleOption(
-                  label: 'Patient',
-                  isSelected: !_isProfessionalMode,
-                  onTap: () {
-                    setState(() {
-                      _isProfessionalMode = false;
-                      emailController.clear();
-                      passwordController.clear();
-                    });
-                  },
-                ),
-              ),
-            ],
+          width: 68,
+          height: 68,
+          decoration: BoxDecoration(color: k.hero, borderRadius: BorderRadius.circular(22)),
+          child: Icon(Icons.hearing_rounded, size: 38, color: k.onHero),
+        ),
+        const SizedBox(height: KSpace.sm),
+        Text(
+          'Korai',
+          style: TextStyle(
+            fontFamily: KFonts.display,
+            fontWeight: FontWeight.w700,
+            fontSize: 34,
+            letterSpacing: -0.6,
+            color: k.ink,
           ),
         ),
-        const SizedBox(height: 24),
-
-        TextField(
-          controller: emailController,
-          keyboardType: TextInputType.emailAddress,
-          decoration: const InputDecoration(
-            labelText: 'Adresse e-mail',
-            prefixIcon: Icon(Icons.mail_outline_rounded),
-            border: OutlineInputBorder(),
-          ),
-        ),
-        const SizedBox(height: 16),
-        TextField(
-          controller: passwordController,
-          obscureText: true,
-          decoration: const InputDecoration(
-            labelText: 'Mot de passe',
-            prefixIcon: Icon(Icons.lock_outline_rounded),
-            border: OutlineInputBorder(),
-          ),
-        ),
-        const Spacer(),
-
-        SizedBox(
-          height: 52,
-          child: FilledButton.icon(
-            style: FilledButton.styleFrom(
-              backgroundColor: const Color(0xFF006D77),
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12)),
-            ),
-            onPressed: widget.session.isLoading ? null : _handleLogin,
-            icon: widget.session.isLoading
-                ? const SizedBox(
-                    height: 18,
-                    width: 18,
-                    child: CircularProgressIndicator(
-                        strokeWidth: 2, color: Colors.white),
-                  )
-                : const Icon(Icons.login_rounded),
-            label: Text(
-              widget.session.isLoading
-                  ? 'Connexion en cours...'
-                  : 'Se connecter',
-              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-            ),
-          ),
-        ),
+        Text('Assistant ORL', style: context.text.bodyMedium?.copyWith(color: k.inkMuted)),
       ],
     );
   }
+}
 
-  Widget _buildRegisterTab(ThemeData theme) {
-    return SingleChildScrollView(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+class _LoginError extends StatelessWidget {
+  const _LoginError({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    final lower = message.toLowerCase();
+    final (title, tone) = lower.contains('attente')
+        ? ('Compte en attente de validation', KTone.warning)
+        : lower.contains('refusée')
+            ? ('Inscription refusée', KTone.danger)
+            : (lower.contains('connexion') || lower.contains('réseau'))
+                ? ('Serveur injoignable', KTone.warning)
+                : ('Connexion impossible', KTone.danger);
+    return KBanner(title: title, message: message, tone: tone);
+  }
+}
+
+class _RegisterChoice extends StatelessWidget {
+  const _RegisterChoice({required this.icon, required this.title, required this.subtitle, required this.onTap});
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final k = context.k;
+    return KCard(
+      onTap: onTap,
+      padding: const EdgeInsets.all(KSpace.md),
+      child: Row(
         children: [
-          Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: regFirstNameController,
-                  decoration: const InputDecoration(
-                    labelText: 'Prénom',
-                    prefixIcon: Icon(Icons.person_outline),
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: TextField(
-                  controller: regLastNameController,
-                  decoration: const InputDecoration(
-                    labelText: 'Nom',
-                    prefixIcon: Icon(Icons.person_outline),
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-              ),
-            ],
+          Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(color: k.lagoon, shape: BoxShape.circle),
+            child: Icon(icon, color: k.brand),
           ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: regEmailController,
-            keyboardType: TextInputType.emailAddress,
-            decoration: const InputDecoration(
-              labelText: 'Adresse e-mail',
-              prefixIcon: Icon(Icons.mail_outline),
-              border: OutlineInputBorder(),
+          const SizedBox(width: KSpace.sm),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, style: context.text.titleSmall),
+                const SizedBox(height: 2),
+                Text(subtitle, style: context.text.bodySmall),
+              ],
             ),
           ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: regPhoneController,
-            keyboardType: TextInputType.phone,
-            decoration: const InputDecoration(
-              labelText: 'Téléphone (optionnel)',
-              prefixIcon: Icon(Icons.phone_outlined),
-              border: OutlineInputBorder(),
-            ),
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: regPasswordController,
-            obscureText: true,
-            decoration: const InputDecoration(
-              labelText: 'Mot de passe',
-              prefixIcon: Icon(Icons.lock_outline),
-              border: OutlineInputBorder(),
-            ),
-          ),
-          const SizedBox(height: 20),
-          SizedBox(
-            height: 52,
-            child: FilledButton.icon(
-              style: FilledButton.styleFrom(
-                backgroundColor: const Color(0xFF006D77),
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12)),
-              ),
-              onPressed: widget.session.isLoading ? null : _handleRegister,
-              icon: widget.session.isLoading
-                  ? const SizedBox(
-                      height: 18,
-                      width: 18,
-                      child: CircularProgressIndicator(
-                          strokeWidth: 2, color: Colors.white),
-                    )
-                  : const Icon(Icons.person_add_rounded),
-              label: Text(
-                widget.session.isLoading
-                    ? 'Création de compte...'
-                    : 'S\'inscrire',
-                style:
-                    const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-              ),
-            ),
-          ),
+          Icon(Icons.chevron_right_rounded, color: k.inkMuted),
         ],
       ),
     );
   }
+}
 
-  Widget _buildToggleOption({
-    required String label,
-    required bool isSelected,
-    required VoidCallback onTap,
-  }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
-        padding: const EdgeInsets.symmetric(vertical: 8),
-        decoration: BoxDecoration(
-          color: isSelected ? Colors.white : Colors.transparent,
-          borderRadius: BorderRadius.circular(10),
-          boxShadow: isSelected
-              ? [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.05),
-                    blurRadius: 4,
-                    offset: const Offset(0, 2),
-                  )
-                ]
-              : null,
-        ),
-        child: Center(
-          child: Text(
-            label,
-            style: TextStyle(
-              fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-              color: isSelected ? const Color(0xFF006D77) : Colors.black54,
-              fontSize: 13,
-            ),
+/// Comptes de démonstration du seed backend. Visible uniquement dans les
+/// builds de debug : `kDebugMode` est une constante, ce bloc est retiré des
+/// versions de production.
+class _DemoAccounts extends StatelessWidget {
+  const _DemoAccounts({required this.onPick, required this.enabled});
+
+  final ValueChanged<String> onPick;
+  final bool enabled;
+
+  @override
+  Widget build(BuildContext context) {
+    final k = context.k;
+    const accounts = [
+      ('Infirmier·ère', 'nurse@korai.local'),
+      ('Spécialiste', 'orl@korai.local'),
+      ('Admin', 'admin@korai.local'),
+      ('Patient', 'patient@korai.local'),
+    ];
+    return Container(
+      padding: const EdgeInsets.all(KSpace.sm),
+      decoration: BoxDecoration(
+        borderRadius: KRadius.controlAll,
+        border: Border.all(color: k.line),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Comptes de démonstration (debug)', style: context.text.labelSmall?.copyWith(color: k.inkMuted)),
+          const SizedBox(height: KSpace.xs),
+          Wrap(
+            spacing: KSpace.xs,
+            runSpacing: KSpace.xs,
+            children: [
+              for (final (label, email) in accounts)
+                ActionChip(
+                  label: Text(label),
+                  onPressed: enabled ? () => onPick(email) : null,
+                ),
+            ],
           ),
-        ),
+        ],
       ),
     );
   }

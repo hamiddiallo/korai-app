@@ -96,9 +96,7 @@ class ChatMessage {
       conversationId: json['conversationId'].toString(),
       role: json['role']?.toString() ?? 'ASSISTANT',
       content: json['content']?.toString() ?? '',
-      sources: sourcesRaw is List
-          ? sourcesRaw.map((source) => source.toString()).toList()
-          : const [],
+      sources: parseSources(sourcesRaw),
       sequence: int.tryParse(json['sequence']?.toString() ?? '') ?? 0,
       deliveryStatus: json['deliveryStatus']?.toString() ?? 'COMPLETED',
       isRead: json['isRead'] == true,
@@ -106,6 +104,30 @@ class ChatMessage {
       createdAt: DateTime.tryParse(json['createdAt']?.toString() ?? '') ??
           DateTime.now(),
     );
+  }
+
+  /// Libellés de sources lisibles. Ignore les anciennes valeurs
+  /// « [object Object] » enregistrées avant la correction du serveur.
+  static List<String> parseSources(Object? raw) {
+    if (raw is! List) return const [];
+    final labels = <String>[];
+    for (final item in raw) {
+      String? label;
+      if (item is String) {
+        label = item.trim();
+      } else if (item is Map) {
+        for (final key in const ['title', 'name', 'document', 'source', 'filename', 'label', 'url']) {
+          final v = item[key];
+          if (v is String && v.trim().isNotEmpty) {
+            label = v.trim();
+            break;
+          }
+        }
+      }
+      if (label == null || label.isEmpty || label == '[object Object]') continue;
+      if (!labels.contains(label)) labels.add(label);
+    }
+    return labels;
   }
 
   factory ChatMessage.localUser({

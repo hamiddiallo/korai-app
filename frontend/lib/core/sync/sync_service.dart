@@ -79,6 +79,7 @@ class SyncService {
   }
 
   Future<SyncRunSummary> _runPending({required int limit}) async {
+    await _outboxDao.purgeSynced();
     final entries = await _outboxDao.listRunnable(limit: limit);
     var synced = 0;
     var failed = 0;
@@ -93,8 +94,13 @@ class SyncService {
       } on SyncDependencyPending catch (error) {
         if (await _retryOrDeadLetter(entry, error)) failed++;
       } on ApiException catch (error) {
+        // Session expirée : inutile de continuer, la reconnexion relancera la file.
         if (error.isAuthFailure) rethrow;
-        if (error.isPermanentClientFailure && !error.isNetworkFailure) {
+        if (error.isNetworkFailure) {
+          await _outboxDao.markWaitingForNetwork(entry, error);
+        } else if (error.isPermanentClientFailure) {
+          // Refus propre à cet élément (accord manquant, dossier hors
+          // périmètre…) : il passe en échec, les suivants continuent.
           await _markPermanentFailure(entry, error);
           failed++;
         } else {
@@ -143,8 +149,7 @@ class SyncService {
 
   Future<void> _syncPatient(SyncOutboxEntry entry) async {
     final response = await _apiClient.postJson('/patients', entry.payload);
-    final patient =
-        Patient.fromJson(response['patient'] as Map<String, dynamic>);
+    final patient = Patient.fromJson(response['patient'] as Map<String, dynamic>);
 
     await _nurseLocalDao.markPatientSynced(
       localId: entry.entityLocalId,
@@ -154,8 +159,7 @@ class SyncService {
   }
 
   Future<void> _syncDiagnosis(SyncOutboxEntry entry) async {
-    final record =
-        await _nurseLocalDao.getDiagnosisSyncRecord(entry.entityLocalId);
+    final record = await _nurseLocalDao.getDiagnosisSyncRecord(entry.entityLocalId);
     if (record == null) {
       await _outboxDao.markFailed(
         entry.localId,
@@ -170,8 +174,7 @@ class SyncService {
       // jamais partir : on la fait échouer en cascade plutôt que boucler.
       final localPatientId = entry.payload['localPatientId']?.toString();
       if (localPatientId != null) {
-        final patientStatus =
-            await _nurseLocalDao.patientSyncStatus(localPatientId);
+        final patientStatus = await _nurseLocalDao.patientSyncStatus(localPatientId);
         if (patientStatus == SyncStatus.syncFailed) {
           throw const SyncDependencyFailed(
             'Le patient associe a echoue : consultation non synchronisable',
@@ -236,8 +239,7 @@ class SyncService {
       await _notificationDao.insertLocal(
         type: NotificationType.syncFailed,
         title: 'Échec de synchronisation',
-        body:
-            "Une consultation n'a pas pu être synchronisée. Voir les éléments en échec.",
+        body: "Une consultation n'a pas pu être synchronisée. Voir les éléments en échec.",
       );
       return;
     }

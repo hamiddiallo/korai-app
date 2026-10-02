@@ -4,6 +4,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../api/api_client.dart';
+import '../design/feedback.dart';
 
 class SessionUser {
   const SessionUser({
@@ -83,9 +84,7 @@ class AuthState {
       user: identical(user, _unset) ? this.user : user as SessionUser?,
       isRestoring: isRestoring ?? this.isRestoring,
       isSubmitting: isSubmitting ?? this.isSubmitting,
-      errorMessage: identical(errorMessage, _unset)
-          ? this.errorMessage
-          : errorMessage as String?,
+      errorMessage: identical(errorMessage, _unset) ? this.errorMessage : errorMessage as String?,
     );
   }
 }
@@ -97,7 +96,13 @@ class AuthCubit extends Cubit<AuthState> {
     required this.apiClient,
     FlutterSecureStorage? storage,
   })  : _storage = storage ?? const FlutterSecureStorage(),
-        super(const AuthState());
+        super(const AuthState()) {
+    apiClient
+      ..tokenRefresher = _refreshTokens
+      ..onSessionExpired = _expireSession;
+  }
+
+  static const sessionExpiredMessage = 'Votre session a expiré. Reconnectez-vous pour continuer.';
 
   final ApiClient apiClient;
   final FlutterSecureStorage _storage;
@@ -122,8 +127,7 @@ class AuthCubit extends Cubit<AuthState> {
     apiClient.setAccessToken(token);
     try {
       final response = await apiClient.getJson('/auth/me');
-      final user =
-          SessionUser.fromJson(response['user'] as Map<String, dynamic>);
+      final user = SessionUser.fromJson(response['user'] as Map<String, dynamic>);
       await _cacheUser(user);
       emit(
         state.copyWith(
@@ -133,6 +137,11 @@ class AuthCubit extends Cubit<AuthState> {
         ),
       );
     } on ApiException catch (error) {
+      if (error.code == 'SESSION_EXPIRED') {
+        await logout();
+        emit(state.copyWith(errorMessage: sessionExpiredMessage));
+        return;
+      }
       if (error.code == 'UNAUTHORIZED' || error.code == 'FORBIDDEN') {
         await logout();
         return;
@@ -141,7 +150,7 @@ class AuthCubit extends Cubit<AuthState> {
         state.copyWith(
           user: cachedUser,
           isRestoring: false,
-          errorMessage: cachedUser == null ? error.toString() : null,
+          errorMessage: cachedUser == null ? friendlyError(error) : null,
         ),
       );
     } catch (error) {
@@ -149,7 +158,7 @@ class AuthCubit extends Cubit<AuthState> {
         state.copyWith(
           user: cachedUser,
           isRestoring: false,
-          errorMessage: cachedUser == null ? error.toString() : null,
+          errorMessage: cachedUser == null ? friendlyError(error) : null,
         ),
       );
     }
@@ -164,7 +173,7 @@ class AuthCubit extends Cubit<AuthState> {
       });
       await _persistAuthPayload(response);
     } catch (error) {
-      emit(state.copyWith(errorMessage: error.toString()));
+      emit(state.copyWith(errorMessage: friendlyError(error)));
     } finally {
       emit(state.copyWith(isSubmitting: false));
     }
@@ -179,6 +188,9 @@ class AuthCubit extends Cubit<AuthState> {
     String? address,
     String? birthDate,
     String? sex,
+    bool consentForAi = false,
+    bool consentForTeleExpertise = false,
+    String? facilityId,
   }) async {
     emit(state.copyWith(isSubmitting: true, errorMessage: null));
     try {
@@ -189,15 +201,15 @@ class AuthCubit extends Cubit<AuthState> {
         'password': password,
         if (phone != null && phone.isNotEmpty) 'phone': phone.trim(),
         if (address != null && address.isNotEmpty) 'address': address.trim(),
-        if (birthDate != null && birthDate.isNotEmpty)
-          'birthDate': birthDate.trim(),
+        if (birthDate != null && birthDate.isNotEmpty) 'birthDate': birthDate.trim(),
         if (sex != null && sex.isNotEmpty) 'sex': sex,
-        'consentForAi': true,
-        'consentForTeleExpertise': true,
+        'consentForAi': consentForAi,
+        'consentForTeleExpertise': consentForTeleExpertise,
+        if (facilityId != null) 'facilityId': facilityId,
       });
       await _persistAuthPayload(response);
     } catch (error) {
-      emit(state.copyWith(errorMessage: error.toString()));
+      emit(state.copyWith(errorMessage: friendlyError(error)));
     } finally {
       emit(state.copyWith(isSubmitting: false));
     }
@@ -224,13 +236,11 @@ class AuthCubit extends Cubit<AuthState> {
         'healthFacility': healthFacility.trim(),
         'supervisorMatricule': supervisorMatricule.trim(),
         if (phone != null && phone.isNotEmpty) 'phone': phone.trim(),
-        if (professionalId != null && professionalId.isNotEmpty)
-          'professionalId': professionalId.trim(),
+        if (professionalId != null && professionalId.isNotEmpty) 'professionalId': professionalId.trim(),
       });
-      return response['message']?.toString() ??
-          'Inscription enregistrée. En attente de validation de votre encadrant.';
+      return response['message']?.toString() ?? 'Inscription enregistrée. En attente de validation de votre encadrant.';
     } catch (error) {
-      emit(state.copyWith(errorMessage: error.toString()));
+      emit(state.copyWith(errorMessage: friendlyError(error)));
       return null;
     } finally {
       emit(state.copyWith(isSubmitting: false));
@@ -239,7 +249,10 @@ class AuthCubit extends Cubit<AuthState> {
 
   /// Inscription spécialiste : vérifiée par le matricule, connectée directement.
   /// Retourne `true` si l'inscription/connexion a réussi.
-  Future<bool> registerSpecialist({
+  /// Inscription d'un spécialiste. Le compte reste en attente jusqu'à la
+  /// vérification de l'identité par un administrateur : renvoie le message à
+  /// afficher, ou `null` en cas d'échec (voir `errorMessage`).
+  Future<String?> registerSpecialist({
     required String fullName,
     required String email,
     required String password,
@@ -255,14 +268,12 @@ class AuthCubit extends Cubit<AuthState> {
         'password': password,
         'matricule': matricule.trim(),
         if (phone != null && phone.isNotEmpty) 'phone': phone.trim(),
-        if (healthFacility != null && healthFacility.isNotEmpty)
-          'healthFacility': healthFacility.trim(),
+        if (healthFacility != null && healthFacility.isNotEmpty) 'healthFacility': healthFacility.trim(),
       });
-      await _persistAuthPayload(response);
-      return true;
+      return response['message']?.toString() ?? 'Inscription enregistrée. Un administrateur doit valider votre compte.';
     } catch (error) {
-      emit(state.copyWith(errorMessage: error.toString()));
-      return false;
+      emit(state.copyWith(errorMessage: friendlyError(error)));
+      return null;
     } finally {
       emit(state.copyWith(isSubmitting: false));
     }
@@ -294,13 +305,12 @@ class AuthCubit extends Cubit<AuthState> {
       await _cacheUser(user);
       emit(state.copyWith(user: user, errorMessage: null));
     } catch (error) {
-      emit(state.copyWith(errorMessage: error.toString()));
+      emit(state.copyWith(errorMessage: friendlyError(error)));
       rethrow;
     } finally {
       emit(state.copyWith(isSubmitting: false));
     }
   }
-
 
   Future<void> changePassword({
     required String currentPassword,
@@ -313,11 +323,16 @@ class AuthCubit extends Cubit<AuthState> {
         'newPassword': newPassword,
       });
     } catch (error) {
-      emit(state.copyWith(errorMessage: error.toString()));
+      emit(state.copyWith(errorMessage: friendlyError(error)));
       rethrow;
     } finally {
       emit(state.copyWith(isSubmitting: false));
     }
+  }
+
+  /// Efface le message d'erreur affiché (changement d'écran, nouvelle saisie).
+  void clearError() {
+    if (state.errorMessage != null) emit(state.copyWith(errorMessage: null));
   }
 
   Future<void> logout() async {
@@ -328,13 +343,41 @@ class AuthCubit extends Cubit<AuthState> {
     emit(const AuthState());
   }
 
+  /// Renouvelle le jeton d'accès (30 min) avec le jeton de rafraîchissement.
+  /// `false` : session terminée. Une panne réseau est relancée telle quelle
+  /// (on ne déconnecte pas quelqu'un parce qu'il est hors ligne).
+  Future<bool> _refreshTokens() async {
+    final refreshToken = await _storage.read(key: _refreshTokenKey);
+    if (refreshToken == null || refreshToken.isEmpty) return false;
+    try {
+      final response = await apiClient.postJson('/auth/refresh', {'refreshToken': refreshToken});
+      final accessToken = response['accessToken'].toString();
+      apiClient.setAccessToken(accessToken);
+      await _storage.write(key: _accessTokenKey, value: accessToken);
+      await _storage.write(key: _refreshTokenKey, value: response['refreshToken'].toString());
+      final user = response['user'];
+      if (user is Map<String, dynamic>) await _cacheUser(SessionUser.fromJson(user));
+      return true;
+    } on ApiException catch (error) {
+      if (error.isNetworkFailure) rethrow;
+      return false;
+    }
+  }
+
+  /// La session n'a pas pu être renouvelée : retour à la connexion avec une
+  /// explication. Pendant la restauration, [restore] s'en charge.
+  Future<void> _expireSession() async {
+    if (!state.isAuthenticated || state.isRestoring) return;
+    await logout();
+    emit(state.copyWith(errorMessage: sessionExpiredMessage));
+  }
+
   Future<void> _persistAuthPayload(Map<String, dynamic> response) async {
     final accessToken = response['accessToken'].toString();
     final user = SessionUser.fromJson(response['user'] as Map<String, dynamic>);
     apiClient.setAccessToken(accessToken);
     await _storage.write(key: _accessTokenKey, value: accessToken);
-    await _storage.write(
-        key: _refreshTokenKey, value: response['refreshToken'].toString());
+    await _storage.write(key: _refreshTokenKey, value: response['refreshToken'].toString());
     await _cacheUser(user);
     emit(
       state.copyWith(
@@ -345,8 +388,7 @@ class AuthCubit extends Cubit<AuthState> {
   }
 
   Future<void> _cacheUser(SessionUser user) async {
-    await _storage.write(
-        key: _sessionUserKey, value: jsonEncode(user.toJson()));
+    await _storage.write(key: _sessionUserKey, value: jsonEncode(user.toJson()));
   }
 
   Future<SessionUser?> _readCachedUser() async {

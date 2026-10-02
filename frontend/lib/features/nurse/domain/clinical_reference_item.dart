@@ -30,4 +30,16 @@ class ClinicalReferenceItem {
       dangerScore: int.tryParse(json['dangerScore']?.toString() ?? '') ?? 0,
     );
   }
+
+  /// Forme stockée dans le cache hors ligne : doit contenir tout ce que lit
+  /// [ClinicalReferenceItem.fromJson], score de danger compris.
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'type': type,
+        'label': label,
+        'description': description,
+        'isActive': isActive,
+        'sortOrder': sortOrder,
+        'dangerScore': dangerScore,
+      };
 }

@@ -19,11 +19,17 @@ class EncryptedLocalDatabase {
 
   final FlutterSecureStorage _secureStorage;
   Database? _database;
+  Future<Database>? _opening;
 
-  Future<Database> get database async {
+  /// Une seule ouverture partagée : deux ouvertures simultanées au premier
+  /// lancement pouvaient générer deux clés de chiffrement différentes.
+  Future<Database> get database {
     final existing = _database;
-    if (existing != null) return existing;
+    if (existing != null) return Future.value(existing);
+    return _opening ??= _open().whenComplete(() => _opening = null);
+  }
 
+  Future<Database> _open() async {
     final directory = await getApplicationSupportDirectory();
     final path = p.join(directory.path, _databaseName);
     final key = await _getOrCreateCipherKey();

@@ -8,6 +8,8 @@ class Patient {
     this.birthDate,
     this.sex,
     this.isValidated = true,
+    this.consentForAi = false,
+    this.consentForTeleExpertise = false,
   });
 
   final String id;
@@ -19,7 +21,26 @@ class Patient {
   final String? sex;
   final bool isValidated;
 
+  /// Accord du patient pour l'analyse par l'IA (vérifié par le serveur).
+  final bool consentForAi;
+
+  /// Accord du patient pour le partage de son dossier avec un spécialiste.
+  final bool consentForTeleExpertise;
+
   String get fullName => '$firstName $lastName';
+
+  Patient withConsents({required bool ai, required bool teleExpertise}) => Patient(
+        id: id,
+        firstName: firstName,
+        lastName: lastName,
+        phone: phone,
+        address: address,
+        birthDate: birthDate,
+        sex: sex,
+        isValidated: isValidated,
+        consentForAi: ai,
+        consentForTeleExpertise: teleExpertise,
+      );
 
   factory Patient.fromJson(Map<String, dynamic> json) {
     return Patient(
@@ -31,6 +52,8 @@ class Patient {
       birthDate: json['birthDate']?.toString(),
       sex: json['sex']?.toString(),
       isValidated: json['isValidated'] == true,
+      consentForAi: json['consentForAi'] == true,
+      consentForTeleExpertise: json['consentForTeleExpertise'] == true,
     );
   }
 }

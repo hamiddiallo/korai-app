@@ -23,8 +23,44 @@ class AdminRepository {
     return AdminUser.fromJson(response['user'] as Map<String, dynamic>);
   }
 
+  /// Active un compte en attente (inscription vérifiée).
+  Future<AdminUser> approveUser(String id) async {
+    final response = await apiClient.postJson('/admin/users/$id/approve', {});
+    return AdminUser.fromJson(response['user'] as Map<String, dynamic>);
+  }
+
+  Future<AdminUser> rejectUser(String id, {String? reason}) async {
+    final response = await apiClient.postJson('/admin/users/$id/reject', {
+      if (reason != null && reason.trim().isNotEmpty) 'reason': reason.trim(),
+    });
+    return AdminUser.fromJson(response['user'] as Map<String, dynamic>);
+  }
+
   Future<void> deleteUser(String id) async {
     await apiClient.deleteJson('/admin/users/$id');
+  }
+
+  Future<List<AdminFacility>> listFacilities() async {
+    final response = await apiClient.getJson('/admin/facilities');
+    return (response['facilities'] as List<dynamic>)
+        .map((item) => AdminFacility.fromJson(item as Map<String, dynamic>))
+        .toList();
+  }
+
+  /// Journal d'audit, du plus récent au plus ancien (50 entrées par page).
+  Future<AuditPage> listAudit({String? patientId, String? before}) async {
+    final query = <String, String>{
+      if (patientId != null) 'patientId': patientId,
+      if (before != null) 'before': before,
+    };
+    final path = query.isEmpty ? '/admin/audit' : '/admin/audit?${Uri(queryParameters: query).query}';
+    final response = await apiClient.getJson(path);
+    return AuditPage(
+      entries: (response['entries'] as List<dynamic>)
+          .map((item) => AuditEntry.fromJson(item as Map<String, dynamic>))
+          .toList(),
+      nextBefore: response['nextBefore']?.toString(),
+    );
   }
 
   Future<List<AdminPatient>> listPatients() async {
@@ -34,8 +70,7 @@ class AdminRepository {
         .toList();
   }
 
-  Future<AdminPatient> updatePatient(
-      String id, Map<String, dynamic> input) async {
+  Future<AdminPatient> updatePatient(String id, Map<String, dynamic> input) async {
     final response = await apiClient.patchJson('/admin/patients/$id', input);
     return AdminPatient.fromJson(response['patient'] as Map<String, dynamic>);
   }
@@ -61,10 +96,8 @@ class AdminRepository {
     return AdminPatient.fromJson(response['patient'] as Map<String, dynamic>);
   }
 
-  Future<List<AdminConsultation>> listPatientConsultations(String patientId,
-      {bool includeDeleted = false}) async {
-    final response = await apiClient.getJson(
-        '/admin/patients/$patientId/consultations?includeDeleted=$includeDeleted');
+  Future<List<AdminConsultation>> listPatientConsultations(String patientId, {bool includeDeleted = false}) async {
+    final response = await apiClient.getJson('/admin/patients/$patientId/consultations?includeDeleted=$includeDeleted');
     return (response['consultations'] as List<dynamic>)
         .map((item) => AdminConsultation.fromJson(item as Map<String, dynamic>))
         .toList();
@@ -78,29 +111,21 @@ class AdminRepository {
     await apiClient.postJson('/admin/consultations/$id/restore', {});
   }
 
-
   Future<List<ClinicalReferenceItem>> listClinicalItems(String type) async {
-    final response =
-        await apiClient.getJson('/admin/clinical-items?type=$type');
+    final response = await apiClient.getJson('/admin/clinical-items?type=$type');
     return (response['items'] as List<dynamic>)
-        .map((item) =>
-            ClinicalReferenceItem.fromJson(item as Map<String, dynamic>))
+        .map((item) => ClinicalReferenceItem.fromJson(item as Map<String, dynamic>))
         .toList();
   }
 
-  Future<ClinicalReferenceItem> createClinicalItem(
-      Map<String, dynamic> input) async {
+  Future<ClinicalReferenceItem> createClinicalItem(Map<String, dynamic> input) async {
     final response = await apiClient.postJson('/admin/clinical-items', input);
-    return ClinicalReferenceItem.fromJson(
-        response['item'] as Map<String, dynamic>);
+    return ClinicalReferenceItem.fromJson(response['item'] as Map<String, dynamic>);
   }
 
-  Future<ClinicalReferenceItem> updateClinicalItem(
-      String id, Map<String, dynamic> input) async {
-    final response =
-        await apiClient.patchJson('/admin/clinical-items/$id', input);
-    return ClinicalReferenceItem.fromJson(
-        response['item'] as Map<String, dynamic>);
+  Future<ClinicalReferenceItem> updateClinicalItem(String id, Map<String, dynamic> input) async {
+    final response = await apiClient.patchJson('/admin/clinical-items/$id', input);
+    return ClinicalReferenceItem.fromJson(response['item'] as Map<String, dynamic>);
   }
 
   Future<void> deleteClinicalItem(String id) async {

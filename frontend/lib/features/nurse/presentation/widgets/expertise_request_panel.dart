@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/design/design.dart';
 import '../../../../core/domain/korai_enums.dart';
 import '../../domain/ai_case.dart';
 
@@ -8,7 +9,8 @@ typedef ExpertiseRequestCallback = Future<AiCase> Function(
   String? summaryNote,
 });
 
-class ExpertiseRequestPanel extends StatefulWidget {
+/// Demande d'avis spécialiste depuis une consultation analysée.
+class ExpertiseRequestPanel extends StatelessWidget {
   const ExpertiseRequestPanel({
     super.key,
     required this.consultation,
@@ -22,40 +24,21 @@ class ExpertiseRequestPanel extends StatefulWidget {
   final ValueChanged<AiCase>? onUpdated;
   final String? summaryNote;
 
-  @override
-  State<ExpertiseRequestPanel> createState() => _ExpertiseRequestPanelState();
-}
-
-class _ExpertiseRequestPanelState extends State<ExpertiseRequestPanel> {
-  bool submitting = false;
-
-  Future<void> _submit() async {
-    setState(() => submitting = true);
+  Future<void> _submit(BuildContext context) async {
     try {
-      final updated = await widget.onRequest(
-        widget.consultation,
-        summaryNote: widget.summaryNote,
-      );
-      if (!mounted) return;
-      widget.onUpdated?.call(updated);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content: Text('Demande d\'expertise envoyée au spécialiste')),
-      );
+      final updated = await onRequest(consultation, summaryNote: summaryNote);
+      onUpdated?.call(updated);
+      if (context.mounted) {
+        KSnack.success(context, 'Demande d’avis envoyée. Vous serez notifié·e dès la réponse du spécialiste.');
+      }
     } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-            content: Text(e.toString()), backgroundColor: Colors.red.shade700),
-      );
-    } finally {
-      if (mounted) setState(() => submitting = false);
+      if (context.mounted) KSnack.error(context, e);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final c = widget.consultation;
+    final c = consultation;
 
     if (c.expertiseReview?.status == ExpertiseStatus.completed ||
         c.status == ConsultationStatus.specialistCompleted.value) {
@@ -63,59 +46,37 @@ class _ExpertiseRequestPanelState extends State<ExpertiseRequestPanel> {
     }
 
     if (c.expertiseInProgress) {
-      return Card(
-        color: Colors.blue.shade50,
-        margin: const EdgeInsets.only(top: 12),
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Row(
-            children: [
-              Icon(Icons.hourglass_top, color: Colors.blue.shade800, size: 20),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  'Demande d\'expertise en cours — en attente d\'avis spécialiste.',
-                  style: TextStyle(fontSize: 13, color: Colors.blue.shade900),
-                ),
-              ),
-            ],
-          ),
+      return const Padding(
+        padding: EdgeInsets.only(top: KSpace.sm),
+        child: KBanner(
+          tone: KTone.info,
+          icon: Icons.schedule_rounded,
+          title: 'Avis demandé',
+          message: 'Un spécialiste ORL va examiner ce dossier. Vous serez notifié·e dès sa réponse.',
         ),
       );
     }
 
     if (!c.canRequestExpertise) return const SizedBox.shrink();
 
-    return Card(
-      color: const Color(0xFFE8F5E9),
-      margin: const EdgeInsets.only(top: 12),
-      child: Padding(
-        padding: const EdgeInsets.all(12),
+    return Padding(
+      padding: const EdgeInsets.only(top: KSpace.sm),
+      child: KCard(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const Text(
-              'Expertise spécialiste',
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+            Text('Besoin d’un second avis ?', style: context.text.titleSmall),
+            const SizedBox(height: 4),
+            Text(
+              'Un spécialiste ORL confirme ou corrige la proposition de l’IA, sans déplacement du patient.',
+              style: context.text.bodySmall,
             ),
-            const SizedBox(height: 6),
-            const Text(
-              'Soumettre cette consultation pour validation ou correction par un ORL.',
-              style: TextStyle(fontSize: 12),
-            ),
-            const SizedBox(height: 12),
-            FilledButton.icon(
-              onPressed: submitting ? null : _submit,
-              icon: submitting
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(
-                          strokeWidth: 2, color: Colors.white),
-                    )
-                  : const Icon(Icons.send_outlined),
-              label:
-                  Text(submitting ? 'Envoi…' : 'Demander un avis spécialiste'),
+            const SizedBox(height: KSpace.sm),
+            KAsyncButton(
+              label: 'Demander un avis spécialiste',
+              busyLabel: 'Envoi de la demande…',
+              icon: Icons.send_rounded,
+              onPressed: () => _submit(context),
             ),
           ],
         ),

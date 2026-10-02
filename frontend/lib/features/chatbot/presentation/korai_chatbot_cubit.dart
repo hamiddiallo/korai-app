@@ -2,6 +2,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../data/chat_repository.dart';
 import '../domain/chat_models.dart';
+import '../../../core/design/feedback.dart';
 
 class KoraiChatbotState {
   const KoraiChatbotState({
@@ -108,11 +109,14 @@ class KoraiChatbotCubit extends Cubit<KoraiChatbotState> {
       emit(
         state.copyWith(
           isLoadingConversations: false,
-          errorBanner: error.toString(),
+          errorBanner: friendlyError(error),
         ),
       );
     }
   }
+
+  /// Ferme le bandeau d'erreur.
+  void dismissError() => emit(state.copyWith(errorBanner: null));
 
   Future<void> createNewConversation() async {
     emit(state.copyWith(errorBanner: null));
@@ -129,7 +133,7 @@ class KoraiChatbotCubit extends Cubit<KoraiChatbotState> {
       );
     } catch (error) {
       if (isClosed) return;
-      emit(state.copyWith(errorBanner: error.toString()));
+      emit(state.copyWith(errorBanner: friendlyError(error)));
     }
   }
 
@@ -162,7 +166,7 @@ class KoraiChatbotCubit extends Cubit<KoraiChatbotState> {
       emit(
         state.copyWith(
           isLoadingMessages: false,
-          errorBanner: error.toString(),
+          errorBanner: friendlyError(error),
         ),
       );
     }
@@ -197,7 +201,7 @@ class KoraiChatbotCubit extends Cubit<KoraiChatbotState> {
       emit(
         state.copyWith(
           isLoadingMessages: false,
-          errorBanner: error.toString(),
+          errorBanner: friendlyError(error),
         ),
       );
     }
@@ -248,7 +252,7 @@ class KoraiChatbotCubit extends Cubit<KoraiChatbotState> {
       emit(
         state.copyWith(
           isSending: false,
-          errorBanner: error.toString(),
+          errorBanner: friendlyError(error),
         ),
       );
     }
@@ -283,7 +287,7 @@ class KoraiChatbotCubit extends Cubit<KoraiChatbotState> {
       emit(
         state.copyWith(
           retryingMessageId: null,
-          errorBanner: error.toString(),
+          errorBanner: friendlyError(error),
         ),
       );
     }
@@ -311,7 +315,7 @@ class KoraiChatbotCubit extends Cubit<KoraiChatbotState> {
       );
     } catch (error) {
       if (isClosed) return;
-      emit(state.copyWith(errorBanner: error.toString()));
+      emit(state.copyWith(errorBanner: friendlyError(error)));
     }
   }
 

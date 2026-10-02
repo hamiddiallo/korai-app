@@ -1,6 +1,5 @@
 import 'dart:io';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:image_picker/image_picker.dart';
 
@@ -13,14 +12,14 @@ import '../data/patient_repository.dart';
 import '../../nurse/domain/ai_case.dart';
 import '../../nurse/domain/clinical_reference_item.dart';
 import '../../nurse/domain/patient.dart';
+import '../../../core/design/feedback.dart';
 
 class PatientConsultationState {
   const PatientConsultationState({this.version = 0});
 
   final int version;
 
-  PatientConsultationState next() =>
-      PatientConsultationState(version: version + 1);
+  PatientConsultationState next() => PatientConsultationState(version: version + 1);
 }
 
 class PatientConsultationViewModel extends Cubit<PatientConsultationState> {
@@ -44,6 +43,13 @@ class PatientConsultationViewModel extends Cubit<PatientConsultationState> {
   int currentStep = 0;
   bool isLoading = false;
   bool isSubmitting = false;
+  bool isSavingProfile = false;
+
+  /// Erreur bloquante du chargement initial (référentiels ou dossier).
+  Object? loadError;
+
+  /// Erreur de chargement de l'historique (dossier validé).
+  Object? historyError;
   bool isEditingImage = false;
   // Défaut sur une oreille concrète : l'option « les deux » a été retirée du
   // workflow (le service IA analyse une image à la fois).
@@ -71,6 +77,7 @@ class PatientConsultationViewModel extends Cubit<PatientConsultationState> {
   Future<void> initialize() async {
     isLoading = true;
     errorMessage = null;
+    loadError = null;
     _emitState();
     try {
       final results = await Future.wait([
@@ -83,40 +90,38 @@ class PatientConsultationViewModel extends Cubit<PatientConsultationState> {
       touchChecks = results[2];
 
       if (linkedPatientId.isNotEmpty) {
-        try {
-          patient = await _repository.getPatient(linkedPatientId);
-          if (isReadOnly) {
-            await _loadValidatedDossierData();
-          }
-        } catch (e) {
-          debugPrint('Erreur de chargement du patient: $e');
-        }
+        patient = await _repository.getPatient(linkedPatientId);
+        // Dossier validé : historique. Sinon : pré-consultations déjà envoyées.
+        await _loadDossierData();
       }
     } catch (error) {
-      errorMessage = error.toString();
+      loadError = error;
     } finally {
       isLoading = false;
       _emitState();
     }
   }
 
-  Future<void> _loadValidatedDossierData() async {
+  Future<void> _loadDossierData() async {
     try {
       consultations = (await _repository.listCases()).sortedByNewest();
+      historyError = null;
       final preCase = _findPreconsultationCase(consultations, linkedPatientId);
       applyClinicalPrefillFromCase(preCase);
       readOnlyNotes = _extractNotesFromNarrative(preCase?.symptoms);
     } catch (e) {
-      debugPrint('Erreur chargement dossier validé: $e');
+      historyError = e;
     }
   }
 
+  /// Relit l'historique des consultations (tirer pour actualiser, réessayer).
+  Future<void> reloadHistory() async {
+    await _loadDossierData();
+    _emitState();
+  }
+
   AiCase? _findPreconsultationCase(List<AiCase> cases, String patientId) {
-    final matching = cases
-        .where((c) =>
-            c.patientId == patientId &&
-            (c.symptoms?.trim().isNotEmpty ?? false))
-        .toList();
+    final matching = cases.where((c) => c.patientId == patientId && (c.symptoms?.trim().isNotEmpty ?? false)).toList();
     if (matching.isEmpty) return null;
     final drafts = matching.where((c) => c.isDraft).toList();
     if (drafts.isNotEmpty) return drafts.first;
@@ -189,6 +194,8 @@ class PatientConsultationViewModel extends Cubit<PatientConsultationState> {
     return null;
   }
 
+  /// Enregistre le profil. Lève une exception en cas d'échec : l'écran
+  /// affiche alors un message clair.
   Future<void> updatePatientProfile({
     required String firstName,
     required String lastName,
@@ -198,14 +205,10 @@ class PatientConsultationViewModel extends Cubit<PatientConsultationState> {
     String? sex,
   }) async {
     if (isReadOnly) {
-      errorMessage =
-          'Dossier validé : modification réservée au professionnel de santé.';
-      _emitState();
-      return;
+      throw StateError('Dossier validé : modification réservée au professionnel de santé.');
     }
 
-    isLoading = true;
-    errorMessage = null;
+    isSavingProfile = true;
     _emitState();
     try {
       final updated = await _repository.updatePatient(linkedPatientId, {
@@ -217,12 +220,19 @@ class PatientConsultationViewModel extends Cubit<PatientConsultationState> {
         if (sex != null) 'sex': sex,
       });
       patient = updated;
-    } catch (error) {
-      errorMessage = error.toString();
     } finally {
-      isLoading = false;
+      isSavingProfile = false;
       _emitState();
     }
+  }
+
+  /// Le patient donne ou retire ses accords (possible même dossier validé).
+  Future<void> updateConsents({required bool ai, required bool teleExpertise}) async {
+    patient = await _repository.updatePatient(linkedPatientId, {
+      'consentForAi': ai,
+      'consentForTeleExpertise': teleExpertise,
+    });
+    _emitState();
   }
 
   void goToStep(int step) {
@@ -256,6 +266,9 @@ class PatientConsultationViewModel extends Cubit<PatientConsultationState> {
   Future<void> pickImage(ImageSource source) async {
     final picked = await _imagePicker.pickImage(
       source: source,
+      // Assez pour l'IA et le spécialiste, sans saturer la file hors ligne.
+      maxWidth: 2048,
+      maxHeight: 2048,
       imageQuality: 86,
     );
     if (picked == null) return;
@@ -290,8 +303,7 @@ class PatientConsultationViewModel extends Cubit<PatientConsultationState> {
     await _editImage(() async {
       final current = image;
       if (current == null) return;
-      image =
-          await OrlImageEditor.adjustBrightness(current, brighter: brighter);
+      image = await OrlImageEditor.adjustBrightness(current, brighter: brighter);
     });
   }
 
@@ -303,7 +315,7 @@ class PatientConsultationViewModel extends Cubit<PatientConsultationState> {
     try {
       await action();
     } catch (error) {
-      errorMessage = error.toString();
+      errorMessage = friendlyError(error);
     } finally {
       isEditingImage = false;
       _emitState();
@@ -320,8 +332,7 @@ class PatientConsultationViewModel extends Cubit<PatientConsultationState> {
     required String notes,
   }) async {
     if (isReadOnly) {
-      errorMessage =
-          'Dossier validé : la pré-consultation ne peut plus être modifiée.';
+      errorMessage = 'Dossier validé : la pré-consultation ne peut plus être modifiée.';
       _emitState();
       return;
     }
@@ -355,28 +366,24 @@ class PatientConsultationViewModel extends Cubit<PatientConsultationState> {
         image: image,
       );
     } catch (error) {
-      errorMessage = error.toString();
+      errorMessage = friendlyError(error);
     } finally {
       isSubmitting = false;
       _emitState();
     }
   }
 
+  /// Récit clinique envoyé au serveur puis à l'IA : données cliniques
+  /// seulement, jamais l'identité du patient (voir la fiche patient).
   String buildClinicalNarrative({
-    required String firstName,
-    required String lastName,
-    required String phone,
-    required String address,
     required String age,
     required String sex,
     required String notes,
   }) {
     return [
-      'Patient: $firstName $lastName (Autodéclaration)',
+      'Origine: pré-consultation remplie par le patient',
       if (age.isNotEmpty) 'Age: $age ans',
       'Sexe: $sex',
-      if (phone.isNotEmpty) 'Telephone: $phone',
-      if (address.isNotEmpty) 'Adresse: $address',
       'Symptomes: ${labelsFor(symptoms, selectedSymptomIds).join(', ')}',
       'Antecedents: ${labelsFor(medicalHistories, selectedMedicalHistoryIds).join(', ')}',
       'Verifications au toucher: ${labelsFor(touchChecks, selectedTouchCheckIds).join(', ')}',
@@ -384,12 +391,8 @@ class PatientConsultationViewModel extends Cubit<PatientConsultationState> {
     ].join('\n');
   }
 
-  List<String> labelsFor(
-      List<ClinicalReferenceItem> items, Set<String> selectedIds) {
-    return items
-        .where((item) => selectedIds.contains(item.id))
-        .map((item) => item.label)
-        .toList();
+  List<String> labelsFor(List<ClinicalReferenceItem> items, Set<String> selectedIds) {
+    return items.where((item) => selectedIds.contains(item.id)).map((item) => item.label).toList();
   }
 
   ConsultationCreatePayload buildConsultationPayload({
@@ -404,10 +407,6 @@ class PatientConsultationViewModel extends Cubit<PatientConsultationState> {
     return ConsultationCreatePayload(
       patientId: linkedPatientId,
       symptoms: buildClinicalNarrative(
-        firstName: firstName,
-        lastName: lastName,
-        phone: phone,
-        address: address,
         age: age,
         sex: sex,
         notes: notes,
@@ -418,11 +417,9 @@ class PatientConsultationViewModel extends Cubit<PatientConsultationState> {
       symptomIds: ClinicalSnapshot.ids(selectedSymptomIds),
       symptomLabels: ClinicalSnapshot.labels(symptoms, selectedSymptomIds),
       medicalHistoryIds: ClinicalSnapshot.ids(selectedMedicalHistoryIds),
-      medicalHistoryLabels:
-          ClinicalSnapshot.labels(medicalHistories, selectedMedicalHistoryIds),
+      medicalHistoryLabels: ClinicalSnapshot.labels(medicalHistories, selectedMedicalHistoryIds),
       touchCheckIds: ClinicalSnapshot.ids(selectedTouchCheckIds),
-      touchCheckLabels:
-          ClinicalSnapshot.labels(touchChecks, selectedTouchCheckIds),
+      touchCheckLabels: ClinicalSnapshot.labels(touchChecks, selectedTouchCheckIds),
     );
   }
 }

@@ -1,26 +1,37 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/api/api_client.dart';
+import '../../../core/design/design.dart';
+import '../../../core/utils/consultation_format.dart';
 import '../data/nurse_registration_repository.dart';
 
-/// Écran de validation des demandes d'inscription des infirmiers encadrés
+enum _Tab { pending, processed }
+
+/// Validation des demandes d'inscription des infirmier·ères encadré·es
 /// (côté spécialiste / admin).
 class NurseRequestsPage extends StatefulWidget {
-  const NurseRequestsPage({super.key, required this.apiClient});
+  const NurseRequestsPage({super.key, required this.apiClient, this.embedded = false, this.onPendingCountChanged});
 
   final ApiClient apiClient;
+
+  /// Nombre de demandes en attente après chaque chargement (badge de navigation).
+  final ValueChanged<int>? onPendingCountChanged;
+
+  /// `true` quand l'écran est un onglet (pas de barre d'application propre).
+  final bool embedded;
 
   @override
   State<NurseRequestsPage> createState() => _NurseRequestsPageState();
 }
 
 class _NurseRequestsPageState extends State<NurseRequestsPage> {
-  late final NurseRegistrationRepository _repository =
-      NurseRegistrationRepository(widget.apiClient);
+  late final NurseRegistrationRepository _repository = NurseRegistrationRepository(widget.apiClient);
 
   List<NurseRequest> _requests = const [];
   bool _loading = true;
-  String? _error;
+  Object? _error;
+  _Tab _tab = _Tab.pending;
+  final Set<String> _busy = {};
 
   @override
   void initState() {
@@ -35,64 +46,52 @@ class _NurseRequestsPageState extends State<NurseRequestsPage> {
     });
     try {
       final requests = await _repository.list();
-      if (mounted) setState(() => _requests = requests);
+      if (!mounted) return;
+      setState(() => _requests = requests);
+      widget.onPendingCountChanged?.call(requests.where((r) => r.isPending).length);
     } catch (e) {
-      if (mounted) setState(() => _error = e.toString());
+      if (mounted) setState(() => _error = e);
     } finally {
       if (mounted) setState(() => _loading = false);
     }
   }
 
   Future<void> _approve(NurseRequest r) async {
-    await _act(() => _repository.approve(r.id), '${r.fullName} validé(e).');
+    final ok = await showKConfirm(
+      context,
+      title: 'Valider l’inscription ?',
+      message: '${r.fullName} pourra se connecter et enregistrer des consultations sous votre encadrement.',
+      confirmLabel: 'Valider',
+    );
+    if (!ok) return;
+    await _act(r, () => _repository.approve(r.id), '${r.fullName} peut maintenant se connecter.');
   }
 
   Future<void> _reject(NurseRequest r) async {
-    final reason = await _askReason();
-    if (reason == null) return; // annulé
-    await _act(
-      () => _repository.reject(r.id, reason: reason),
-      'Demande de ${r.fullName} refusée.',
-    );
+    final reason = await _askReason(r);
+    if (reason == null) return;
+    await _act(r, () => _repository.reject(r.id, reason: reason), 'Demande de ${r.fullName} refusée.');
   }
 
-  Future<void> _act(Future<void> Function() action, String successMsg) async {
-    final messenger = ScaffoldMessenger.of(context);
+  Future<void> _act(NurseRequest r, Future<void> Function() action, String successMsg) async {
+    setState(() => _busy.add(r.id));
     try {
       await action();
-      messenger.showSnackBar(SnackBar(content: Text(successMsg)));
+      if (!mounted) return;
+      KSnack.success(context, successMsg);
       await _load();
     } catch (e) {
-      messenger.showSnackBar(
-        SnackBar(content: Text('Erreur : $e'), backgroundColor: Colors.red),
-      );
+      if (mounted) KSnack.error(context, e);
+    } finally {
+      if (mounted) setState(() => _busy.remove(r.id));
     }
   }
 
-  Future<String?> _askReason() {
-    final controller = TextEditingController();
-    return showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Refuser la demande'),
-        content: TextField(
-          controller: controller,
-          decoration: const InputDecoration(
-            labelText: 'Motif (optionnel)',
-            border: OutlineInputBorder(),
-          ),
-          maxLines: 2,
-        ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx), child: const Text('Annuler')),
-          FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: Colors.red),
-            onPressed: () => Navigator.pop(ctx, controller.text.trim()),
-            child: const Text('Refuser'),
-          ),
-        ],
-      ),
+  Future<String?> _askReason(NurseRequest r) {
+    return showKReasonDialog(
+      context,
+      title: 'Refuser la demande',
+      message: '${r.fullName} verra ce motif lors de sa prochaine tentative de connexion.',
     );
   }
 
@@ -100,143 +99,177 @@ class _NurseRequestsPageState extends State<NurseRequestsPage> {
   Widget build(BuildContext context) {
     final pending = _requests.where((r) => r.isPending).toList();
     final processed = _requests.where((r) => !r.isPending).toList();
+    final list = _tab == _Tab.pending ? pending : processed;
 
+    final Widget body;
+    if (_loading) {
+      body = const KSkeletonList(count: 3);
+    } else if (_error != null) {
+      body = KErrorView(error: _error!, onRetry: _load);
+    } else {
+      body = RefreshIndicator(
+        onRefresh: _load,
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(KSpace.gutter, KSpace.xs, KSpace.gutter, 120),
+          children: [
+            KSegmented<_Tab>(
+              segments: [
+                KSegment(value: _Tab.pending, label: 'En attente', count: pending.length),
+                KSegment(value: _Tab.processed, label: 'Traitées', count: processed.length),
+              ],
+              value: _tab,
+              onChanged: (t) => setState(() => _tab = t),
+            ),
+            const SizedBox(height: KSpace.md),
+            if (list.isEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: KSpace.xl),
+                child: KEmptyView(
+                  icon: _tab == _Tab.pending ? Icons.how_to_reg_outlined : Icons.history_rounded,
+                  title: _tab == _Tab.pending ? 'Aucune demande en attente' : 'Aucune demande traitée',
+                  message: _tab == _Tab.pending
+                      ? 'Les infirmier·ères qui s’inscrivent avec votre matricule apparaîtront ici.'
+                      : 'Les demandes validées ou refusées apparaîtront ici.',
+                ),
+              )
+            else
+              for (final r in list) ...[
+                _RequestCard(
+                  request: r,
+                  busy: _busy.contains(r.id),
+                  onApprove: r.isPending ? () => _approve(r) : null,
+                  onReject: r.isPending ? () => _reject(r) : null,
+                ),
+                const SizedBox(height: KSpace.sm),
+              ],
+          ],
+        ),
+      );
+    }
+
+    if (widget.embedded) {
+      return Column(
+        children: [
+          KScreenHeader(
+            eyebrow: 'Encadrement',
+            title: 'Inscriptions',
+            trailing: [
+              IconButton(tooltip: 'Actualiser', onPressed: _load, icon: const Icon(Icons.refresh_rounded)),
+            ],
+          ),
+          Expanded(child: body),
+        ],
+      );
+    }
     return Scaffold(
       appBar: AppBar(
-        title: const Text("Demandes d'inscription"),
+        title: const Text('Demandes d’inscription'),
         actions: [
-          IconButton(onPressed: _load, icon: const Icon(Icons.refresh)),
+          IconButton(tooltip: 'Actualiser', onPressed: _load, icon: const Icon(Icons.refresh_rounded)),
         ],
       ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : _error != null
-              ? Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(24),
-                    child: Text(_error!, textAlign: TextAlign.center),
-                  ),
-                )
-              : RefreshIndicator(
-                  onRefresh: _load,
-                  child: ListView(
-                    padding: const EdgeInsets.all(16),
-                    children: [
-                      if (pending.isEmpty && processed.isEmpty)
-                        const Padding(
-                          padding: EdgeInsets.only(top: 60),
-                          child: Center(
-                              child: Text('Aucune demande d\'inscription.')),
-                        ),
-                      if (pending.isNotEmpty) ...[
-                        Text('En attente (${pending.length})',
-                            style: const TextStyle(
-                                fontWeight: FontWeight.bold, fontSize: 15)),
-                        const SizedBox(height: 8),
-                        ...pending.map((r) => _RequestCard(
-                              request: r,
-                              onApprove: () => _approve(r),
-                              onReject: () => _reject(r),
-                            )),
-                        const SizedBox(height: 16),
-                      ],
-                      if (processed.isNotEmpty) ...[
-                        Text('Traitées',
-                            style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 14,
-                                color: Colors.grey.shade700)),
-                        const SizedBox(height: 8),
-                        ...processed.map((r) => _RequestCard(request: r)),
-                      ],
-                    ],
-                  ),
-                ),
+      body: body,
     );
   }
 }
 
 class _RequestCard extends StatelessWidget {
-  const _RequestCard({required this.request, this.onApprove, this.onReject});
+  const _RequestCard({required this.request, required this.busy, this.onApprove, this.onReject});
 
   final NurseRequest request;
+  final bool busy;
   final VoidCallback? onApprove;
   final VoidCallback? onReject;
 
   @override
   Widget build(BuildContext context) {
-    final (color, label) = switch (request.accountStatus) {
-      'ACTIVE' => (const Color(0xFF059669), 'Validé'),
-      'REJECTED' => (const Color(0xFFEF4444), 'Refusé'),
-      _ => (const Color(0xFFF59E0B), 'En attente'),
+    final k = context.k;
+    final status = request.accountStatus;
+    final statusIcon = switch (status) {
+      'ACTIVE' => Icons.check_circle_rounded,
+      'REJECTED' => Icons.block_rounded,
+      _ => Icons.hourglass_top_rounded,
     };
-    return Card(
-      margin: const EdgeInsets.only(bottom: 10),
-      elevation: 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: Colors.grey.shade200),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(request.fullName,
-                      style: const TextStyle(
-                          fontWeight: FontWeight.bold, fontSize: 15)),
+    return KCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              KInitialsAvatar(name: request.fullName),
+              const SizedBox(width: KSpace.sm),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(request.fullName, style: context.text.titleSmall),
+                    Text(request.email, style: context.text.bodySmall),
+                  ],
                 ),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 8, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: color.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Text(label,
-                      style: TextStyle(
-                          color: color,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 11)),
-                ),
-              ],
-            ),
-            const SizedBox(height: 4),
-            Text(request.email,
-                style: TextStyle(fontSize: 12.5, color: Colors.grey.shade700)),
-            if (request.healthFacility != null)
-              Text(request.healthFacility!,
-                  style:
-                      TextStyle(fontSize: 12, color: Colors.grey.shade600)),
-            if (onApprove != null || onReject != null) ...[
-              const SizedBox(height: 12),
+              ),
+              KPill(
+                label: KLabels.accountStatus(status),
+                icon: statusIcon,
+                tone: KLabels.accountStatusTone(status),
+                dense: true,
+              ),
+            ],
+          ),
+          const SizedBox(height: KSpace.sm),
+          if (request.healthFacility != null && request.healthFacility!.trim().isNotEmpty)
+            _Line(icon: Icons.local_hospital_outlined, text: request.healthFacility!),
+          if (request.phone != null && request.phone!.trim().isNotEmpty)
+            _Line(icon: Icons.phone_outlined, text: request.phone!),
+          if (request.createdAt != null)
+            _Line(icon: Icons.event_outlined, text: 'Demande du ${ConsultationFormat.formatDate(request.createdAt)}'),
+          if (onApprove != null || onReject != null) ...[
+            const SizedBox(height: KSpace.sm),
+            if (busy)
+              const KLoadingView(message: 'Enregistrement de votre décision…', compact: true)
+            else
               Row(
                 children: [
                   Expanded(
                     child: OutlinedButton.icon(
                       onPressed: onReject,
-                      icon: const Icon(Icons.close, size: 18),
+                      icon: const Icon(Icons.close_rounded, size: 18),
                       label: const Text('Refuser'),
-                      style: OutlinedButton.styleFrom(
-                          foregroundColor: Colors.red),
+                      style: OutlinedButton.styleFrom(foregroundColor: k.danger),
                     ),
                   ),
-                  const SizedBox(width: 10),
+                  const SizedBox(width: KSpace.sm),
                   Expanded(
                     child: FilledButton.icon(
                       onPressed: onApprove,
-                      icon: const Icon(Icons.check, size: 18),
+                      icon: const Icon(Icons.check_rounded, size: 18),
                       label: const Text('Valider'),
                     ),
                   ),
                 ],
               ),
-            ],
           ],
-        ),
+        ],
+      ),
+    );
+  }
+}
+
+class _Line extends StatelessWidget {
+  const _Line({required this.icon, required this.text});
+
+  final IconData icon;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 2),
+      child: Row(
+        children: [
+          Icon(icon, size: 16, color: context.k.inkMuted),
+          const SizedBox(width: 6),
+          Expanded(child: Text(text, style: context.text.bodySmall)),
+        ],
       ),
     );
   }

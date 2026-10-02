@@ -31,7 +31,7 @@ class ClinicalReferenceLocalDao {
             'description': item.description,
             'is_active': item.isActive ? 1 : 0,
             'sort_order': item.sortOrder,
-            'raw_json': jsonEncode(_toJson(item)),
+            'raw_json': jsonEncode(item.toJson()),
             'updated_at': now,
           },
           conflictAlgorithm: ConflictAlgorithm.replace,
@@ -66,13 +66,4 @@ class ClinicalReferenceLocalDao {
       );
     }).toList();
   }
-
-  Map<String, dynamic> _toJson(ClinicalReferenceItem item) => {
-        'id': item.id,
-        'type': item.type,
-        'label': item.label,
-        'description': item.description,
-        'isActive': item.isActive,
-        'sortOrder': item.sortOrder,
-      };
 }

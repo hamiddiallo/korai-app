@@ -5,6 +5,7 @@ import 'package:uuid/uuid.dart';
 
 import '../offline/offline_models.dart';
 import '../storage/encrypted_local_database.dart';
+import '../design/feedback.dart';
 
 class SyncOutboxEntry {
   const SyncOutboxEntry({
@@ -57,15 +58,24 @@ class SyncOutboxDao {
   final EncryptedLocalDatabase _database;
   final _uuid = const Uuid();
 
+  /// Délai pendant lequel la file laisse la main à un envoi direct en cours
+  /// (sinon les deux partiraient en même temps).
+  static const directSendGrace = Duration(minutes: 2);
+
+  /// Ajoute un envoi à la file. [executor] : transaction de l'appelant, pour
+  /// écrire l'élément et son envoi ensemble (tout ou rien). [directSend] :
+  /// l'appelant tente l'envoi tout de suite, la file attend [directSendGrace].
   Future<String> enqueue({
     required OfflineEntityType entityType,
     required String entityLocalId,
     required OutboxOperation operation,
     required Map<String, dynamic> payload,
     int priority = 100,
+    DatabaseExecutor? executor,
+    bool directSend = false,
   }) async {
-    final db = await _database.database;
-    final now = DateTime.now().toUtc().toIso8601String();
+    final db = executor ?? await _database.database;
+    final now = DateTime.now().toUtc();
     final id = _uuid.v4();
 
     await db.insert(
@@ -79,12 +89,60 @@ class SyncOutboxDao {
         'status': SyncStatus.pendingSync.value,
         'priority': priority,
         'attempt_count': 0,
-        'created_at': now,
-        'updated_at': now,
+        'next_retry_at': directSend ? now.add(directSendGrace).toIso8601String() : null,
+        'created_at': now.toIso8601String(),
+        'updated_at': now.toIso8601String(),
       },
-      conflictAlgorithm: ConflictAlgorithm.replace,
     );
     return id;
+  }
+
+  /// L'envoi direct n'a pas abouti : la file peut reprendre l'élément dès que possible.
+  Future<void> releaseForSync({
+    required OfflineEntityType entityType,
+    required String entityLocalId,
+  }) async {
+    final db = await _database.database;
+    await db.update(
+      'sync_outbox',
+      {'next_retry_at': null, 'updated_at': DateTime.now().toUtc().toIso8601String()},
+      where: 'entity_type = ? AND entity_local_id = ? AND status = ?',
+      whereArgs: [entityType.value, entityLocalId, SyncStatus.pendingSync.value],
+    );
+  }
+
+  /// Pas de réseau : l'élément attend, sans consommer de tentative (une longue
+  /// coupure ne doit jamais faire échouer définitivement un envoi).
+  Future<void> markWaitingForNetwork(SyncOutboxEntry entry, Object error) async {
+    final db = await _database.database;
+    final now = DateTime.now().toUtc();
+    await db.update(
+      'sync_outbox',
+      {
+        'status': SyncStatus.pendingSync.value,
+        'last_error': friendlyError(error),
+        'next_retry_at': now.add(networkRetryDelay).toIso8601String(),
+        'locked_at': null,
+        'updated_at': now.toIso8601String(),
+      },
+      where: 'local_id = ?',
+      whereArgs: [entry.localId],
+    );
+  }
+
+  /// Nouvel essai après une coupure (la reconnexion relance aussi la file).
+  static const networkRetryDelay = Duration(minutes: 2);
+
+  /// Supprime les envois terminés depuis plus de [olderThan] : la file ne
+  /// garde que ce qui reste à faire.
+  Future<int> purgeSynced({Duration olderThan = const Duration(days: 7)}) async {
+    final db = await _database.database;
+    final limit = DateTime.now().toUtc().subtract(olderThan).toIso8601String();
+    return db.delete(
+      'sync_outbox',
+      where: 'status = ? AND updated_at < ?',
+      whereArgs: [SyncStatus.synced.value, limit],
+    );
   }
 
   Future<List<SyncOutboxEntry>> listRunnable({int limit = 25}) async {
@@ -197,8 +255,7 @@ class SyncOutboxDao {
         {
           'status': SyncStatus.syncFailed.value,
           'attempt_count': attempts,
-          'last_error':
-              'Abandon apres $attempts tentatives. Derniere erreur : $error',
+          'last_error': 'Abandon apres $attempts tentatives. Derniere erreur : $error',
           'next_retry_at': null,
           'locked_at': null,
           'updated_at': now.toIso8601String(),
@@ -221,7 +278,7 @@ class SyncOutboxDao {
       {
         'status': SyncStatus.pendingSync.value,
         'attempt_count': attempts,
-        'last_error': error.toString(),
+        'last_error': friendlyError(error),
         'next_retry_at': now.add(delay).toIso8601String(),
         'locked_at': null,
         'updated_at': now.toIso8601String(),
@@ -238,7 +295,7 @@ class SyncOutboxDao {
       'sync_outbox',
       {
         'status': SyncStatus.syncFailed.value,
-        'last_error': error.toString(),
+        'last_error': friendlyError(error),
         'locked_at': null,
         'updated_at': DateTime.now().toUtc().toIso8601String(),
       },
@@ -274,11 +331,8 @@ class SyncOutboxDao {
       'sync_outbox',
       {
         'status': SyncStatus.pendingSync.value,
-        'last_error': error.toString(),
-        'next_retry_at': DateTime.now()
-            .toUtc()
-            .add(const Duration(minutes: 1))
-            .toIso8601String(),
+        'last_error': friendlyError(error),
+        'next_retry_at': DateTime.now().toUtc().add(const Duration(minutes: 1)).toIso8601String(),
         'updated_at': DateTime.now().toUtc().toIso8601String(),
       },
       where: 'entity_type = ? AND entity_local_id = ?',
@@ -296,7 +350,7 @@ class SyncOutboxDao {
       'sync_outbox',
       {
         'status': SyncStatus.syncFailed.value,
-        'last_error': error.toString(),
+        'last_error': friendlyError(error),
         'updated_at': DateTime.now().toUtc().toIso8601String(),
       },
       where: 'entity_type = ? AND entity_local_id = ?',

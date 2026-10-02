@@ -1,17 +1,8 @@
+import '../design/labels.dart';
 import '../domain/korai_enums.dart';
 
 class ConsultationFormat {
-  static String statusLabel(String status) {
-    return switch (ConsultationStatus.tryFromApi(status)) {
-      ConsultationStatus.draft => 'Brouillon',
-      ConsultationStatus.pendingAi => 'IA en cours',
-      ConsultationStatus.aiFailed => 'Analyse IA échouée',
-      ConsultationStatus.aiCompleted => 'Diagnostic IA terminé',
-      ConsultationStatus.pendingSpecialistReview => 'En attente ORL',
-      ConsultationStatus.specialistCompleted => 'Avis spécialiste reçu',
-      null => status,
-    };
-  }
+  static String statusLabel(String status) => KLabels.consultationStatus(status);
 
   static String earSideLabel(EarSide earSide) => earSide.label;
 
@@ -65,5 +56,14 @@ class ConsultationFormat {
     final day = local.day.toString().padLeft(2, '0');
     final month = months[local.month - 1];
     return '$day $month ${local.year}';
+  }
+
+  /// Durée d'attente lisible : « 12 min », « 3 h », « 2 j ».
+  static String formatWaiting(Duration? d) {
+    if (d == null || d.isNegative) return '–';
+    if (d.inMinutes < 1) return '< 1 min';
+    if (d.inHours < 1) return '${d.inMinutes} min';
+    if (d.inDays < 1) return '${d.inHours} h';
+    return '${d.inDays} j';
   }
 }

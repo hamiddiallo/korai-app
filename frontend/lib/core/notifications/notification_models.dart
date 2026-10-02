@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
 
+import '../design/korai_tokens.dart';
+
 /// Types de notifications (alignés avec l'enum backend + types locaux de sync).
 enum NotificationType {
   expertiseRequested('EXPERTISE_REQUESTED'),
   expertiseAssigned('EXPERTISE_ASSIGNED'),
   expertiseCompleted('EXPERTISE_COMPLETED'),
   patientValidated('PATIENT_VALIDATED'),
+  nurseRegistrationRequest('NURSE_REGISTRATION_REQUEST'),
   // Types purement locaux (générés côté app, jamais envoyés par le serveur).
   syncCompleted('SYNC_COMPLETED'),
   syncFailed('SYNC_FAILED'),
@@ -26,19 +29,22 @@ enum NotificationType {
         NotificationType.expertiseAssigned => Icons.how_to_reg_outlined,
         NotificationType.expertiseCompleted => Icons.verified_user_outlined,
         NotificationType.patientValidated => Icons.check_circle_outline,
+        NotificationType.nurseRegistrationRequest => Icons.person_add_alt_1_outlined,
         NotificationType.syncCompleted => Icons.cloud_done_outlined,
         NotificationType.syncFailed => Icons.sync_problem_outlined,
         NotificationType.unknown => Icons.notifications_none,
       };
 
-  Color get color => switch (this) {
-        NotificationType.expertiseRequested => const Color(0xFF006D77),
-        NotificationType.expertiseAssigned => const Color(0xFF2563EB),
-        NotificationType.expertiseCompleted => const Color(0xFF059669),
-        NotificationType.patientValidated => const Color(0xFF059669),
-        NotificationType.syncCompleted => const Color(0xFF059669),
-        NotificationType.syncFailed => const Color(0xFFEF4444),
-        NotificationType.unknown => const Color(0xFF6B7280),
+  /// Tonalité sémantique (couleurs issues des jetons Korai).
+  KTone get tone => switch (this) {
+        NotificationType.expertiseRequested => KTone.brand,
+        NotificationType.expertiseAssigned => KTone.info,
+        NotificationType.expertiseCompleted => KTone.success,
+        NotificationType.patientValidated => KTone.success,
+        NotificationType.nurseRegistrationRequest => KTone.warning,
+        NotificationType.syncCompleted => KTone.success,
+        NotificationType.syncFailed => KTone.danger,
+        NotificationType.unknown => KTone.neutral,
       };
 }
 

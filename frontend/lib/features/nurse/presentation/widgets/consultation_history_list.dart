@@ -1,13 +1,16 @@
 import 'package:flutter/material.dart';
 
-import '../../../../core/domain/korai_enums.dart';
-import '../../../../core/utils/consultation_format.dart';
+import '../../../../core/design/design.dart';
 import '../../domain/ai_case.dart';
 import '../../domain/patient.dart';
+import '../screens/consultation_detail_page.dart';
+import 'consultation_card.dart';
 import 'expertise_request_panel.dart';
 
 typedef ConsultationPatientNameResolver = String? Function(AiCase consultation);
 
+/// Liste de consultations (soignant ou patient). Chaque ligne ouvre le détail
+/// de la consultation en page.
 class ConsultationHistoryList extends StatelessWidget {
   const ConsultationHistoryList({
     super.key,
@@ -35,790 +38,83 @@ class ConsultationHistoryList extends StatelessWidget {
   final ExpertiseRequestCallback? onRequestExpertise;
   final void Function(AiCase updated)? onConsultationUpdated;
 
-  /// Relance l'analyse IA d'une consultation en échec (AI_FAILED).
-  final Future<void> Function(AiCase consultation)? onRetryFailed;
+  /// Relance l'analyse IA d'une consultation en échec ; renvoie la
+  /// consultation mise à jour.
+  final Future<AiCase> Function(AiCase consultation)? onRetryFailed;
+
+  static Future<void> openDetail(
+    BuildContext context,
+    AiCase consultation, {
+    String? patientName,
+    bool forPatient = false,
+    ExpertiseRequestCallback? onRequestExpertise,
+    ValueChanged<AiCase>? onConsultationUpdated,
+    Future<AiCase> Function(AiCase)? onRetry,
+    ValueChanged<AiCase>? onResumeDraft,
+  }) {
+    return Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => ConsultationDetailPage(
+          consultation: consultation,
+          patientName: patientName,
+          forPatient: forPatient,
+          onRequestExpertise: onRequestExpertise,
+          onConsultationUpdated: onConsultationUpdated,
+          onRetry: onRetry,
+          onResumeDraft: onResumeDraft == null
+              ? null
+              : (draft) {
+                  Navigator.of(context).pop();
+                  onResumeDraft(draft);
+                },
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     if (consultations.isEmpty) {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: Colors.grey.shade50,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.grey.shade200),
-            ),
-            child: Text(
-              emptyMessage,
-              textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.grey.shade700),
-            ),
-          ),
-          if (showStartButton && onStartNew != null) ...[
-            const SizedBox(height: 16),
-            FilledButton.icon(
-              onPressed: onStartNew,
-              icon: const Icon(Icons.add_circle_outline),
-              label: const Text('Nouvelle consultation'),
-            ),
-          ],
-        ],
+      return KEmptyView(
+        icon: Icons.event_note_outlined,
+        title: 'Aucune consultation',
+        message: emptyMessage,
+        actionLabel: showStartButton && onStartNew != null ? 'Nouvelle consultation' : null,
+        onAction: showStartButton ? onStartNew : null,
+        compact: true,
       );
     }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (patient != null) ...[
-          Text(
-            'Dossier : ${patient!.fullName}',
-            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+        for (final c in consultations) ...[
+          ConsultationCard(
+            consultation: c,
+            patientName: patient?.fullName ?? patientNameFor?.call(c),
+            showDiagnosis: !forPatient || c.patientCanSeeClinicalDetails,
+            onTap: () => openDetail(
+              context,
+              c,
+              patientName: patient?.fullName ?? patientNameFor?.call(c),
+              forPatient: forPatient,
+              onRequestExpertise: onRequestExpertise,
+              onConsultationUpdated: onConsultationUpdated,
+              onRetry: onRetryFailed,
+              onResumeDraft: onResumeDraft,
+            ),
           ),
-          const SizedBox(height: 4),
-          Text(
-            '${consultations.length} consultation${consultations.length > 1 ? 's' : ''}',
-            style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
-          ),
-          const SizedBox(height: 12),
+          const SizedBox(height: KSpace.xs),
         ],
-        ...consultations.map((consultation) {
-          final patientName =
-              patient?.fullName ?? patientNameFor?.call(consultation);
-          return ConsultationHistoryEntry(
-            consultation: consultation,
-            patientName: patientName,
-            onResumeDraft: onResumeDraft,
-            forPatient: forPatient,
-            onRequestExpertise: onRequestExpertise,
-            onConsultationUpdated: onConsultationUpdated,
-            onRetryFailed: onRetryFailed,
-          );
-        }),
         if (showStartButton && onStartNew != null) ...[
-          const SizedBox(height: 8),
-          OutlinedButton.icon(
+          const SizedBox(height: KSpace.xs),
+          FilledButton.icon(
             onPressed: onStartNew,
-            icon: const Icon(Icons.add),
+            icon: const Icon(Icons.add_rounded),
             label: const Text('Nouvelle consultation'),
           ),
         ],
       ],
     );
   }
-}
-
-class ConsultationHistoryEntry extends StatelessWidget {
-  const ConsultationHistoryEntry({
-    super.key,
-    required this.consultation,
-    this.patientName,
-    this.onResumeDraft,
-    this.forPatient = false,
-    this.onRequestExpertise,
-    this.onConsultationUpdated,
-    this.onRetryFailed,
-  });
-
-  final AiCase consultation;
-  final String? patientName;
-  final void Function(AiCase draft)? onResumeDraft;
-  final bool forPatient;
-  final ExpertiseRequestCallback? onRequestExpertise;
-  final void Function(AiCase updated)? onConsultationUpdated;
-  final Future<void> Function(AiCase consultation)? onRetryFailed;
-
-  @override
-  Widget build(BuildContext context) {
-    final isDraft = consultation.isDraft;
-    final color = _statusColor(consultation);
-
-    if (isDraft) {
-      return Card(
-        margin: const EdgeInsets.only(bottom: 10),
-        elevation: 0,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-          side: BorderSide(color: Colors.grey.shade200),
-        ),
-        child: ListTile(
-          contentPadding:
-              const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-          leading: CircleAvatar(
-            backgroundColor: color.withValues(alpha: 0.12),
-            child: Icon(Icons.edit_note, color: color, size: 22),
-          ),
-          title: Text(
-            ConsultationFormat.formatDateTime(consultation.createdAt),
-            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-          ),
-          subtitle: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (patientName != null) ...[
-                const SizedBox(height: 4),
-                Text(patientName!,
-                    style: const TextStyle(
-                        fontSize: 12, fontWeight: FontWeight.w600)),
-              ],
-              const SizedBox(height: 4),
-              Text(
-                '${ConsultationFormat.statusLabel(consultation.status)} · Brouillon à reprendre',
-                style: TextStyle(
-                    fontSize: 12, color: color, fontWeight: FontWeight.w600),
-              ),
-            ],
-          ),
-          trailing: Icon(Icons.play_arrow_rounded, color: color),
-          onTap:
-              onResumeDraft == null ? null : () => onResumeDraft!(consultation),
-        ),
-      );
-    }
-
-    final isAiFailed = consultation.isAiFailed;
-    final hasAiDetails = consultation.isCompleted ||
-        consultation.status == ConsultationStatus.pendingAi.value ||
-        consultation.status == ConsultationStatus.pendingSpecialistReview.value;
-    // Une consultation en échec est dépliable : on y montre le récap clinique
-    // et le bouton de relance.
-    final canExpand = hasAiDetails || isAiFailed;
-
-    return Card(
-      margin: const EdgeInsets.only(bottom: 10),
-      elevation: 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: Colors.grey.shade200),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: Theme(
-        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
-        child: ExpansionTile(
-          tilePadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
-          childrenPadding: const EdgeInsets.fromLTRB(8, 0, 8, 12),
-          leading: CircleAvatar(
-            backgroundColor: color.withValues(alpha: 0.12),
-            child: Icon(Icons.event_note_outlined, color: color, size: 22),
-          ),
-          title: Text(
-            ConsultationFormat.formatDateTime(consultation.createdAt),
-            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-          ),
-          subtitle: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (patientName != null) ...[
-                const SizedBox(height: 4),
-                Text(patientName!,
-                    style: const TextStyle(
-                        fontSize: 12, fontWeight: FontWeight.w600)),
-              ],
-              const SizedBox(height: 4),
-              Text(
-                ConsultationFormat.statusLabel(consultation.status),
-                style: TextStyle(
-                    fontSize: 12, color: color, fontWeight: FontWeight.w600),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                isAiFailed
-                    ? 'Déplier pour voir les infos cliniques et relancer'
-                    : hasAiDetails
-                        ? 'Déplier pour voir le compte-rendu'
-                        : 'Aucun diagnostic IA disponible',
-                style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
-              ),
-            ],
-          ),
-          children: canExpand
-              ? [
-                  ConsultationDiagnosticDetails(
-                    consultation: consultation,
-                    patientName: patientName,
-                    forPatient: forPatient,
-                    onRequestExpertise: onRequestExpertise,
-                    onConsultationUpdated: onConsultationUpdated,
-                    onRetryFailed: onRetryFailed,
-                  ),
-                ]
-              : [
-                  Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: Text(
-                      'Diagnostic en cours ou non généré.',
-                      style:
-                          TextStyle(fontSize: 13, color: Colors.grey.shade700),
-                    ),
-                  ),
-                ],
-        ),
-      ),
-    );
-  }
-
-  Color _statusColor(AiCase consultation) {
-    if (consultation.isDraft) return Colors.orange;
-    if (consultation.isAiFailed) return const Color(0xFFB45309);
-    if (consultation.isCompleted) return Colors.green;
-    return const Color(0xFF006D77);
-  }
-}
-
-/// Sections repliables du compte-rendu (évite d'afficher tout le texte d'un coup).
-class ConsultationDiagnosticDetails extends StatelessWidget {
-  const ConsultationDiagnosticDetails({
-    super.key,
-    required this.consultation,
-    this.patientName,
-    this.forPatient = false,
-    this.onRequestExpertise,
-    this.onConsultationUpdated,
-    this.onRetryFailed,
-  });
-
-  final AiCase consultation;
-  final String? patientName;
-  final bool forPatient;
-  final ExpertiseRequestCallback? onRequestExpertise;
-  final void Function(AiCase updated)? onConsultationUpdated;
-  final Future<void> Function(AiCase consultation)? onRetryFailed;
-
-  @override
-  Widget build(BuildContext context) {
-    final effective = consultation.effectiveSummary;
-    final hideForPatient =
-        forPatient && !consultation.patientCanSeeClinicalDetails;
-
-    if (hideForPatient) {
-      return Padding(
-        padding: const EdgeInsets.all(12),
-        child: Text(
-          effective?.patientStatusLabel ??
-              'Votre consultation est en cours d\'analyse par un spécialiste.',
-          style: TextStyle(fontSize: 13, color: Colors.grey.shade700),
-        ),
-      );
-    }
-
-    final summary = consultation.summary;
-    final expertise = consultation.expertiseReview;
-    final isFailed = consultation.isAiFailed;
-
-    final sections = <Widget>[
-      _ExpandableDetailSection(
-        title: 'Informations patient',
-        subtitle: patientName ?? 'Déplier pour voir',
-        icon: Icons.person_outline,
-        children: _patientInfoChildren(),
-      ),
-      _ExpandableDetailSection(
-        title: 'Informations cliniques',
-        subtitle: _clinicalSubtitle(),
-        icon: Icons.medical_information_outlined,
-        children: _clinicalInfoChildren(),
-      ),
-      // Consultation en échec : encart d'échec + relance à la place de la
-      // section « Réponse de l'IA ». L'expertise est masquée (pas de diagnostic).
-      if (isFailed)
-        _AiFailureSection(
-          consultation: consultation,
-          onRetry: onRetryFailed,
-        )
-      else ...[
-        _ExpandableDetailSection(
-          title: 'Réponse de l\'IA',
-          subtitle: summary.likelyDiagnosis?.trim().isNotEmpty == true
-              ? summary.likelyDiagnosis!
-              : 'Voir le détail',
-          icon: Icons.psychology_outlined,
-          children: _aiResponseChildren(summary),
-        ),
-        if (expertise != null)
-          _ExpandableDetailSection(
-            title: 'Réponse de l\'expert',
-            subtitle: _expertSubtitle(expertise),
-            icon: Icons.verified_user_outlined,
-            iconColor: const Color(0xFF006D77),
-            children: _expertResponseChildren(expertise),
-          ),
-        if (!forPatient && onRequestExpertise != null)
-          ExpertiseRequestPanel(
-            consultation: consultation,
-            onRequest: onRequestExpertise!,
-            onUpdated: onConsultationUpdated,
-          ),
-      ],
-    ];
-
-    return Column(children: sections);
-  }
-
-  List<Widget> _patientInfoChildren() {
-    return [
-      if (patientName != null) _DetailRow('Patient', patientName!),
-      _DetailRow(
-          'Date', ConsultationFormat.formatDateTime(consultation.createdAt)),
-      _DetailRow(
-          'Oreille', ConsultationFormat.earSideLabel(consultation.earSide)),
-      _DetailRow('Urgence', consultation.urgency.value),
-      _DetailRow('Statut', ConsultationFormat.statusLabel(consultation.status)),
-      _DetailRow('Mise à jour',
-          ConsultationFormat.formatDateTime(consultation.updatedAt)),
-      if (_hasText(consultation.clinicalNotes))
-        _DetailParagraph(consultation.clinicalNotes!),
-    ];
-  }
-
-  String _clinicalSubtitle() {
-    final parts = <String>[];
-    if (consultation.symptomLabels.isNotEmpty) {
-      parts.add('${consultation.symptomLabels.length} symptôme(s)');
-    }
-    if (consultation.medicalHistoryLabels.isNotEmpty) {
-      parts.add('${consultation.medicalHistoryLabels.length} antécédent(s)');
-    }
-    return parts.isEmpty ? 'Déplier pour voir' : parts.join(' · ');
-  }
-
-  List<Widget> _clinicalInfoChildren() {
-    final children = <Widget>[];
-    if (consultation.symptomLabels.isNotEmpty) {
-      children
-          .add(_DetailRow('Symptômes', consultation.symptomLabels.join(', ')));
-    }
-    if (consultation.medicalHistoryLabels.isNotEmpty) {
-      children.add(_DetailRow(
-          'Antécédents', consultation.medicalHistoryLabels.join(', ')));
-    }
-    if (consultation.touchCheckLabels.isNotEmpty) {
-      for (var i = 0; i < consultation.touchCheckLabels.length; i++) {
-        final label = consultation.touchCheckLabels[i];
-        final id = i < consultation.touchCheckIds.length
-            ? consultation.touchCheckIds[i]
-            : null;
-        final obs = id != null ? consultation.touchObservations[id] : null;
-        children.add(
-          _DetailRow(
-            'Toucher',
-            obs != null && obs.isNotEmpty ? '$label — $obs' : label,
-          ),
-        );
-      }
-    }
-    if (children.isEmpty && _hasText(consultation.symptoms)) {
-      children.add(_DetailParagraph(consultation.symptoms!));
-    }
-    if (children.isEmpty) {
-      children.add(
-        Text(
-          'Aucune donnée clinique structurée.',
-          style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
-        ),
-      );
-    }
-    return children;
-  }
-
-  List<Widget> _aiResponseChildren(AiSummary summary) {
-    final children = <Widget>[
-      _DetailRow(
-          'Diagnostic probable', summary.likelyDiagnosis ?? 'Non déterminé'),
-      _DetailRow('Confiance', summary.confidenceLabel.value),
-    ];
-    if (_hasText(summary.imageOpinion)) {
-      children.add(_DetailBlock('Avis image', summary.imageOpinion!));
-    }
-    if (_hasText(summary.ragOpinion)) {
-      children.add(_DetailBlock('Avis symptômes (RAG)', summary.ragOpinion!));
-    }
-    if (summary.warnings.isNotEmpty) {
-      children.add(const Padding(
-        padding: EdgeInsets.only(top: 8, bottom: 4),
-        child: Text('Alertes',
-            style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12)),
-      ));
-      children.addAll(summary.warnings.map((w) => _DetailBullet(w)));
-    }
-    return children;
-  }
-
-  String _expertSubtitle(ExpertiseReview expertise) {
-    if (expertise.status == ExpertiseStatus.completed &&
-        expertise.decision != null) {
-      return expertise.decision!.label;
-    }
-    return switch (expertise.status) {
-      ExpertiseStatus.pending => 'En attente de prise en charge',
-      ExpertiseStatus.inReview => 'Analyse en cours',
-      ExpertiseStatus.completed => 'Terminée',
-    };
-  }
-
-  List<Widget> _expertResponseChildren(ExpertiseReview expertise) {
-    final children = <Widget>[
-      _DetailRow('Statut expertise', _expertStatusLabel(expertise.status)),
-    ];
-
-    if (_hasText(expertise.summaryNote)) {
-      children.add(_DetailBlock('Note à l\'escalade', expertise.summaryNote!));
-    }
-
-    if (expertise.status != ExpertiseStatus.completed ||
-        expertise.decision == null) {
-      children.add(
-        Padding(
-          padding: const EdgeInsets.only(top: 4),
-          child: Text(
-            'L\'avis du spécialiste sera affiché ici une fois la revue terminée.',
-            style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
-          ),
-        ),
-      );
-      return children;
-    }
-
-    children.add(_DetailRow('Décision', expertise.decision!.label));
-
-    switch (expertise.decision!) {
-      case ExpertDecision.validated:
-        children.add(
-          _DetailRow(
-            'Diagnostic retenu',
-            consultation.summary.likelyDiagnosis ?? 'Non déterminé',
-          ),
-        );
-        children.add(
-          _DetailRow('Confiance', 'HIGH (validation experte)'),
-        );
-      case ExpertDecision.corrected:
-      case ExpertDecision.insufficient:
-        if (_hasText(expertise.correctedLikelyDiagnosis)) {
-          children.add(
-              _DetailRow('Diagnostic', expertise.correctedLikelyDiagnosis!));
-        } else if (expertise.decision == ExpertDecision.insufficient) {
-          children.add(_DetailRow('Diagnostic', 'Indéterminé'));
-        }
-        if (_hasText(expertise.correctedClinicalSummary)) {
-          children.add(_DetailBlock(
-              'Synthèse clinique', expertise.correctedClinicalSummary!));
-        }
-    }
-
-    if (_hasText(expertise.correctedRecommendation)) {
-      children.add(
-          _DetailRow('Recommandation', expertise.correctedRecommendation!));
-    }
-    if (_hasText(expertise.comment)) {
-      children.add(_DetailBlock('Commentaire', expertise.comment!));
-    }
-    if (_hasText(expertise.reviewedAt)) {
-      children.add(_DetailRow('Date de l\'avis',
-          ConsultationFormat.formatDateTime(expertise.reviewedAt)));
-    }
-
-    return children;
-  }
-
-  String _expertStatusLabel(ExpertiseStatus status) => switch (status) {
-        ExpertiseStatus.pending => 'En attente',
-        ExpertiseStatus.inReview => 'En cours de revue',
-        ExpertiseStatus.completed => 'Terminée',
-      };
-
-  bool _hasText(String? value) => value != null && value.trim().isNotEmpty;
-}
-
-/// Encart d'échec d'analyse IA affiché dans le détail d'une consultation en
-/// échec, avec un bouton de relance directe.
-class _AiFailureSection extends StatelessWidget {
-  const _AiFailureSection({required this.consultation, this.onRetry});
-
-  final AiCase consultation;
-  final Future<void> Function(AiCase consultation)? onRetry;
-
-  @override
-  Widget build(BuildContext context) {
-    const amber = Color(0xFFB45309);
-    return Container(
-      margin: const EdgeInsets.fromLTRB(8, 6, 8, 4),
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: const Color(0xFFFFFBEB),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFF59E0B)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: const [
-              Icon(Icons.cloud_off_rounded, size: 20, color: amber),
-              SizedBox(width: 8),
-              Text(
-                'Analyse IA indisponible',
-                style: TextStyle(
-                    fontWeight: FontWeight.bold, fontSize: 13, color: amber),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Text(
-            consultation.aiErrorDisplay,
-            style: const TextStyle(fontSize: 12.5, color: Colors.black87),
-          ),
-          if (onRetry != null) ...[
-            const SizedBox(height: 12),
-            SizedBox(
-              width: double.infinity,
-              child: _RetryFailedButton(
-                consultation: consultation,
-                onRetry: onRetry!,
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-class _RetryFailedButton extends StatefulWidget {
-  const _RetryFailedButton({required this.consultation, required this.onRetry});
-
-  final AiCase consultation;
-  final Future<void> Function(AiCase consultation) onRetry;
-
-  @override
-  State<_RetryFailedButton> createState() => _RetryFailedButtonState();
-}
-
-class _RetryFailedButtonState extends State<_RetryFailedButton> {
-  bool _loading = false;
-
-  Future<void> _run() async {
-    setState(() => _loading = true);
-    try {
-      await widget.onRetry(widget.consultation);
-    } finally {
-      if (mounted) setState(() => _loading = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return FilledButton.icon(
-      onPressed: _loading ? null : _run,
-      icon: _loading
-          ? const SizedBox(
-              width: 16,
-              height: 16,
-              child:
-                  CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-            )
-          : const Icon(Icons.refresh_rounded, size: 18),
-      label: Text(_loading ? 'Analyse en cours…' : 'Relancer l\'analyse'),
-    );
-  }
-}
-
-class _ExpandableDetailSection extends StatelessWidget {
-  const _ExpandableDetailSection({
-    required this.title,
-    required this.icon,
-    required this.children,
-    this.subtitle,
-    this.iconColor,
-  });
-
-  final String title;
-  final String? subtitle;
-  final IconData icon;
-  final List<Widget> children;
-  final Color? iconColor;
-
-  @override
-  Widget build(BuildContext context) {
-    return Theme(
-      data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
-      child: ExpansionTile(
-        dense: true,
-        tilePadding: const EdgeInsets.symmetric(horizontal: 8),
-        childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
-        leading:
-            Icon(icon, size: 20, color: iconColor ?? const Color(0xFF006D77)),
-        title: Text(
-          title,
-          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-        ),
-        subtitle: subtitle != null
-            ? Text(
-                subtitle!,
-                style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              )
-            : null,
-        children: children,
-      ),
-    );
-  }
-}
-
-class _DetailRow extends StatelessWidget {
-  const _DetailRow(this.label, this.value);
-
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 118,
-            child: Text(
-              '$label :',
-              style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.grey.shade700),
-            ),
-          ),
-          Expanded(
-            child:
-                Text(value, style: const TextStyle(fontSize: 13, height: 1.35)),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _DetailParagraph extends StatelessWidget {
-  const _DetailParagraph(this.text);
-
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Text(text, style: const TextStyle(fontSize: 13, height: 1.4)),
-    );
-  }
-}
-
-class _DetailBlock extends StatelessWidget {
-  const _DetailBlock(this.label, this.text);
-
-  final String label;
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(label,
-              style:
-                  const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
-          const SizedBox(height: 4),
-          Text(text, style: const TextStyle(fontSize: 12, height: 1.4)),
-        ],
-      ),
-    );
-  }
-}
-
-class _DetailBullet extends StatelessWidget {
-  const _DetailBullet(this.text);
-
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 6),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text('• ', style: TextStyle(fontSize: 13)),
-          Expanded(
-              child: Text(text,
-                  style: const TextStyle(fontSize: 13, height: 1.35))),
-        ],
-      ),
-    );
-  }
-}
-
-/// Feuille modale avec le même système de sections repliables (usage optionnel).
-void showConsultationDetailSheet(BuildContext context, AiCase consultation,
-    {String? patientName}) {
-  showModalBottomSheet(
-    context: context,
-    isScrollControlled: true,
-    shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-    ),
-    builder: (context) {
-      return DraggableScrollableSheet(
-        expand: false,
-        initialChildSize: 0.55,
-        minChildSize: 0.35,
-        maxChildSize: 0.92,
-        builder: (context, scrollController) {
-          return Padding(
-            padding: const EdgeInsets.fromLTRB(12, 12, 12, 24),
-            child: ListView(
-              controller: scrollController,
-              children: [
-                Center(
-                  child: Container(
-                    width: 40,
-                    height: 4,
-                    margin: const EdgeInsets.only(bottom: 12),
-                    decoration: BoxDecoration(
-                      color: Colors.grey.shade300,
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Consultation du ${ConsultationFormat.formatDateTime(consultation.createdAt)}',
-                        style: Theme.of(context)
-                            .textTheme
-                            .titleLarge
-                            ?.copyWith(fontWeight: FontWeight.bold),
-                      ),
-                      if (patientName != null) ...[
-                        const SizedBox(height: 4),
-                        Text(patientName,
-                            style: TextStyle(color: Colors.grey.shade700)),
-                      ],
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 8),
-                ConsultationDiagnosticDetails(consultation: consultation),
-              ],
-            ),
-          );
-        },
-      );
-    },
-  );
 }

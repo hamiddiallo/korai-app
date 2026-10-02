@@ -24,6 +24,8 @@
 	<string>????</string>
 	<key>CFBundleVersion</key>
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
+	<key>NSFaceIDUsageDescription</key>
+	<string>Korai utilise Face ID pour déverrouiller l’application et protéger les dossiers patients.</string>
 	<key>NSCameraUsageDescription</key>
 	<string>Korai utilise la camera pour capturer les images otoscopiques pendant la consultation.</string>
 	<key>NSPhotoLibraryUsageDescription</key>

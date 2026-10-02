@@ -10,10 +10,12 @@ import '../../../core/domain/clinical_urgency.dart';
 import '../../../core/domain/consultation_create_payload.dart';
 import '../../../core/domain/korai_enums.dart';
 import '../../../core/utils/orl_image_editor.dart';
+import '../data/local/nurse_local_dao.dart';
 import '../data/nurse_repository.dart';
 import '../domain/ai_case.dart';
 import '../domain/clinical_reference_item.dart';
 import '../domain/patient.dart';
+import '../../../core/design/feedback.dart';
 
 class NurseConsultationState {
   const NurseConsultationState({this.version = 0});
@@ -54,7 +56,32 @@ class NurseConsultationViewModel extends Cubit<NurseConsultationState> {
   final selectedTouchCheckIds = <String>{};
   final touchCheckObservations = <String, String>{};
 
+  /// Accords recueillis auprès du patient pour cette consultation (décochés
+  /// tant que le soignant ne les a pas demandés).
+  bool consentForAi = false;
+  bool consentForTeleExpertise = false;
+
   static const totalSteps = 6;
+
+  void setConsents({required bool ai, required bool teleExpertise}) {
+    consentForAi = ai;
+    consentForTeleExpertise = teleExpertise;
+    _emitState();
+  }
+
+  /// Patient déjà enregistré : envoie au serveur les accords modifiés avant de
+  /// poursuivre (réseau requis ; lève l'erreur à afficher sinon).
+  Future<void> saveConsentsIfChanged() async {
+    final current = patient;
+    if (current == null || NurseLocalDao.isLocalId(current.id)) return;
+    if (current.consentForAi == consentForAi && current.consentForTeleExpertise == consentForTeleExpertise) return;
+    patient = await _repository.updateConsents(
+      current.id,
+      consentForAi: consentForAi,
+      consentForTeleExpertise: consentForTeleExpertise,
+    );
+    _emitState();
+  }
 
   static const touchObservationOptions = [
     'Non réalisé',
@@ -89,7 +116,7 @@ class NurseConsultationViewModel extends Cubit<NurseConsultationState> {
       medicalHistories = results[1];
       touchChecks = results[2];
     } catch (error) {
-      errorMessage = error.toString();
+      errorMessage = friendlyError(error);
     } finally {
       isLoading = false;
       _emitState();
@@ -108,11 +135,7 @@ class NurseConsultationViewModel extends Cubit<NurseConsultationState> {
   void previousStep() => goToStep(currentStep - 1);
 
   AiCase? findPatientPreconsultationCase(List<AiCase> cases, String patientId) {
-    final matching = cases
-        .where((c) =>
-            c.patientId == patientId &&
-            (c.symptoms?.trim().isNotEmpty ?? false))
-        .toList();
+    final matching = cases.where((c) => c.patientId == patientId && (c.symptoms?.trim().isNotEmpty ?? false)).toList();
     if (matching.isEmpty) return null;
 
     final drafts = matching.where((c) => c.isDraft).toList();
@@ -172,8 +195,7 @@ class NurseConsultationViewModel extends Cubit<NurseConsultationState> {
       }
     }
     for (final touchCheck in touchChecks) {
-      final observation =
-          _parseTouchObservationFromNarrative(narrative, touchCheck.label);
+      final observation = _parseTouchObservationFromNarrative(narrative, touchCheck.label);
       if (observation != null) {
         selectedTouchCheckIds.add(touchCheck.id);
         touchCheckObservations[touchCheck.id] = observation;
@@ -220,18 +242,12 @@ class NurseConsultationViewModel extends Cubit<NurseConsultationState> {
 
     final lower = narrative.toLowerCase();
     return PreconsultationPreview(
-      symptomLabels: symptoms
-          .where((item) => lower.contains(item.label.toLowerCase()))
-          .map((item) => item.label)
-          .toList(),
-      historyLabels: medicalHistories
-          .where((item) => lower.contains(item.label.toLowerCase()))
-          .map((item) => item.label)
-          .toList(),
-      touchCheckLabels: touchChecks
-          .where((item) => lower.contains(item.label.toLowerCase()))
-          .map((item) => item.label)
-          .toList(),
+      symptomLabels:
+          symptoms.where((item) => lower.contains(item.label.toLowerCase())).map((item) => item.label).toList(),
+      historyLabels:
+          medicalHistories.where((item) => lower.contains(item.label.toLowerCase())).map((item) => item.label).toList(),
+      touchCheckLabels:
+          touchChecks.where((item) => lower.contains(item.label.toLowerCase())).map((item) => item.label).toList(),
       notes: extractNotesFromNarrative(narrative),
     );
   }
@@ -290,8 +306,7 @@ class NurseConsultationViewModel extends Cubit<NurseConsultationState> {
   List<String> touchCheckSummaries() {
     return touchChecks
         .where((item) => selectedTouchCheckIds.contains(item.id))
-        .map((item) =>
-            '${item.label}: ${touchCheckObservations[item.id] ?? "—"}')
+        .map((item) => '${item.label}: ${touchCheckObservations[item.id] ?? "—"}')
         .toList();
   }
 
@@ -311,6 +326,8 @@ class NurseConsultationViewModel extends Cubit<NurseConsultationState> {
         phone: phone,
         sex: sex,
         address: address,
+        consentForAi: consentForAi,
+        consentForTeleExpertise: consentForTeleExpertise,
       );
     });
   }
@@ -325,6 +342,9 @@ class NurseConsultationViewModel extends Cubit<NurseConsultationState> {
   Future<void> pickImage(ImageSource source) async {
     final picked = await _imagePicker.pickImage(
       source: source,
+      // Assez pour l'IA et le spécialiste, sans saturer la file hors ligne.
+      maxWidth: 2048,
+      maxHeight: 2048,
       imageQuality: 86,
     );
     if (picked == null) return;
@@ -362,8 +382,7 @@ class NurseConsultationViewModel extends Cubit<NurseConsultationState> {
     await _editImage(() async {
       final current = image;
       if (current == null) return;
-      image =
-          await OrlImageEditor.adjustBrightness(current, brighter: brighter);
+      image = await OrlImageEditor.adjustBrightness(current, brighter: brighter);
     });
   }
 
@@ -375,7 +394,7 @@ class NurseConsultationViewModel extends Cubit<NurseConsultationState> {
     try {
       await action();
     } catch (error) {
-      errorMessage = error.toString();
+      errorMessage = friendlyError(error);
     } finally {
       isEditingImage = false;
       _emitState();
@@ -406,6 +425,8 @@ class NurseConsultationViewModel extends Cubit<NurseConsultationState> {
         phone: phone,
         sex: sex,
         address: address,
+        consentForAi: consentForAi,
+        consentForTeleExpertise: consentForTeleExpertise,
       );
 
       final currentPatient = patient!;
@@ -426,15 +447,7 @@ class NurseConsultationViewModel extends Cubit<NurseConsultationState> {
       );
 
       try {
-        final remotePatient = await _repository.syncLocalPatient(
-          currentPatient,
-          firstName: firstName,
-          lastName: lastName,
-          birthDate: age.isEmpty ? null : 'Age: $age',
-          phone: phone,
-          sex: sex,
-          address: address,
-        );
+        final remotePatient = await _repository.syncLocalPatient(currentPatient);
         patient = remotePatient;
 
         aiCase = await _repository.diagnose(
@@ -461,27 +474,25 @@ class NurseConsultationViewModel extends Cubit<NurseConsultationState> {
           );
           if (reused != null) {
             aiCase = reused;
-            infoMessage =
-                'Réponse IA réutilisée hors-ligne (cas clinique identique). '
-                'La consultation sera synchronisée au retour du réseau.';
+            infoMessage = 'Hors ligne : réponse reprise d’une consultation équivalente (même profil clinique). '
+                'La consultation sera envoyée au retour du réseau.';
           } else {
             infoMessage =
-                'Consultation enregistree localement. L\'analyse IA sera synchronisee des que le reseau revient.';
+                'Consultation enregistrée sur l’appareil. L’analyse IA démarrera automatiquement au retour du réseau.';
           }
         } else if (error.isPermanentClientFailure) {
           errorMessage =
-              'Consultation enregistree localement, mais le serveur a refuse la synchronisation : ${error.message}';
+              'Consultation enregistrée sur l’appareil, mais le serveur l’a refusée : ${friendlyError(error)}';
         } else {
-          // 5xx / service indisponible : l\'entree reste en file et sera rejouee.
-          infoMessage =
-              'Consultation enregistree. ${error.message}';
+          // 5xx / service indisponible : l'entrée reste en file et sera rejouée.
+          infoMessage = 'Consultation enregistrée. ${friendlyError(error)}';
         }
       } catch (_) {
         infoMessage =
-            'Consultation enregistree localement. L\'analyse IA sera synchronisee des que le reseau revient.';
+            'Consultation enregistrée sur l’appareil. L’analyse IA démarrera automatiquement au retour du réseau.';
       }
     } catch (error) {
-      errorMessage = error.toString();
+      errorMessage = friendlyError(error);
     } finally {
       isSubmitting = false;
       _emitState();
@@ -548,19 +559,18 @@ class NurseConsultationViewModel extends Cubit<NurseConsultationState> {
           );
           if (reused != null) {
             aiCase = reused;
-            infoMessage =
-                'Réponse IA réutilisée hors-ligne (cas clinique identique). '
-                'La consultation sera synchronisée au retour du réseau.';
+            infoMessage = 'Hors ligne : réponse reprise d’une consultation équivalente (même profil clinique). '
+                'La consultation sera envoyée au retour du réseau.';
           } else {
             infoMessage =
-                'Consultation enregistree localement. L\'analyse IA sera synchronisee des que le reseau revient.';
+                'Consultation enregistrée sur l’appareil. L’analyse IA démarrera automatiquement au retour du réseau.';
           }
         } else {
-          errorMessage = error.message;
+          errorMessage = friendlyError(error);
         }
       }
     } catch (error) {
-      errorMessage = error.toString();
+      errorMessage = friendlyError(error);
     } finally {
       isLoading = false;
       _emitState();
@@ -600,8 +610,7 @@ class NurseConsultationViewModel extends Cubit<NurseConsultationState> {
     required String notes,
   }) {
     final touchSnapshot = {
-      for (final id in selectedTouchCheckIds)
-        id: touchCheckObservations[id] ?? '',
+      for (final id in selectedTouchCheckIds) id: touchCheckObservations[id] ?? '',
     };
     return ConsultationCreatePayload(
       patientId: patientId,
@@ -616,10 +625,6 @@ class NurseConsultationViewModel extends Cubit<NurseConsultationState> {
         touchObservations: touchSnapshot,
       ),
       symptoms: buildClinicalNarrative(
-        firstName: firstName,
-        lastName: lastName,
-        phone: phone,
-        address: address,
         age: age,
         sex: sex,
         notes: notes,
@@ -631,11 +636,9 @@ class NurseConsultationViewModel extends Cubit<NurseConsultationState> {
       symptomIds: ClinicalSnapshot.ids(selectedSymptomIds),
       symptomLabels: ClinicalSnapshot.labels(symptoms, selectedSymptomIds),
       medicalHistoryIds: ClinicalSnapshot.ids(selectedMedicalHistoryIds),
-      medicalHistoryLabels:
-          ClinicalSnapshot.labels(medicalHistories, selectedMedicalHistoryIds),
+      medicalHistoryLabels: ClinicalSnapshot.labels(medicalHistories, selectedMedicalHistoryIds),
       touchCheckIds: ClinicalSnapshot.ids(selectedTouchCheckIds),
-      touchCheckLabels:
-          ClinicalSnapshot.labels(touchChecks, selectedTouchCheckIds),
+      touchCheckLabels: ClinicalSnapshot.labels(touchChecks, selectedTouchCheckIds),
       touchObservations: Map<String, String>.from(touchCheckObservations),
     );
   }
@@ -659,10 +662,10 @@ class NurseConsultationViewModel extends Cubit<NurseConsultationState> {
       }
     } on ApiException catch (error) {
       errorMessage = error.isNetworkFailure
-          ? 'Pas de connexion : impossible de relancer l\'analyse pour le moment.'
-          : error.message;
+          ? 'Pas de connexion : l’analyse ne peut pas être relancée maintenant. Réessayez au retour du réseau.'
+          : friendlyError(error);
     } catch (error) {
-      errorMessage = error.toString();
+      errorMessage = friendlyError(error);
     } finally {
       isSubmitting = false;
       _emitState();
@@ -675,28 +678,23 @@ class NurseConsultationViewModel extends Cubit<NurseConsultationState> {
 
     AiCase? updated;
     await _run(() async {
-      updated = await _repository.requestExpertise(current.id,
-          summaryNote: summaryNote);
+      updated = await _repository.requestExpertise(current.id, summaryNote: summaryNote);
       aiCase = updated;
     });
     return updated;
   }
 
+  /// Récit clinique envoyé au serveur puis à l'IA : données cliniques
+  /// seulement. L'identité (nom, téléphone, adresse) reste dans la fiche
+  /// patient et ne figure jamais dans ce texte.
   String buildClinicalNarrative({
-    required String firstName,
-    required String lastName,
-    required String phone,
-    required String address,
     required String age,
     required String sex,
     required String notes,
   }) {
     return [
-      'Patient: $firstName $lastName',
       if (age.isNotEmpty) 'Age: $age ans',
       'Sexe: $sex',
-      if (phone.isNotEmpty) 'Telephone: $phone',
-      if (address.isNotEmpty) 'Adresse: $address',
       'Symptomes: ${labelsFor(symptoms, selectedSymptomIds).join(', ')}',
       'Antecedents: ${labelsFor(medicalHistories, selectedMedicalHistoryIds).join(', ')}',
       ..._touchCheckNarrativeLines(),
@@ -714,29 +712,31 @@ class NurseConsultationViewModel extends Cubit<NurseConsultationState> {
     ];
   }
 
+  /// Au moins un élément pris en compte dans l'urgence a été renseigné.
+  bool get hasUrgencyInput =>
+      selectedSymptomIds.isNotEmpty || selectedMedicalHistoryIds.isNotEmpty || selectedTouchCheckIds.isNotEmpty;
+
   /// Niveau d'urgence calculé automatiquement à partir des scores de danger
-  /// des symptômes et antécédents cochés (aperçu ; le serveur fait autorité).
+  /// des symptômes, des vérifications au toucher anormales et des antécédents
+  /// (aperçu ; le serveur fait autorité).
   UrgencyLevel computedUrgency() {
-    final symptomScores = symptoms
-        .where((s) => selectedSymptomIds.contains(s.id))
-        .map((s) => s.dangerScore)
-        .toList();
-    final historyScores = medicalHistories
-        .where((h) => selectedMedicalHistoryIds.contains(h.id))
-        .map((h) => h.dangerScore)
-        .toList();
-    return ClinicalUrgency.compute(
-      symptomScores: symptomScores,
-      historyScores: historyScores,
-    );
+    final signScores = [
+      for (final s in symptoms)
+        if (selectedSymptomIds.contains(s.id)) s.dangerScore,
+      for (final t in touchChecks)
+        if (selectedTouchCheckIds.contains(t.id) &&
+            ClinicalUrgency.isAbnormalTouchFinding(touchCheckObservations[t.id]))
+          t.dangerScore,
+    ];
+    final historyScores = [
+      for (final h in medicalHistories)
+        if (selectedMedicalHistoryIds.contains(h.id)) h.dangerScore,
+    ];
+    return ClinicalUrgency.compute(signScores: signScores, historyScores: historyScores);
   }
 
-  List<String> labelsFor(
-      List<ClinicalReferenceItem> items, Set<String> selectedIds) {
-    return items
-        .where((item) => selectedIds.contains(item.id))
-        .map((item) => item.label)
-        .toList();
+  List<String> labelsFor(List<ClinicalReferenceItem> items, Set<String> selectedIds) {
+    return items.where((item) => selectedIds.contains(item.id)).map((item) => item.label).toList();
   }
 
   Future<void> _run(Future<void> Function() action) async {
@@ -747,7 +747,7 @@ class NurseConsultationViewModel extends Cubit<NurseConsultationState> {
     try {
       await action();
     } catch (error) {
-      errorMessage = error.toString();
+      errorMessage = friendlyError(error);
     } finally {
       isLoading = false;
       _emitState();

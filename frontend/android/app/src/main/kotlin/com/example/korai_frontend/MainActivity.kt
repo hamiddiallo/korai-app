@@ -1,5 +1,6 @@
 package com.example.korai_frontend
 
-import io.flutter.embedding.android.FlutterActivity
+import io.flutter.embedding.android.FlutterFragmentActivity
 
-class MainActivity : FlutterActivity()
+// FragmentActivity requise par local_auth (fenêtre biométrique du système).
+class MainActivity : FlutterFragmentActivity()

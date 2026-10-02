@@ -7,6 +7,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../offline/offline_models.dart';
 import 'sync_outbox_dao.dart';
 import 'sync_service.dart';
+import '../design/feedback.dart';
 
 /// Élément en échec de synchronisation, présenté à l'utilisateur (libellé +
 /// cause), avec son identifiant d'outbox pour le réessai ciblé.
@@ -180,14 +181,16 @@ class SyncCubit extends Cubit<SyncState> {
       title = name.isEmpty ? 'Patient' : name;
       subtitle = 'Création de patient';
     } else if (entry.operation == OutboxOperation.submitDiagnosis.value) {
+      final name = entry.payload['patientName']?.toString().trim() ?? '';
       final diagnosis = entry.payload['diagnosisPayload'];
       final narrative =
           diagnosis is Map ? diagnosis['symptoms']?.toString() ?? '' : '';
-      title = _patientNameFromNarrative(narrative) ?? 'Consultation';
+      // Anciennes entrées : le nom figurait encore dans le récit clinique.
+      title = name.isNotEmpty ? name : (_patientNameFromNarrative(narrative) ?? 'Consultation');
       subtitle = 'Analyse de consultation';
     } else {
-      title = 'Élément à synchroniser';
-      subtitle = entry.operation;
+      title = 'Élément à envoyer';
+      subtitle = 'Donnée enregistrée sur l’appareil';
     }
     return FailedSyncItem(
       localId: entry.localId,
@@ -232,7 +235,7 @@ class SyncCubit extends Cubit<SyncState> {
         emit(
           state.copyWith(
             isSyncing: false,
-            errorMessage: error.toString(),
+            errorMessage: friendlyError(error),
           ),
         );
       }

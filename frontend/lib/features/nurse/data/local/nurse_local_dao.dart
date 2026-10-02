@@ -6,11 +6,15 @@ import 'package:path/path.dart' as p;
 import 'package:sqflite_sqlcipher/sqflite.dart';
 import 'package:uuid/uuid.dart';
 
+import '../../../../core/api/api_client.dart';
 import '../../../../core/domain/consultation_create_payload.dart';
 import '../../../../core/offline/offline_models.dart';
 import '../../../../core/storage/encrypted_local_database.dart';
 import '../../../../core/sync/sync_outbox_dao.dart';
+import '../../../../core/domain/korai_enums.dart';
+import '../../domain/ai_case.dart';
 import '../../domain/patient.dart';
+import '../../../../core/design/feedback.dart';
 
 class LocalConsultationDraft {
   const LocalConsultationDraft({
@@ -78,47 +82,36 @@ class LocalDiagnosisSyncRecord {
   Map<String, dynamic> toJsonBody() => {
         'patientId': serverPatientId,
         'symptoms': clinicalNarrative,
-        if (clinicalNotes != null && clinicalNotes!.isNotEmpty)
-          'clinicalNotes': clinicalNotes,
+        if (clinicalNotes != null && clinicalNotes!.isNotEmpty) 'clinicalNotes': clinicalNotes,
         'urgency': urgency,
         'earSide': earSide,
         'showSources': showSources,
         'requestSpecialistReview': requestSpecialistReview,
         if (symptomIds.isNotEmpty) 'symptomIds': symptomIds,
         if (symptomLabels.isNotEmpty) 'symptomLabels': symptomLabels,
-        if (medicalHistoryIds.isNotEmpty)
-          'medicalHistoryIds': medicalHistoryIds,
-        if (medicalHistoryLabels.isNotEmpty)
-          'medicalHistoryLabels': medicalHistoryLabels,
+        if (medicalHistoryIds.isNotEmpty) 'medicalHistoryIds': medicalHistoryIds,
+        if (medicalHistoryLabels.isNotEmpty) 'medicalHistoryLabels': medicalHistoryLabels,
         if (touchCheckIds.isNotEmpty) 'touchCheckIds': touchCheckIds,
         if (touchCheckLabels.isNotEmpty) 'touchCheckLabels': touchCheckLabels,
-        if (touchObservations.isNotEmpty)
-          'touchObservations': touchObservations,
+        if (touchObservations.isNotEmpty) 'touchObservations': touchObservations,
         'clientLocalId': localId,
       };
 
   Map<String, String> toMultipartFields() => {
         'patientId': serverPatientId ?? '',
         'symptoms': clinicalNarrative,
-        if (clinicalNotes != null && clinicalNotes!.isNotEmpty)
-          'clinicalNotes': clinicalNotes!,
+        if (clinicalNotes != null && clinicalNotes!.isNotEmpty) 'clinicalNotes': clinicalNotes!,
         'urgency': urgency,
         'earSide': earSide,
         'showSources': showSources.toString(),
         'requestSpecialistReview': requestSpecialistReview.toString(),
         if (symptomIds.isNotEmpty) 'symptomIds': jsonEncode(symptomIds),
-        if (symptomLabels.isNotEmpty)
-          'symptomLabels': jsonEncode(symptomLabels),
-        if (medicalHistoryIds.isNotEmpty)
-          'medicalHistoryIds': jsonEncode(medicalHistoryIds),
-        if (medicalHistoryLabels.isNotEmpty)
-          'medicalHistoryLabels': jsonEncode(medicalHistoryLabels),
-        if (touchCheckIds.isNotEmpty)
-          'touchCheckIds': jsonEncode(touchCheckIds),
-        if (touchCheckLabels.isNotEmpty)
-          'touchCheckLabels': jsonEncode(touchCheckLabels),
-        if (touchObservations.isNotEmpty)
-          'touchObservations': jsonEncode(touchObservations),
+        if (symptomLabels.isNotEmpty) 'symptomLabels': jsonEncode(symptomLabels),
+        if (medicalHistoryIds.isNotEmpty) 'medicalHistoryIds': jsonEncode(medicalHistoryIds),
+        if (medicalHistoryLabels.isNotEmpty) 'medicalHistoryLabels': jsonEncode(medicalHistoryLabels),
+        if (touchCheckIds.isNotEmpty) 'touchCheckIds': jsonEncode(touchCheckIds),
+        if (touchCheckLabels.isNotEmpty) 'touchCheckLabels': jsonEncode(touchCheckLabels),
+        if (touchObservations.isNotEmpty) 'touchObservations': jsonEncode(touchObservations),
         'clientLocalId': localId,
       };
 }
@@ -170,14 +163,16 @@ class NurseLocalDao {
     String? phone,
     String? sex,
     String? address,
+    required bool consentForAi,
+    required bool consentForTeleExpertise,
   }) async {
     final db = await _database.database;
     final now = DateTime.now().toUtc().toIso8601String();
     final id = localId ?? '$localIdPrefix${_uuid.v4()}';
 
-    await db.insert(
-      'local_patients',
-      {
+    // Fiche et envoi écrits ensemble : jamais l'un sans l'autre.
+    await db.transaction((txn) async {
+      await txn.insert('local_patients', {
         'local_id': id,
         'first_name': firstName,
         'last_name': lastName,
@@ -185,33 +180,34 @@ class NurseLocalDao {
         'address': _blankToNull(address),
         'birth_date': _blankToNull(birthDate),
         'sex': _blankToNull(sex),
-        'consent_for_ai': 1,
-        'consent_for_tele_expertise': 1,
+        'consent_for_ai': consentForAi ? 1 : 0,
+        'consent_for_tele_expertise': consentForTeleExpertise ? 1 : 0,
         'is_validated': 0,
         'sync_status': SyncStatus.pendingSync.value,
         'created_at': now,
         'updated_at': now,
-      },
-      conflictAlgorithm: ConflictAlgorithm.replace,
-    );
+      });
 
-    await _outboxDao.enqueue(
-      entityType: OfflineEntityType.patient,
-      entityLocalId: id,
-      operation: OutboxOperation.createPatient,
-      payload: {
-        'clientLocalId': id,
-        'firstName': firstName,
-        'lastName': lastName,
-        if (birthDate != null && birthDate.isNotEmpty) 'birthDate': birthDate,
-        if (phone != null && phone.isNotEmpty) 'phone': phone,
-        if (sex != null && sex.isNotEmpty) 'sex': sex,
-        if (address != null && address.isNotEmpty) 'address': address,
-        'consentForAi': true,
-        'consentForTeleExpertise': true,
-      },
-      priority: 10,
-    );
+      await _outboxDao.enqueue(
+        executor: txn,
+        directSend: true,
+        entityType: OfflineEntityType.patient,
+        entityLocalId: id,
+        operation: OutboxOperation.createPatient,
+        payload: {
+          'clientLocalId': id,
+          'firstName': firstName,
+          'lastName': lastName,
+          if (birthDate != null && birthDate.isNotEmpty) 'birthDate': birthDate,
+          if (phone != null && phone.isNotEmpty) 'phone': phone,
+          if (sex != null && sex.isNotEmpty) 'sex': sex,
+          if (address != null && address.isNotEmpty) 'address': address,
+          'consentForAi': consentForAi,
+          'consentForTeleExpertise': consentForTeleExpertise,
+        },
+        priority: 10,
+      );
+    });
 
     return Patient(
       id: id,
@@ -222,8 +218,18 @@ class NurseLocalDao {
       birthDate: _blankToNull(birthDate),
       sex: _blankToNull(sex),
       isValidated: false,
+      consentForAi: consentForAi,
+      consentForTeleExpertise: consentForTeleExpertise,
     );
   }
+
+  /// La création directe n'a pas abouti : la file d'envoi peut la reprendre.
+  Future<void> releasePatientForSync(String localId) =>
+      _outboxDao.releaseForSync(entityType: OfflineEntityType.patient, entityLocalId: localId);
+
+  /// La consultation n'est pas partie : la file d'envoi peut la reprendre.
+  Future<void> releaseDiagnosisForSync(String localId) =>
+      _outboxDao.releaseForSync(entityType: OfflineEntityType.consultation, entityLocalId: localId);
 
   Future<void> cacheRemotePatients(List<Patient> patients) async {
     final db = await _database.database;
@@ -246,8 +252,8 @@ class NurseLocalDao {
           'address': patient.address,
           'birth_date': patient.birthDate,
           'sex': patient.sex,
-          'consent_for_ai': 1,
-          'consent_for_tele_expertise': 1,
+          'consent_for_ai': patient.consentForAi ? 1 : 0,
+          'consent_for_tele_expertise': patient.consentForTeleExpertise ? 1 : 0,
           'is_validated': patient.isValidated ? 1 : 0,
           'sync_status': SyncStatus.synced.value,
           'last_sync_error': null,
@@ -276,6 +282,34 @@ class NurseLocalDao {
     });
   }
 
+  /// Liste complète renvoyée par le serveur : met le cache à jour et retire
+  /// les dossiers que ce compte ne voit plus (supprimés, autre établissement),
+  /// sauf ceux qui ont encore des données non envoyées.
+  Future<int> replaceRemotePatients(List<Patient> patients) async {
+    await cacheRemotePatients(patients);
+    final db = await _database.database;
+    final visible = patients.map((p) => p.id).toSet();
+    return db.transaction((txn) async {
+      final rows = await txn.rawQuery(
+        '''
+        SELECT p.local_id, p.server_id FROM local_patients p
+        WHERE p.sync_status = ? AND p.server_id IS NOT NULL
+          AND NOT EXISTS (
+            SELECT 1 FROM local_consultations c
+            WHERE c.local_patient_id = p.local_id AND c.sync_status <> ?
+          )
+        ''',
+        [SyncStatus.synced.value, SyncStatus.synced.value],
+      );
+      var removed = 0;
+      for (final row in rows) {
+        if (visible.contains(row['server_id'])) continue;
+        removed += await txn.delete('local_patients', where: 'local_id = ?', whereArgs: [row['local_id']]);
+      }
+      return removed;
+    });
+  }
+
   Future<List<Patient>> listPatients() async {
     final db = await _database.database;
     final rows = await db.query(
@@ -292,6 +326,23 @@ class NurseLocalDao {
     final db = await _database.database;
     final now = DateTime.now().toUtc().toIso8601String();
     await db.transaction((txn) async {
+      // Une copie du même patient a pu être mise en cache entre-temps : ses
+      // consultations (peut-être pas encore envoyées) rejoignent la fiche
+      // gardée AVANT la suppression, sinon la cascade les effacerait.
+      final duplicates = await txn.query(
+        'local_patients',
+        columns: ['local_id'],
+        where: 'server_id = ? AND local_id <> ?',
+        whereArgs: [remotePatient.id, localId],
+      );
+      for (final duplicate in duplicates) {
+        await txn.update(
+          'local_consultations',
+          {'local_patient_id': localId},
+          where: 'local_patient_id = ?',
+          whereArgs: [duplicate['local_id']],
+        );
+      }
       await txn.delete(
         'local_patients',
         where: 'server_id = ? AND local_id <> ?',
@@ -307,6 +358,8 @@ class NurseLocalDao {
           'address': remotePatient.address,
           'birth_date': remotePatient.birthDate,
           'sex': remotePatient.sex,
+          'consent_for_ai': remotePatient.consentForAi ? 1 : 0,
+          'consent_for_tele_expertise': remotePatient.consentForTeleExpertise ? 1 : 0,
           'is_validated': remotePatient.isValidated ? 1 : 0,
           'sync_status': SyncStatus.synced.value,
           'last_sync_error': null,
@@ -340,7 +393,7 @@ class NurseLocalDao {
       'local_patients',
       {
         'sync_status': SyncStatus.syncFailed.value,
-        'last_sync_error': error.toString(),
+        'last_sync_error': friendlyError(error),
         'updated_at': DateTime.now().toUtc().toIso8601String(),
       },
       where: 'local_id = ?',
@@ -380,20 +433,17 @@ class NurseLocalDao {
           'symptom_ids_json': jsonEncode(payload.symptomIds),
           'symptom_labels_json': jsonEncode(payload.symptomLabels),
           'medical_history_ids_json': jsonEncode(payload.medicalHistoryIds),
-          'medical_history_labels_json':
-              jsonEncode(payload.medicalHistoryLabels),
+          'medical_history_labels_json': jsonEncode(payload.medicalHistoryLabels),
           'touch_check_ids_json': jsonEncode(payload.touchCheckIds),
           'touch_check_labels_json': jsonEncode(payload.touchCheckLabels),
           'touch_observations_json': jsonEncode(payload.touchObservations),
           'status': 'PENDING_AI',
           'sync_status': SyncStatus.pendingSync.value,
           // Empreinte uniquement pour les consultations SANS image (dédup IA).
-          'clinical_fingerprint':
-              image == null ? payload.clinicalFingerprint : null,
+          'clinical_fingerprint': image == null ? payload.clinicalFingerprint : null,
           'created_at': now,
           'updated_at': now,
         },
-        conflictAlgorithm: ConflictAlgorithm.replace,
       );
 
       if (image != null && imageId != null) {
@@ -404,31 +454,37 @@ class NurseLocalDao {
             'local_id': imageId,
             'local_consultation_id': consultationId,
             'ear_side': payload.earSide.value,
-            'mime_type': 'image/jpeg',
+            'mime_type': sniffImageMimeType(bytes),
             'file_name': p.basename(image.path),
             'bytes': bytes,
             'byte_size': bytes.length,
             'sync_status': SyncStatus.pendingSync.value,
             'created_at': now,
           },
-          conflictAlgorithm: ConflictAlgorithm.replace,
         );
       }
-    });
 
-    await _outboxDao.enqueue(
-      entityType: OfflineEntityType.consultation,
-      entityLocalId: consultationId,
-      operation: OutboxOperation.submitDiagnosis,
-      payload: {
-        'clientLocalId': consultationId,
-        'localPatientId': localPatientId,
-        if (!isLocalId(patient.id)) 'serverPatientId': patient.id,
-        'diagnosisPayload': payload.toJsonBody(),
-        if (imageId != null) 'imageLocalId': imageId,
-      },
-      priority: 20,
-    );
+      // Consultation, photo et envoi écrits ensemble : jamais de consultation
+      // enregistrée sans son envoi (ni l'inverse). L'appelant tente l'envoi
+      // direct aussitôt ; la file ne le reprend qu'en cas d'échec.
+      await _outboxDao.enqueue(
+        executor: txn,
+        directSend: true,
+        entityType: OfflineEntityType.consultation,
+        entityLocalId: consultationId,
+        operation: OutboxOperation.submitDiagnosis,
+        payload: {
+          'clientLocalId': consultationId,
+          'localPatientId': localPatientId,
+          // Affichage local uniquement (panneau des envois en échec) : jamais transmis.
+          'patientName': patient.fullName,
+          if (!isLocalId(patient.id)) 'serverPatientId': patient.id,
+          'diagnosisPayload': payload.toJsonBody(),
+          if (imageId != null) 'imageLocalId': imageId,
+        },
+        priority: 20,
+      );
+    });
 
     return LocalConsultationDraft(
       localId: consultationId,
@@ -443,9 +499,7 @@ class NurseLocalDao {
     final db = await _database.database;
     final now = DateTime.now().toUtc().toIso8601String();
     final remoteCaseId = remoteCaseJson['id']?.toString();
-    final summary =
-        (remoteCaseJson['organizedAiSummary'] as Map<String, dynamic>?) ??
-            const <String, dynamic>{};
+    final summary = (remoteCaseJson['organizedAiSummary'] as Map<String, dynamic>?) ?? const <String, dynamic>{};
 
     await db.transaction((txn) async {
       await txn.update(
@@ -461,12 +515,10 @@ class NurseLocalDao {
         whereArgs: [consultationLocalId],
       );
 
-      await txn.update(
+      // Le serveur conserve désormais la photo (chiffrée) : la copie de
+      // l'appareil n'a plus de raison d'être.
+      await txn.delete(
         'local_otoscopic_images',
-        {
-          'server_consultation_id': remoteCaseId,
-          'sync_status': SyncStatus.synced.value,
-        },
         where: 'local_consultation_id = ?',
         whereArgs: [consultationLocalId],
       );
@@ -513,7 +565,7 @@ class NurseLocalDao {
       'local_consultations',
       {
         'sync_status': SyncStatus.syncFailed.value,
-        'last_sync_error': error.toString(),
+        'last_sync_error': friendlyError(error),
         'updated_at': DateTime.now().toUtc().toIso8601String(),
       },
       where: 'local_id = ?',
@@ -524,6 +576,48 @@ class NurseLocalDao {
       entityLocalId: consultationLocalId,
       error: error,
     );
+  }
+
+  /// Consultations enregistrées sur l'appareil qui ne sont pas encore sur le
+  /// serveur (en file ou refusées), pour les afficher dans le dossier et
+  /// l'historique à côté des consultations envoyées.
+  Future<List<AiCase>> listUnsentConsultations() async {
+    final db = await _database.database;
+    final rows = await db.rawQuery(
+      '''
+      SELECT c.*, p.server_id AS patient_server_id
+      FROM local_consultations c
+      LEFT JOIN local_patients p ON p.local_id = c.local_patient_id
+      WHERE c.sync_status <> ?
+      ORDER BY c.created_at DESC
+      ''',
+      [SyncStatus.synced.value],
+    );
+    return rows.map((row) {
+      final failed = row['sync_status'] == SyncStatus.syncFailed.value;
+      return AiCase(
+        id: row['local_id'].toString(),
+        status: ConsultationStatus.pendingAi.value,
+        summary: const AiSummary(confidenceLabel: AiConfidenceLabel.unknown, warnings: [], sources: []),
+        createdAt: row['created_at'].toString(),
+        updatedAt: row['updated_at'].toString(),
+        patientId: row['server_patient_id']?.toString() ??
+            row['patient_server_id']?.toString() ??
+            row['local_patient_id'].toString(),
+        symptoms: row['clinical_narrative']?.toString(),
+        clinicalNotes: row['clinical_notes']?.toString(),
+        urgency: UrgencyLevel.values.firstWhere(
+          (u) => u.value == row['urgency']?.toString(),
+          orElse: () => UrgencyLevel.medium,
+        ),
+        earSide: EarSide.fromApi(row['ear_side']?.toString()),
+        symptomLabels: _decodeStringList(row['symptom_labels_json']),
+        medicalHistoryLabels: _decodeStringList(row['medical_history_labels_json']),
+        touchCheckLabels: _decodeStringList(row['touch_check_labels_json']),
+        aiErrorMessage: failed ? row['last_sync_error']?.toString() : null,
+        upload: failed ? LocalUpload.failed : LocalUpload.pending,
+      );
+    }).toList();
   }
 
   /// Cherche dans le cache local une réponse IA exploitable (consultation
@@ -569,11 +663,8 @@ class NurseLocalDao {
   }) async {
     final db = await _database.database;
     final now = DateTime.now().toUtc().toIso8601String();
-    const reuseWarning =
-        "Réponse IA réutilisée d'une consultation clinique identique (sans nouvelle analyse IA).";
-    final warnings = cached.warnings.contains(reuseWarning)
-        ? cached.warnings
-        : [reuseWarning, ...cached.warnings];
+    const reuseWarning = "Réponse IA réutilisée d'une consultation clinique identique (sans nouvelle analyse IA).";
+    final warnings = cached.warnings.contains(reuseWarning) ? cached.warnings : [reuseWarning, ...cached.warnings];
 
     await db.transaction((txn) async {
       await txn.update(
@@ -667,8 +758,7 @@ class NurseLocalDao {
             localId: imageRows.first['local_id'].toString(),
             bytes: imageRows.first['bytes'] as Uint8List,
             mimeType: imageRows.first['mime_type']?.toString() ?? 'image/jpeg',
-            fileName:
-                imageRows.first['file_name']?.toString() ?? 'otoscopie.jpg',
+            fileName: imageRows.first['file_name']?.toString() ?? 'otoscopie.jpg',
           );
 
     return LocalDiagnosisSyncRecord(
@@ -683,8 +773,7 @@ class NurseLocalDao {
       symptomIds: _decodeStringList(row['symptom_ids_json']),
       symptomLabels: _decodeStringList(row['symptom_labels_json']),
       medicalHistoryIds: _decodeStringList(row['medical_history_ids_json']),
-      medicalHistoryLabels:
-          _decodeStringList(row['medical_history_labels_json']),
+      medicalHistoryLabels: _decodeStringList(row['medical_history_labels_json']),
       touchCheckIds: _decodeStringList(row['touch_check_ids_json']),
       touchCheckLabels: _decodeStringList(row['touch_check_labels_json']),
       touchObservations: _decodeStringMap(row['touch_observations_json']),
@@ -721,6 +810,8 @@ class NurseLocalDao {
       birthDate: row['birth_date']?.toString(),
       sex: row['sex']?.toString(),
       isValidated: row['is_validated'] == 1,
+      consentForAi: row['consent_for_ai'] == 1,
+      consentForTeleExpertise: row['consent_for_tele_expertise'] == 1,
     );
   }
 

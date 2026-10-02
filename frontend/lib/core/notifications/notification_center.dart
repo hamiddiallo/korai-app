@@ -1,47 +1,62 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../design/design.dart';
 import 'notification_cubit.dart';
 import 'notification_models.dart';
 
 typedef NotificationTapCallback = void Function(AppNotification notification);
 
 /// Cloche avec badge du nombre de notifications non lues. Ouvre le centre de
-/// notifications au tap.
+/// notifications au toucher.
 class NotificationBell extends StatelessWidget {
   const NotificationBell({
     super.key,
     this.color,
     this.onTapNotification,
     this.pinnedHeader,
+    this.filled = false,
   });
 
-  /// Couleur de l'icône. `null` → hérite du thème (utile dans une AppBar).
+  /// Couleur de l'icône. `null` → hérite du thème.
   final Color? color;
   final NotificationTapCallback? onTapNotification;
 
-  /// En-tête épinglé optionnel (ex. « patients à valider » côté infirmier).
+  /// En-tête épinglé optionnel (ex. « patients à valider » côté soignant).
   final WidgetBuilder? pinnedHeader;
+
+  /// Fond de carte rond (en-têtes d'écran) plutôt qu'une icône nue.
+  final bool filled;
 
   @override
   Widget build(BuildContext context) {
+    final k = context.k;
     return BlocBuilder<NotificationCubit, NotificationState>(
       buildWhen: (p, n) => p.unreadCount != n.unreadCount,
       builder: (context, state) {
         final count = state.unreadCount;
+        final icon = count > 0
+            ? Badge(
+                backgroundColor: k.danger,
+                label: Text(count > 99 ? '99+' : '$count'),
+                child: Icon(Icons.notifications_rounded, color: color ?? k.ink),
+              )
+            : Icon(Icons.notifications_none_rounded, color: color ?? k.ink);
         return IconButton(
-          tooltip: 'Notifications',
+          tooltip: count > 0 ? 'Notifications, $count non lues' : 'Notifications',
+          style: filled
+              ? IconButton.styleFrom(
+                  backgroundColor: k.surface,
+                  side: BorderSide(color: k.line),
+                  minimumSize: const Size(46, 46),
+                )
+              : null,
           onPressed: () => showNotificationCenter(
             context,
             onTapNotification: onTapNotification,
             pinnedHeader: pinnedHeader,
           ),
-          icon: count > 0
-              ? Badge(
-                  label: Text('$count'),
-                  child: Icon(Icons.notifications_active, color: color),
-                )
-              : Icon(Icons.notifications_none, color: color),
+          icon: icon,
         );
       },
     );
@@ -57,9 +72,6 @@ Future<void> showNotificationCenter(
   return showModalBottomSheet(
     context: context,
     isScrollControlled: true,
-    shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-    ),
     builder: (sheetContext) {
       return BlocProvider.value(
         value: cubit,
@@ -91,30 +103,17 @@ class _NotificationCenterSheet extends StatelessWidget {
             final cubit = context.read<NotificationCubit>();
             return Column(
               children: [
-                const SizedBox(height: 10),
-                Container(
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: Colors.grey.shade300,
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 12, 8, 4),
+                  padding: const EdgeInsets.fromLTRB(KSpace.gutter, 0, KSpace.xs, KSpace.xs),
                   child: Row(
                     children: [
-                      const Expanded(
-                        child: Text(
-                          'Notifications',
-                          style: TextStyle(
-                              fontSize: 18, fontWeight: FontWeight.bold),
-                        ),
+                      Expanded(
+                        child: Text('Notifications', style: context.text.headlineSmall),
                       ),
                       if (state.unreadCount > 0)
                         TextButton(
                           onPressed: cubit.markAllRead,
-                          child: const Text('Tout marquer lu'),
+                          child: const Text('Tout marquer comme lu'),
                         ),
                     ],
                   ),
@@ -124,28 +123,22 @@ class _NotificationCenterSheet extends StatelessWidget {
                     onRefresh: cubit.refresh,
                     child: ListView(
                       controller: scrollController,
-                      padding: const EdgeInsets.fromLTRB(12, 4, 12, 24),
+                      padding: const EdgeInsets.fromLTRB(KSpace.md, KSpace.xxs, KSpace.md, KSpace.xl),
                       children: [
                         if (pinnedHeader != null) pinnedHeader!(context),
                         if (state.items.isEmpty)
-                          Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 48),
-                            child: Column(
-                              children: [
-                                Icon(Icons.notifications_none,
-                                    size: 48, color: Colors.grey.shade400),
-                                const SizedBox(height: 12),
-                                Text(
-                                  'Aucune notification',
-                                  style:
-                                      TextStyle(color: Colors.grey.shade600),
-                                ),
-                              ],
+                          const Padding(
+                            padding: EdgeInsets.only(top: KSpace.xl),
+                            child: KEmptyView(
+                              icon: Icons.notifications_none_rounded,
+                              title: 'Aucune notification',
+                              message:
+                                  'Vous serez prévenu·e ici des avis de spécialistes, des validations et des envois de données.',
                             ),
                           )
                         else
-                          ...state.items.map(
-                            (n) => _NotificationTile(
+                          for (final n in state.items) ...[
+                            _NotificationTile(
                               notification: n,
                               onTap: () {
                                 cubit.markRead(n);
@@ -155,7 +148,8 @@ class _NotificationCenterSheet extends StatelessWidget {
                                 }
                               },
                             ),
-                          ),
+                            const SizedBox(height: KSpace.xs),
+                          ],
                       ],
                     ),
                   ),
@@ -177,61 +171,64 @@ class _NotificationTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final k = context.k;
     final unread = !notification.isRead;
-    final type = notification.type;
-    return Card(
-      margin: const EdgeInsets.only(bottom: 8),
-      elevation: 0,
-      color: unread ? const Color(0xFFF0FBFF) : Colors.white,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: BorderSide(
-          color: unread
-              ? type.color.withValues(alpha: 0.35)
-              : Colors.grey.shade200,
-        ),
-      ),
-      child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-        leading: CircleAvatar(
-          backgroundColor: type.color.withValues(alpha: 0.12),
-          child: Icon(type.icon, color: type.color, size: 22),
-        ),
-        title: Text(
-          notification.title,
-          style: TextStyle(
-            fontSize: 14,
-            fontWeight: unread ? FontWeight.bold : FontWeight.w600,
-          ),
-        ),
-        subtitle: Column(
+    final c = k.tone(notification.type.tone);
+    return Semantics(
+      label: unread ? 'Non lue' : null,
+      child: KCard(
+        onTap: onTap,
+        color: unread ? k.surface : k.mist,
+        borderColor: unread ? c.accent.withValues(alpha: 0.45) : k.line,
+        padding: const EdgeInsets.all(KSpace.sm),
+        child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const SizedBox(height: 2),
-            Text(notification.body, style: const TextStyle(fontSize: 12.5)),
-            const SizedBox(height: 4),
-            Text(
-              _relativeTime(notification.createdAt),
-              style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(color: c.bg, shape: BoxShape.circle),
+              child: Icon(notification.type.icon, color: c.fg, size: 21),
             ),
+            const SizedBox(width: KSpace.sm),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    notification.title,
+                    style: context.text.titleSmall?.copyWith(
+                      fontWeight: unread ? FontWeight.w700 : FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(notification.body, style: context.text.bodyMedium?.copyWith(color: k.inkMuted)),
+                  const SizedBox(height: 4),
+                  Text(
+                    _relativeTime(notification.createdAt),
+                    style: context.text.labelSmall?.copyWith(color: k.inkMuted, fontFamily: KFonts.mono),
+                  ),
+                ],
+              ),
+            ),
+            if (unread)
+              Padding(
+                padding: const EdgeInsets.only(top: 6, left: 6),
+                child: Container(
+                  width: 10,
+                  height: 10,
+                  decoration: BoxDecoration(color: c.accent, shape: BoxShape.circle),
+                ),
+              ),
           ],
         ),
-        trailing: unread
-            ? Container(
-                width: 9,
-                height: 9,
-                decoration:
-                    BoxDecoration(color: type.color, shape: BoxShape.circle),
-              )
-            : null,
-        onTap: onTap,
       ),
     );
   }
 
   String _relativeTime(DateTime utc) {
     final diff = DateTime.now().toUtc().difference(utc);
-    if (diff.inMinutes < 1) return "À l'instant";
+    if (diff.inMinutes < 1) return 'À l’instant';
     if (diff.inMinutes < 60) return 'Il y a ${diff.inMinutes} min';
     if (diff.inHours < 24) return 'Il y a ${diff.inHours} h';
     if (diff.inDays < 7) return 'Il y a ${diff.inDays} j';

@@ -7,6 +7,9 @@ class AdminUser {
     this.phone,
     this.healthFacility,
     this.professionalId,
+    this.accountStatus = 'ACTIVE',
+    this.matricule,
+    this.rejectionReason,
   });
 
   final String id;
@@ -17,6 +20,13 @@ class AdminUser {
   final String? healthFacility;
   final String? professionalId;
 
+  /// ACTIVE, PENDING (inscription à vérifier) ou REJECTED.
+  final String accountStatus;
+  final String? matricule;
+  final String? rejectionReason;
+
+  bool get isPending => accountStatus == 'PENDING';
+
   factory AdminUser.fromJson(Map<String, dynamic> json) {
     return AdminUser(
       id: json['id'].toString(),
@@ -26,6 +36,9 @@ class AdminUser {
       phone: json['phone']?.toString(),
       healthFacility: json['healthFacility']?.toString(),
       professionalId: json['professionalId']?.toString(),
+      accountStatus: json['accountStatus']?.toString() ?? 'ACTIVE',
+      matricule: json['matricule']?.toString(),
+      rejectionReason: json['rejectionReason']?.toString(),
     );
   }
 }
@@ -42,6 +55,7 @@ class AdminPatient {
     this.phone,
     this.address,
     this.deletedAt,
+    this.facilityId,
   });
 
   final String id;
@@ -54,6 +68,9 @@ class AdminPatient {
   final bool consentForAi;
   final bool consentForTeleExpertise;
   final String? deletedAt;
+
+  /// Établissement qui suit le patient (absent : pas encore rattaché).
+  final String? facilityId;
 
   String get fullName => '$firstName $lastName';
 
@@ -69,8 +86,69 @@ class AdminPatient {
       consentForAi: json['consentForAi'] == true,
       consentForTeleExpertise: json['consentForTeleExpertise'] == true,
       deletedAt: json['deletedAt']?.toString(),
+      facilityId: json['facilityId']?.toString(),
     );
   }
+}
+
+/// Établissement et nombre de personnes rattachées (vue admin).
+class AdminFacility {
+  const AdminFacility({required this.id, required this.name, this.nurseCount = 0, this.patientCount = 0});
+
+  final String id;
+  final String name;
+  final int nurseCount;
+  final int patientCount;
+
+  factory AdminFacility.fromJson(Map<String, dynamic> json) => AdminFacility(
+        id: json['id'].toString(),
+        name: json['name'].toString(),
+        nurseCount: int.tryParse(json['nurseCount']?.toString() ?? '') ?? 0,
+        patientCount: int.tryParse(json['patientCount']?.toString() ?? '') ?? 0,
+      );
+}
+
+/// Entrée du journal d'audit : qui a fait quoi, sur quel dossier, et quand.
+class AuditEntry {
+  const AuditEntry({
+    required this.id,
+    required this.createdAt,
+    required this.action,
+    this.actorName,
+    this.actorRole,
+    this.patientId,
+    this.patientName,
+    this.details = const {},
+  });
+
+  final String id;
+  final String createdAt;
+  final String action;
+  final String? actorName;
+  final String? actorRole;
+  final String? patientId;
+  final String? patientName;
+  final Map<String, dynamic> details;
+
+  factory AuditEntry.fromJson(Map<String, dynamic> json) => AuditEntry(
+        id: json['id'].toString(),
+        createdAt: json['createdAt'].toString(),
+        action: json['action'].toString(),
+        actorName: json['actorName']?.toString(),
+        actorRole: json['actorRole']?.toString(),
+        patientId: json['patientId']?.toString(),
+        patientName: json['patientName']?.toString(),
+        details: (json['details'] as Map?)?.cast<String, dynamic>() ?? const {},
+      );
+}
+
+class AuditPage {
+  const AuditPage({required this.entries, this.nextBefore});
+
+  final List<AuditEntry> entries;
+
+  /// À passer en `before` pour la page suivante (null : fin du journal).
+  final String? nextBefore;
 }
 
 class AdminConsultation {
@@ -103,14 +181,11 @@ class AdminConsultation {
     final likelyDiag = aiResp != null ? aiResp['likelyDiagnosis']?.toString() : null;
 
     final rawSymptoms = json['symptomLabels'];
-    final List<String> symptoms = rawSymptoms is List
-        ? rawSymptoms.map((e) => e.toString()).toList()
-        : [];
+    final List<String> symptoms = rawSymptoms is List ? rawSymptoms.map((e) => e.toString()).toList() : [];
 
     final rawImages = json['otoscopicImages'];
-    final List<AdminOtoscopicImage> images = rawImages is List
-        ? rawImages.map((e) => AdminOtoscopicImage.fromJson(e as Map<String, dynamic>)).toList()
-        : [];
+    final List<AdminOtoscopicImage> images =
+        rawImages is List ? rawImages.map((e) => AdminOtoscopicImage.fromJson(e as Map<String, dynamic>)).toList() : [];
 
     return AdminConsultation(
       id: json['id'].toString(),
@@ -149,7 +224,6 @@ class AdminOtoscopicImage {
     );
   }
 }
-
 
 class ClinicalReferenceItem {
   const ClinicalReferenceItem({
