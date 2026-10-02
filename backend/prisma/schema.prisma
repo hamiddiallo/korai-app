@@ -22,12 +22,12 @@ enum AccountStatus {
 
 /// Registre de référence des médecins (source de vérité des matricules).
 model Medecin {
-  id        String   @id @default(uuid())
-  matricule String   @unique
+  id        String    @id @default(uuid())
+  matricule String    @unique
   nom       String
   prenom    String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
   deletedAt DateTime?
 }
 
@@ -91,29 +91,47 @@ enum ChatDeliveryStatus {
   FAILED
 }
 
+/// Établissement de santé (poste, centre, hôpital). Les soignants d'un même
+/// établissement partagent les dossiers de ses patients.
+model Facility {
+  id             String   @id @default(uuid())
+  name           String
+  /// Nom en minuscules, sans accents ni espaces superflus : évite les doublons.
+  normalizedName String   @unique
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  users    User[]
+  patients Patient[]
+}
+
 model User {
-  id              String   @id @default(uuid())
-  fullName        String
-  email           String   @unique
-  passwordHash    String
-  role            Role
-  accountStatus   AccountStatus @default(ACTIVE)
+  id                  String        @id @default(uuid())
+  fullName            String
+  email               String        @unique
+  passwordHash        String
+  role                Role
+  accountStatus       AccountStatus @default(ACTIVE)
   /// Matricule du médecin (compte SPECIALIST) — référence le registre Medecin.
-  matricule       String?
+  matricule           String?
   /// Matricule de l'expert encadrant (compte NURSE en attente de validation).
   supervisorMatricule String?
-  rejectionReason String?
-  phone           String?
-  healthFacility  String?
-  professionalId  String?
-  linkedPatientId String?
-  createdAt       DateTime @default(now())
-  deletedAt       DateTime?
+  rejectionReason     String?
+  phone               String?
+  healthFacility      String?
+  /// Établissement du soignant : détermine les dossiers qu'il peut consulter.
+  facilityId          String?
+  professionalId      String?
+  linkedPatientId     String?
+  createdAt           DateTime      @default(now())
+  deletedAt           DateTime?
 
-  patientProfile        Patient?       @relation("PatientAccount")
-  createdPatients       Patient[]      @relation("PatientCreator")
-  consultationsCreated  Consultation[] @relation("ConsultationCreator")
-  consultationsAssigned Consultation[] @relation("ConsultationSpecialist")
+  facility Facility? @relation(fields: [facilityId], references: [id])
+
+  patientProfile        Patient?           @relation("PatientAccount")
+  createdPatients       Patient[]          @relation("PatientCreator")
+  consultationsCreated  Consultation[]     @relation("ConsultationCreator")
+  consultationsAssigned Consultation[]     @relation("ConsultationSpecialist")
   expertiseRequested    ExpertiseRequest[] @relation("ExpertiseRequester")
   expertiseAssigned     ExpertiseRequest[] @relation("ExpertiseAssignee")
   chatConversations     ChatConversation[]
@@ -147,30 +165,37 @@ model Notification {
 }
 
 model Patient {
-  id                      String   @id @default(uuid())
-  userId                  String?  @unique
-  createdByUserId         String
-  firstName               String
-  lastName                String
-  birthDate               String?
-  sex                     Sex?
-  phone                   String?
-  address                 String?
-  consentForAi            Boolean  @default(false)
-  consentForTeleExpertise Boolean  @default(false)
-  isValidated             Boolean  @default(true)
-  clientLocalId           String?
-  clientMutationId        String?
-  createdAt               DateTime @default(now())
-  updatedAt               DateTime @updatedAt
-  deletedAt               DateTime?
+  id                        String    @id @default(uuid())
+  userId                    String?   @unique
+  createdByUserId           String
+  firstName                 String
+  lastName                  String
+  birthDate                 String?
+  sex                       Sex?
+  phone                     String?
+  address                   String?
+  consentForAi              Boolean   @default(false)
+  consentForTeleExpertise   Boolean   @default(false)
+  /// Date du dernier accord donné (null tant que l'accord n'est pas donné).
+  consentForAiAt            DateTime?
+  consentForTeleExpertiseAt DateTime?
+  /// Établissement qui suit le patient (null : pas encore rattaché).
+  facilityId                String?
+  isValidated               Boolean   @default(true)
+  clientLocalId             String?
+  clientMutationId          String?
+  createdAt                 DateTime  @default(now())
+  updatedAt                 DateTime  @updatedAt
+  deletedAt                 DateTime?
 
   account       User?          @relation("PatientAccount", fields: [userId], references: [id])
   creator       User           @relation("PatientCreator", fields: [createdByUserId], references: [id])
+  facility      Facility?      @relation(fields: [facilityId], references: [id])
   consultations Consultation[]
 
   @@unique([createdByUserId, clientLocalId])
   @@unique([createdByUserId, clientMutationId])
+  @@index([facilityId])
 }
 
 model Consultation {
@@ -200,9 +225,9 @@ model Consultation {
   updatedAt            DateTime           @updatedAt
   deletedAt            DateTime?
 
-  patient            Patient            @relation(fields: [patientId], references: [id])
-  creator            User               @relation("ConsultationCreator", fields: [createdByUserId], references: [id])
-  assignedSpecialist User?              @relation("ConsultationSpecialist", fields: [assignedSpecialistId], references: [id])
+  patient            Patient           @relation(fields: [patientId], references: [id])
+  creator            User              @relation("ConsultationCreator", fields: [createdByUserId], references: [id])
+  assignedSpecialist User?             @relation("ConsultationSpecialist", fields: [assignedSpecialistId], references: [id])
   otoscopicImages    OtoscopicImage[]
   aiResponse         AiResponse?
   expertiseRequest   ExpertiseRequest?
@@ -213,41 +238,44 @@ model Consultation {
 }
 
 model OtoscopicImage {
-  id             String   @id @default(uuid())
+  id             String    @id @default(uuid())
   consultationId String
   earSide        EarSide
   mimeType       String
   fileName       String?
   byteSize       Int?
+  /// Fichier chiffré de la photo sur le serveur (coffre `modules/images`) ;
+  /// null pour une simple description sans photo.
+  storageKey     String?   @unique
   description    String?
-  createdAt      DateTime @default(now())
+  createdAt      DateTime  @default(now())
   deletedAt      DateTime?
 
   consultation Consultation @relation(fields: [consultationId], references: [id], onDelete: Cascade)
 }
 
 model AiResponse {
-  id               String   @id @default(uuid())
-  consultationId   String   @unique
-  rawJson          Json
-  imageOpinion     String?
-  ragOpinion       String?
-  likelyDiagnosis  String?
-  confidenceLabel  String?
-  warnings         String[]
-  sources          String[]
-  createdAt        DateTime @default(now())
-  deletedAt        DateTime?
+  id              String    @id @default(uuid())
+  consultationId  String    @unique
+  rawJson         Json
+  imageOpinion    String?
+  ragOpinion      String?
+  likelyDiagnosis String?
+  confidenceLabel String?
+  warnings        String[]
+  sources         String[]
+  createdAt       DateTime  @default(now())
+  deletedAt       DateTime?
 
   consultation Consultation @relation(fields: [consultationId], references: [id], onDelete: Cascade)
 }
 
 model ExpertiseRequest {
-  id                        String           @id @default(uuid())
-  consultationId            String           @unique
+  id                        String          @id @default(uuid())
+  consultationId            String          @unique
   requestedByUserId         String
   assignedToUserId          String?
-  status                    ExpertiseStatus  @default(PENDING)
+  status                    ExpertiseStatus @default(PENDING)
   decision                  ExpertDecision?
   comment                   String?
   correctedLikelyDiagnosis  String?
@@ -259,13 +287,13 @@ model ExpertiseRequest {
   summaryNote               String?
   noteAudio                 String?
   reviewedAt                DateTime?
-  createdAt                 DateTime         @default(now())
-  updatedAt                 DateTime         @updatedAt
+  createdAt                 DateTime        @default(now())
+  updatedAt                 DateTime        @updatedAt
   deletedAt                 DateTime?
 
-  consultation     Consultation @relation(fields: [consultationId], references: [id], onDelete: Cascade)
-  requester        User         @relation("ExpertiseRequester", fields: [requestedByUserId], references: [id])
-  assignedSpecialist User?      @relation("ExpertiseAssignee", fields: [assignedToUserId], references: [id])
+  consultation       Consultation @relation(fields: [consultationId], references: [id], onDelete: Cascade)
+  requester          User         @relation("ExpertiseRequester", fields: [requestedByUserId], references: [id])
+  assignedSpecialist User?        @relation("ExpertiseAssignee", fields: [assignedToUserId], references: [id])
 }
 
 model ClinicalReferenceItem {
@@ -321,4 +349,23 @@ model ChatMessage {
 
   @@unique([conversationId, sequence])
   @@index([conversationId, sequence])
+}
+
+/// Journal d'audit : qui a consulté ou modifié quoi, et quand. Ne contient
+/// jamais de donnée de santé (identifiants et noms de champs uniquement).
+model AuditLog {
+  id          String   @id @default(uuid())
+  createdAt   DateTime @default(now())
+  actorUserId String?
+  actorRole   Role?
+  action      String
+  entityType  String
+  entityId    String?
+  patientId   String?
+  ip          String?
+  details     Json?
+
+  @@index([createdAt])
+  @@index([patientId, createdAt])
+  @@index([actorUserId, createdAt])
 }

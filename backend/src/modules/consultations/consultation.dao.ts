@@ -54,6 +54,8 @@ const mapConsultation = (row: {
     fileName: string | null;
     byteSize: number | null;
     description: string | null;
+    storageKey: string | null;
+    deletedAt: Date | null;
     createdAt: Date;
   }[];
   expertiseRequest?: Parameters<typeof mapExpertiseFromRow>[0] | null;
@@ -104,6 +106,8 @@ const mapConsultation = (row: {
     fileName: nullable(img.fileName),
     byteSize: nullable(img.byteSize),
     description: nullable(img.description),
+    stored: Boolean(img.storageKey),
+    deletedAt: img.deletedAt?.toISOString(),
     createdAt: img.createdAt.toISOString()
   })),
   expertiseRequest: row.expertiseRequest ? mapExpertiseFromRow(row.expertiseRequest) : undefined
@@ -283,9 +287,10 @@ export const consultationDao = {
     return this.findById(id);
   },
 
-  async list() {
+  /** Consultations non supprimées visibles selon `scope` (voir `consultationScope`). */
+  async list(scope: Prisma.ConsultationWhereInput = {}) {
     const rows = await prisma.consultation.findMany({
-      where: { deletedAt: null },
+      where: { AND: [{ deletedAt: null }, scope] },
       orderBy: { updatedAt: 'desc' },
       include: includeRelations
     });
@@ -330,8 +335,23 @@ export const consultationDao = {
     fileName?: string;
     byteSize?: number;
     description?: string;
+    storageKey?: string;
   }) {
     return prisma.otoscopicImage.create({ data: input });
+  },
+
+  /** Photo conservée d'une consultation (null si absente, supprimée ou d'une autre consultation). */
+  async findStoredImage(consultationId: string, imageId?: string) {
+    return prisma.otoscopicImage.findFirst({
+      where: {
+        consultationId,
+        ...(imageId ? { id: imageId } : {}),
+        deletedAt: null,
+        storageKey: { not: null }
+      },
+      orderBy: { createdAt: 'desc' },
+      select: { id: true, mimeType: true, storageKey: true }
+    });
   },
 
   async createAiResponse(

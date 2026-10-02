@@ -12,6 +12,8 @@ export type UserRecord = {
   rejectionReason?: string;
   phone?: string;
   healthFacility?: string;
+  /** Établissement du soignant (périmètre des dossiers qu'il peut consulter). */
+  facilityId?: string;
   professionalId?: string;
   linkedPatientId?: string;
   createdAt: string;

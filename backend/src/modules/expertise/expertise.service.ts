@@ -1,5 +1,6 @@
 import { ConsultationStatus, ExpertDecision, ExpertiseStatus } from '@prisma/client';
 import { forbidden, notFound } from '../../common/errors/http-error.js';
+import type { AuthenticatedUser } from '../../common/types.js';
 import { HttpError } from '../../common/errors/http-error.js';
 import { consultationDao } from '../consultations/consultation.dao.js';
 import { notificationService } from '../notifications/notification.service.js';
@@ -61,8 +62,9 @@ export const expertiseService = {
     return expertise;
   },
 
-  async listInbox() {
-    const rows = await expertiseDao.listInbox();
+  /** File commune (demandes en attente) + dossiers pris en charge par ce spécialiste. */
+  async listInbox(user: AuthenticatedUser) {
+    const rows = await expertiseDao.listInbox(user.role === 'ADMIN' ? undefined : user.id);
     return rows.map((row) => ({
       expertise: {
         id: row.id,

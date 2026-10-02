@@ -24,7 +24,19 @@ const envSchema = z
       message:
         'Definir AI_SERVICE_BASE_URL dans .env (URL ngrok du service IA, ex. https://xxxx.ngrok-free.app)'
     }),
-    AI_SERVICE_TIMEOUT_MS: z.coerce.number().default(120000)
+    AI_SERVICE_TIMEOUT_MS: z.coerce.number().default(120000),
+    /**
+     * Clé de chiffrement des photos du tympan (AES-256-GCM) : 32 octets en
+     * base64. Sans elle, les photos stockées sont illisibles : la conserver
+     * précieusement (sauvegarde du serveur).
+     */
+    IMAGE_ENCRYPTION_KEY: z
+      .string({ required_error: 'IMAGE_ENCRYPTION_KEY manquante (voir .env.example)' })
+      .refine((value) => Buffer.from(value, 'base64').length === 32, {
+        message: 'IMAGE_ENCRYPTION_KEY : 32 octets encodés en base64 requis'
+      }),
+    /** Dossier des photos chiffrées (hors du dépôt). */
+    IMAGE_STORAGE_DIR: z.string().default('storage/otoscopic-images')
   })
   .superRefine((e, ctx) => {
     if (e.NODE_ENV !== 'production') return;

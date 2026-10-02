@@ -15,7 +15,8 @@ const prodEnv = {
   AI_SERVICE_BASE_URL: 'https://ia.korai.sn',
   CORS_ORIGIN: 'https://app.korai.sn',
   JWT_ACCESS_SECRET: strong('a'),
-  JWT_REFRESH_SECRET: strong('b')
+  JWT_REFRESH_SECRET: strong('b'),
+  IMAGE_ENCRYPTION_KEY: Buffer.alloc(32, 1).toString('base64')
 };
 
 describe('configuration de production', () => {
@@ -28,6 +29,14 @@ describe('configuration de production', () => {
     assert.throws(() => parseEnv({ ...prodEnv, JWT_REFRESH_SECRET: 'x'.repeat(20) }), /JWT_REFRESH_SECRET/);
     assert.throws(() => parseEnv({ ...prodEnv, JWT_REFRESH_SECRET: prodEnv.JWT_ACCESS_SECRET }), /différents/);
     assert.throws(() => parseEnv({ ...prodEnv, JWT_ACCESS_SECRET: undefined }), /JWT_ACCESS_SECRET/);
+  });
+
+  it('exige une clé de chiffrement des photos de 32 octets', () => {
+    assert.throws(() => parseEnv({ ...prodEnv, IMAGE_ENCRYPTION_KEY: undefined }), /IMAGE_ENCRYPTION_KEY/);
+    assert.throws(
+      () => parseEnv({ ...prodEnv, IMAGE_ENCRYPTION_KEY: Buffer.alloc(16).toString('base64') }),
+      /32 octets/
+    );
   });
 
   it('refuse CORS ouvert à tous en production, le permet en développement', () => {

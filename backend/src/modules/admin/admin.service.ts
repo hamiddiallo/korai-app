@@ -6,6 +6,9 @@ import { consultationDao } from '../consultations/consultation.dao.js';
 import { clinicalReferenceDao } from '../clinical-reference/clinical-reference.dao.js';
 import { medecinDao } from '../medecins/medecin.dao.js';
 import { adminDao } from './admin.dao.js';
+import { facilityDao } from '../facilities/facility.dao.js';
+import { auditDao } from '../audit/audit.service.js';
+import { prisma } from '../../common/prisma.js';
 import type { PatientRecord } from '../patients/patient.types.js';
 
 export const adminService = {
@@ -26,7 +29,16 @@ export const adminService = {
     const existing = await userDao.findByEmail(input.email);
     if (existing) throw new HttpError(409, 'EMAIL_ALREADY_EXISTS', 'Un utilisateur existe deja avec cet email');
 
-    const user = await userDao.create(input);
+    // Un soignant est rattaché à l'établissement indiqué (créé s'il est nouveau).
+    const facility =
+      input.role === 'NURSE' && input.healthFacility?.trim()
+        ? await facilityDao.findOrCreate(input.healthFacility)
+        : undefined;
+    const user = await userDao.create({
+      ...input,
+      healthFacility: facility?.name ?? input.healthFacility,
+      facilityId: facility?.id
+    });
     return toPublicUser(user);
   },
 
@@ -39,12 +51,18 @@ export const adminService = {
       if (duplicate) throw new HttpError(409, 'EMAIL_ALREADY_EXISTS', 'Un utilisateur existe deja avec cet email');
     }
 
+    const role = input.role ?? existing.role;
+    const facility =
+      role === 'NURSE' && input.healthFacility?.trim()
+        ? await facilityDao.findOrCreate(input.healthFacility)
+        : undefined;
     const user = await userDao.update(id, {
       fullName: input.fullName,
       email: input.email,
       role: input.role,
       phone: input.phone,
-      healthFacility: input.healthFacility,
+      healthFacility: facility?.name ?? input.healthFacility,
+      facilityId: facility?.id,
       professionalId: input.professionalId
     });
     return toPublicUser(user);
@@ -100,7 +118,48 @@ export const adminService = {
   async updatePatient(id: string, input: Partial<PatientRecord>) {
     const existing = await patientDao.findById(id);
     if (!existing) throw notFound('Patient introuvable');
-    return patientDao.update(id, input);
+    const { facilityId, ...patch } = input;
+    if (facilityId && !(await facilityDao.findById(facilityId))) {
+      throw new HttpError(422, 'FACILITY_NOT_FOUND', 'Établissement introuvable.');
+    }
+    return patientDao.update(id, patch, { facilityId });
+  },
+
+  listFacilities() {
+    return facilityDao.listWithCounts();
+  },
+
+  /** Journal d'audit, du plus récent au plus ancien, avec les noms lisibles. */
+  async listAudit(filter: { patientId?: string; actorUserId?: string; before?: Date; limit: number }) {
+    const rows = await auditDao.list(filter);
+    const actorIds = [...new Set(rows.map((r) => r.actorUserId).filter((v): v is string => Boolean(v)))];
+    const patientIds = [...new Set(rows.map((r) => r.patientId).filter((v): v is string => Boolean(v)))];
+    const [actors, patients] = await Promise.all([
+      prisma.user.findMany({ where: { id: { in: actorIds } }, select: { id: true, fullName: true } }),
+      prisma.patient.findMany({
+        where: { id: { in: patientIds } },
+        select: { id: true, firstName: true, lastName: true }
+      })
+    ]);
+    const actorName = new Map(actors.map((a) => [a.id, a.fullName]));
+    const patientName = new Map(patients.map((p) => [p.id, `${p.firstName} ${p.lastName}`]));
+    return {
+      entries: rows.map((row) => ({
+        id: row.id,
+        createdAt: row.createdAt.toISOString(),
+        action: row.action,
+        entityType: row.entityType,
+        entityId: row.entityId,
+        actorUserId: row.actorUserId,
+        actorName: row.actorUserId ? actorName.get(row.actorUserId) ?? null : null,
+        actorRole: row.actorRole,
+        patientId: row.patientId,
+        patientName: row.patientId ? patientName.get(row.patientId) ?? null : null,
+        ip: row.ip,
+        details: row.details
+      })),
+      nextBefore: rows.length === filter.limit ? rows[rows.length - 1]!.createdAt.toISOString() : null
+    };
   },
 
   async deletePatient(id: string) {

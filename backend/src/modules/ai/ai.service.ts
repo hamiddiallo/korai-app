@@ -9,6 +9,8 @@ type DiagnoseInput = {
   image: Express.Multer.File;
   symptoms: string;
   showSources: boolean;
+  /** Image déjà nettoyée (`anonymizeImageForExternalAi`) : pas de second ré-encodage. */
+  sanitized?: boolean;
 };
 
 const pickString = (value: unknown): string | undefined => {
@@ -243,7 +245,7 @@ export const aiService = {
 
   /** Proxy multipart (image anonymisee) → FastAPI POST /diagnose-separate — usage interne consultations uniquement. */
   async diagnoseSeparate(input: DiagnoseInput) {
-    const sanitizedBuffer = await anonymizeImageForExternalAi(input.image);
+    const sanitizedBuffer = input.sanitized ? input.image.buffer : await anonymizeImageForExternalAi(input.image);
 
     const form = new FormData();
     form.append('file', sanitizedBuffer, {

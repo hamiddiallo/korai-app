@@ -1,4 +1,4 @@
-import type { Sex } from '@prisma/client';
+import type { Prisma, Sex } from '@prisma/client';
 import { prisma } from '../../common/prisma.js';
 import type { PatientRecord } from './patient.types.js';
 
@@ -29,6 +29,9 @@ const mapPatient = (patient: {
   address: string | null;
   consentForAi: boolean;
   consentForTeleExpertise: boolean;
+  consentForAiAt: Date | null;
+  consentForTeleExpertiseAt: Date | null;
+  facilityId: string | null;
   isValidated: boolean;
   clientLocalId: string | null;
   clientMutationId: string | null;
@@ -47,6 +50,9 @@ const mapPatient = (patient: {
   address: nullable(patient.address),
   consentForAi: patient.consentForAi,
   consentForTeleExpertise: patient.consentForTeleExpertise,
+  consentForAiAt: patient.consentForAiAt?.toISOString(),
+  consentForTeleExpertiseAt: patient.consentForTeleExpertiseAt?.toISOString(),
+  facilityId: nullable(patient.facilityId),
   isValidated: patient.isValidated,
   clientLocalId: nullable(patient.clientLocalId),
   clientMutationId: nullable(patient.clientMutationId),
@@ -67,11 +73,19 @@ export const patientDao = {
     address?: string;
     consentForAi: boolean;
     consentForTeleExpertise: boolean;
+    facilityId?: string;
     isValidated: boolean;
     clientLocalId?: string;
     clientMutationId?: string;
   }) {
-    const patient = await prisma.patient.create({ data: input });
+    const now = new Date();
+    const patient = await prisma.patient.create({
+      data: {
+        ...input,
+        consentForAiAt: input.consentForAi ? now : null,
+        consentForTeleExpertiseAt: input.consentForTeleExpertise ? now : null
+      }
+    });
     return mapPatient(patient);
   },
 
@@ -107,12 +121,10 @@ export const patientDao = {
     return patient ? mapPatient(patient) : undefined;
   },
 
-  async list(createdByUserId?: string) {
+  /** Patients non supprimés visibles selon `scope` (voir `patientScope`). */
+  async list(scope: Prisma.PatientWhereInput = {}) {
     const patients = await prisma.patient.findMany({
-      where: {
-        deletedAt: null,
-        ...(createdByUserId ? { createdByUserId } : {})
-      },
+      where: { AND: [{ deletedAt: null }, scope] },
       orderBy: { updatedAt: 'desc' }
     });
     return patients.map(mapPatient);
@@ -130,7 +142,9 @@ export const patientDao = {
       consentForAi: boolean;
       consentForTeleExpertise: boolean;
       isValidated: boolean;
-    }>
+    }>,
+    /** Champs fixés par le serveur, jamais par la requête. */
+    system: { facilityId?: string } = {}
   ) {
     // Copie champ par champ : jamais d'objet reçu transmis tel quel à Prisma
     // (les relations imbriquées permettraient d'écrire dans d'autres tables).
@@ -138,6 +152,22 @@ export const patientDao = {
     for (const key of PATIENT_UPDATABLE_FIELDS) {
       if (patch[key] !== undefined) data[key] = patch[key];
     }
+    // Date de l'accord : posée quand il est donné, effacée quand il est retiré.
+    const current = await prisma.patient.findUnique({
+      where: { id },
+      select: { consentForAi: true, consentForTeleExpertise: true }
+    });
+    const now = new Date();
+    if (patch.consentForAi !== undefined && patch.consentForAi !== current?.consentForAi) {
+      data.consentForAiAt = patch.consentForAi ? now : null;
+    }
+    if (
+      patch.consentForTeleExpertise !== undefined &&
+      patch.consentForTeleExpertise !== current?.consentForTeleExpertise
+    ) {
+      data.consentForTeleExpertiseAt = patch.consentForTeleExpertise ? now : null;
+    }
+    if (system.facilityId) data.facilityId = system.facilityId;
     const patient = await prisma.patient.update({ where: { id }, data });
     return mapPatient(patient);
   },

@@ -1,18 +1,26 @@
 /**
  * Outils de test : application Express réelle (routes, validation, erreurs)
  * sur un port libre, sans base de données — les accès Prisma et les services
- * sont remplacés par `mock.method` dans chaque test.
+ * sont remplacés par `stub()` (ou `mock.method`) dans chaque test.
  */
 import { once } from 'node:events';
+import { rmSync } from 'node:fs';
 import type { AddressInfo } from 'node:net';
 import { mock } from 'node:test';
 import type { AuthenticatedUser } from '../src/common/types.js';
 
 // Avant tout import de l'application : env.ts lit ces variables au chargement.
 process.env.NODE_ENV ??= 'test';
+// Aucune base réelle dans les tests : tout accès non simulé échoue aussitôt
+// (port fermé) au lieu de lire ou d'écrire dans la base de développement.
+process.env.DATABASE_URL = 'postgresql://test:test@127.0.0.1:1/korai_tests_sans_base';
 process.env.AI_SERVICE_BASE_URL ??= 'http://ai.test';
 process.env.JWT_ACCESS_SECRET ??= 'test_access_secret_0123456789abcdef';
 process.env.JWT_REFRESH_SECRET ??= 'test_refresh_secret_0123456789abcdef';
+// Clé et dossier propres aux tests : jamais le coffre de développement.
+process.env.IMAGE_ENCRYPTION_KEY = Buffer.alloc(32, 7).toString('base64');
+process.env.IMAGE_STORAGE_DIR = `${process.env.TMPDIR ?? '/tmp'}/korai-tests-images-${process.pid}`;
+process.on('exit', () => rmSync(process.env.IMAGE_STORAGE_DIR!, { recursive: true, force: true }));
 
 export type TestApp = {
   url: string;
@@ -77,4 +85,22 @@ export const stub = <T extends object, K extends keyof T>(target: T, key: K, imp
 export const restoreStubs = () => {
   while (stubs.length) stubs.pop()!();
   mock.restoreAll();
+};
+
+/** Accès aux dossiers accordé (ou refusé) sans interroger la base. */
+export const allowAccess = async (allowed = true) => {
+  const { access } = await import('../src/common/access/access-policy.js');
+  stub(access, 'canSeePatient', (async () => allowed) as typeof access.canSeePatient);
+  stub(access, 'canSeeConsultation', (async () => allowed) as typeof access.canSeeConsultation);
+};
+
+/** Journal d'audit en mémoire : renvoie les entrées enregistrées pendant le test. */
+export const captureAudit = async () => {
+  const { audit, auditDao } = await import('../src/modules/audit/audit.service.js');
+  audit.resetCoalescing();
+  const entries: any[] = [];
+  stub(auditDao, 'create', (async (entry: any) => {
+    entries.push(entry);
+  }) as typeof auditDao.create);
+  return entries;
 };

@@ -18,6 +18,7 @@ const mapUser = (user: {
   rejectionReason: string | null;
   phone: string | null;
   healthFacility: string | null;
+  facilityId: string | null;
   professionalId: string | null;
   linkedPatientId: string | null;
   createdAt: Date;
@@ -33,6 +34,7 @@ const mapUser = (user: {
   rejectionReason: nullable(user.rejectionReason),
   phone: nullable(user.phone),
   healthFacility: nullable(user.healthFacility),
+  facilityId: nullable(user.facilityId),
   professionalId: nullable(user.professionalId),
   linkedPatientId: nullable(user.linkedPatientId),
   createdAt: user.createdAt.toISOString()
@@ -84,6 +86,7 @@ export const userDao = {
     supervisorMatricule?: string;
     phone?: string;
     healthFacility?: string;
+    facilityId?: string;
     professionalId?: string;
     linkedPatientId?: string;
   }) {
@@ -101,6 +104,7 @@ export const userDao = {
         supervisorMatricule: input.supervisorMatricule,
         phone: input.phone,
         healthFacility: input.healthFacility,
+        facilityId: input.facilityId,
         professionalId: input.professionalId,
         linkedPatientId: input.linkedPatientId
       }
@@ -161,6 +165,7 @@ export const userDao = {
       role: Role;
       phone?: string;
       healthFacility?: string;
+      facilityId?: string | null;
       professionalId?: string;
       linkedPatientId?: string;
     }>
@@ -173,6 +178,7 @@ export const userDao = {
         role: patch.role,
         phone: patch.phone,
         healthFacility: patch.healthFacility,
+        facilityId: patch.facilityId,
         professionalId: patch.professionalId,
         linkedPatientId: patch.linkedPatientId
       }

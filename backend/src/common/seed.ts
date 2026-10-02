@@ -2,12 +2,16 @@ import { userDao } from '../modules/users/user.dao.js';
 import { clinicalReferenceDao } from '../modules/clinical-reference/clinical-reference.dao.js';
 import { medecinDao } from '../modules/medecins/medecin.dao.js';
 import { authService } from '../modules/auth/auth.service.js';
+import { facilityDao } from '../modules/facilities/facility.dao.js';
 
 const MEDECINS_TO_SEED = [
   { matricule: 'ORL001', nom: 'Demo', prenom: 'ORL' },
   { matricule: 'ORL002', nom: 'Ndiaye', prenom: 'Awa' },
   { matricule: 'ORL003', nom: 'Diop', prenom: 'Moussa' }
 ];
+
+/** Établissement du soignant et du patient de démonstration. */
+const DEMO_FACILITY = 'Poste de santé de démonstration';
 
 // dangerScore (0–3) : alimente le calcul automatique du niveau d'urgence.
 const CLINICAL_ITEMS_TO_SEED = [
@@ -58,11 +62,14 @@ const step = async (label: string, run: () => Promise<unknown>) => {
 export async function runSeed() {
   await step('comptes de démonstration', async () => {
     if ((await userDao.count()) > 0) return;
+    const facility = await facilityDao.findOrCreate(DEMO_FACILITY);
     await userDao.create({
       fullName: 'Infirmier Demo',
       email: 'nurse@korai.local',
       password: 'Password123!',
-      role: 'NURSE'
+      role: 'NURSE',
+      healthFacility: facility.name,
+      facilityId: facility.id
     });
     await userDao.create({
       fullName: 'ORL Demo',
@@ -93,7 +100,8 @@ export async function runSeed() {
       phone: '770000000',
       address: 'Dakar',
       consentForAi: true,
-      consentForTeleExpertise: true
+      consentForTeleExpertise: true,
+      facilityId: (await facilityDao.findOrCreate(DEMO_FACILITY)).id
     });
   });
 

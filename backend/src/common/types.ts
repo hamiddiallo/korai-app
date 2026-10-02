@@ -22,6 +22,7 @@ export type AuthenticatedUser = {
   supervisorMatricule?: string;
   phone?: string;
   healthFacility?: string;
+  facilityId?: string;
   professionalId?: string;
   linkedPatientId?: string;
   createdAt: string;
@@ -60,6 +61,8 @@ export type LegacyOrlCase = {
   organizedAiSummary?: AiSummary;
   expertiseReview?: ExpertiseReviewApi;
   effectiveSummary?: EffectiveSummary;
+  /** Photos du tympan conservées, à lire via `url` (accès contrôlé). */
+  images: Array<{ id: string; earSide: string; mimeType: string; createdAt: string; url: string }>;
   status: string;
   urgency: string;
   aiErrorCode?: string;

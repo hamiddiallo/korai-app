@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { after, afterEach, before, beforeEach, describe, it } from 'node:test';
-import { makeUser, restoreStubs, signInAs, startTestApp, stub, type TestApp } from './helpers.js';
+import { allowAccess, captureAudit, makeUser, restoreStubs, signInAs, startTestApp, stub, type TestApp } from './helpers.js';
 
 const { prisma } = await import('../src/common/prisma.js');
 const { patientDao } = await import('../src/modules/patients/patient.dao.js');
@@ -36,9 +36,12 @@ describe('PATCH /patients/:id — champs modifiables', () => {
   after(async () => {
     await app.close();
   });
-  beforeEach(() => {
+  beforeEach(async () => {
     updateCalls = [];
+    await allowAccess();
+    await captureAudit();
     stub(prisma.patient, 'findFirst', (async () => patientRow()) as any);
+    stub(prisma.patient, 'findUnique', (async () => patientRow()) as any);
     stub(prisma.patient, 'update', (async (args: any) => {
       updateCalls.push(args);
       return patientRow(args.data);

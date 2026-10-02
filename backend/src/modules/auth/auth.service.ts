@@ -8,6 +8,7 @@ import type { UserRecord } from '../users/user.types.js';
 import { patientDao } from '../patients/patient.dao.js';
 import { medecinDao } from '../medecins/medecin.dao.js';
 import { notificationService } from '../notifications/notification.service.js';
+import { facilityDao, normalizeFacilityName } from '../facilities/facility.dao.js';
 
 type JwtPayload = {
   sub: string;
@@ -36,6 +37,7 @@ const toAuthenticatedUser = (user: UserRecord): AuthenticatedUser => ({
   supervisorMatricule: user.supervisorMatricule,
   phone: user.phone,
   healthFacility: user.healthFacility,
+  facilityId: user.facilityId,
   professionalId: user.professionalId,
   linkedPatientId: user.linkedPatientId,
   createdAt: user.createdAt
@@ -169,6 +171,9 @@ export const authService = {
       );
     }
 
+    // L'établissement déclaré est rejoint (ou créé) : il détermine les dossiers
+    // partagés une fois le compte validé par l'encadrant.
+    const facility = await facilityDao.findOrCreate(input.healthFacility);
     const user = await userDao.create({
       fullName: input.fullName,
       email: input.email,
@@ -177,7 +182,8 @@ export const authService = {
       accountStatus: 'PENDING',
       supervisorMatricule,
       phone: input.phone,
-      healthFacility: input.healthFacility,
+      healthFacility: facility.name,
+      facilityId: facility.id,
       professionalId: input.professionalId
     });
 
@@ -213,9 +219,15 @@ export const authService = {
     address?: string;
     consentForAi: boolean;
     consentForTeleExpertise: boolean;
+    /** Établissement où le patient est suivi (facultatif). */
+    facilityId?: string;
   }) {
     const existing = await userDao.findByEmail(input.email);
     if (existing) throw new HttpError(409, 'EMAIL_ALREADY_EXISTS', 'Un utilisateur existe deja avec cet email');
+
+    if (input.facilityId && !(await facilityDao.findById(input.facilityId))) {
+      throw new HttpError(422, 'FACILITY_NOT_FOUND', 'Établissement introuvable. Choisissez-le dans la liste.');
+    }
 
     const user = await userDao.create({
       fullName: `${input.firstName} ${input.lastName}`,
@@ -236,6 +248,7 @@ export const authService = {
       address: input.address,
       consentForAi: input.consentForAi,
       consentForTeleExpertise: input.consentForTeleExpertise,
+      facilityId: input.facilityId,
       isValidated: false
     });
 
@@ -306,6 +319,20 @@ export const authService = {
   ) {
     const user = await userDao.findById(userId);
     if (!user) throw new HttpError(404, 'USER_NOT_FOUND', 'Utilisateur introuvable');
+
+    // L'établissement d'un soignant définit les dossiers qu'il consulte : seul
+    // un administrateur peut le changer.
+    if (
+      user.role === 'NURSE' &&
+      data.healthFacility !== undefined &&
+      normalizeFacilityName(data.healthFacility) !== normalizeFacilityName(user.healthFacility ?? '')
+    ) {
+      throw new HttpError(
+        403,
+        'FACILITY_CHANGE_FORBIDDEN',
+        'Votre établissement ne peut être modifié que par un administrateur.'
+      );
+    }
 
     const updated = await userDao.update(userId, {
       fullName: data.fullName ?? user.fullName,

@@ -44,6 +44,9 @@ export type ConsultationRecord = {
     fileName?: string;
     byteSize?: number;
     description?: string;
+    /** Photo conservée (chiffrée) sur le serveur. */
+    stored?: boolean;
+    deletedAt?: string;
     createdAt: string;
   }[];
 };

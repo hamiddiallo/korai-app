@@ -21,7 +21,7 @@ export const registerNurseSchema = z.object({
   email: z.string().email(),
   password: z.string().min(8),
   phone: z.string().min(5).optional(),
-  healthFacility: z.string().min(2),
+  healthFacility: z.string().trim().min(2).max(120),
   professionalId: z.string().min(2).optional(),
   supervisorMatricule: z.string().min(1)
 });
@@ -45,7 +45,8 @@ export const registerPatientSchema = z.object({
   phone: z.string().min(5).optional(),
   address: z.string().optional(),
   consentForAi: z.boolean().default(false),
-  consentForTeleExpertise: z.boolean().default(false)
+  consentForTeleExpertise: z.boolean().default(false),
+  facilityId: z.string().uuid().optional()
 });
 
 const emptyToUndefined = (val: unknown) => (val === '' ? undefined : val);

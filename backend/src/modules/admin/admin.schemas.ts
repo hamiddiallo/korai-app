@@ -28,7 +28,9 @@ export const updateAdminPatientSchema = z.object({
   address: z.string().optional(),
   consentForAi: z.boolean().optional(),
   consentForTeleExpertise: z.boolean().optional(),
-  isValidated: z.boolean().optional()
+  isValidated: z.boolean().optional(),
+  /** Établissement qui suit le patient. */
+  facilityId: z.string().uuid().optional()
 });
 
 export const createClinicalItemSchema = z.object({

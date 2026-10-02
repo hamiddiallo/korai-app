@@ -41,6 +41,12 @@ consultationRouter.post(
   asyncHandler((req, res) => consultationController.diagnose(req, res))
 );
 
+consultationRouter.get(
+  '/:id/images/:imageId',
+  requireRoles('NURSE', 'SPECIALIST', 'ADMIN', 'PATIENT'),
+  asyncHandler((req, res) => consultationController.image(req, res))
+);
+
 consultationRouter.post(
   '/:id/diagnose/retry',
   requireRoles('NURSE', 'ADMIN', 'PATIENT'),

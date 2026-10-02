@@ -62,9 +62,16 @@ export const expertiseDao = {
     return prisma.expertiseRequest.findUnique({ where: { consultationId } }).then((r) => (r ? mapExpertise(r) : undefined));
   },
 
-  async listInbox() {
+  /** Sans `specialistId` (admin) : toutes les demandes ouvertes. */
+  async listInbox(specialistId?: string) {
     const rows = await prisma.expertiseRequest.findMany({
-      where: { status: { in: ['PENDING', 'IN_REVIEW'] } },
+      where: {
+        deletedAt: null,
+        consultation: { is: { deletedAt: null } },
+        ...(specialistId
+          ? { OR: [{ status: 'PENDING' }, { status: 'IN_REVIEW', assignedToUserId: specialistId }] }
+          : { status: { in: ['PENDING', 'IN_REVIEW'] } })
+      },
       orderBy: { createdAt: 'asc' },
       include: {
         consultation: {

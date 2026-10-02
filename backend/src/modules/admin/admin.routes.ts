@@ -39,6 +39,9 @@ adminRouter.post('/patients/:id/restore', asyncHandler((req, res) => adminContro
 adminRouter.delete('/consultations/:id', asyncHandler((req, res) => adminController.deleteConsultation(req, res)));
 adminRouter.post('/consultations/:id/restore', asyncHandler((req, res) => adminController.restoreConsultation(req, res)));
 
+adminRouter.get('/facilities', asyncHandler((req, res) => adminController.listFacilities(req, res)));
+adminRouter.get('/audit', asyncHandler((req, res) => adminController.listAudit(req, res)));
+
 adminRouter.get('/clinical-items', asyncHandler((req, res) => adminController.listClinicalItems(req, res)));
 adminRouter.post('/clinical-items', validateBody(createClinicalItemSchema), asyncHandler((req, res) => adminController.createClinicalItem(req, res)));
 adminRouter.patch('/clinical-items/:id', validateBody(updateClinicalItemSchema), asyncHandler((req, res) => adminController.updateClinicalItem(req, res)));

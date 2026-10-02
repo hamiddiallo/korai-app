@@ -83,6 +83,15 @@ export const toLegacyOrlCaseFromRecord = (
 ): LegacyOrlCase => {
   const organizedAiSummary = toOrganizedAiSummary(consultation);
   const expertise = consultation.expertiseRequest;
+  const effectiveSummary = buildEffectiveSummary({
+    consultationStatus: consultation.status,
+    expertise,
+    aiSummary: organizedAiSummary,
+    viewerRole
+  });
+  // Un patient ne reçoit jamais la réponse brute de l'IA, et ne voit l'analyse
+  // et l'avis qu'une fois le résultat partagé (le masquage ne dépend pas de l'app).
+  const patientCanSee = viewerRole !== 'PATIENT' || effectiveSummary.patientVisible;
 
   return {
     id: consultation.id,
@@ -100,15 +109,19 @@ export const toLegacyOrlCaseFromRecord = (
     touchCheckIds: consultation.touchCheckIds,
     touchCheckLabels: consultation.touchCheckLabels,
     touchObservations: consultation.touchObservations,
-    aiResponse: consultation.aiResponse?.rawJson,
-    organizedAiSummary,
-    expertiseReview: expertise ? toExpertiseReviewApi(expertise) : undefined,
-    effectiveSummary: buildEffectiveSummary({
-      consultationStatus: consultation.status,
-      expertise,
-      aiSummary: organizedAiSummary,
-      viewerRole
-    }),
+    aiResponse: viewerRole === 'PATIENT' ? undefined : consultation.aiResponse?.rawJson,
+    organizedAiSummary: patientCanSee ? organizedAiSummary : undefined,
+    expertiseReview: expertise && patientCanSee ? toExpertiseReviewApi(expertise) : undefined,
+    effectiveSummary,
+    images: (consultation.otoscopicImages ?? [])
+      .filter((image) => image.stored && !image.deletedAt)
+      .map((image) => ({
+        id: image.id,
+        earSide: image.earSide,
+        mimeType: image.mimeType,
+        createdAt: image.createdAt,
+        url: `/cases/${consultation.id}/images/${image.id}`
+      })),
     status: consultation.status,
     urgency: consultation.urgency,
     aiErrorCode: consultation.aiErrorCode,

@@ -1,7 +1,15 @@
-import { ConsultationStatus, EarSide, UrgencyLevel } from '@prisma/client';
-import { forbidden, notFound } from '../../common/errors/http-error.js';
+import { ConsultationStatus, EarSide, Prisma, UrgencyLevel } from '@prisma/client';
+import { consultationScope } from '../../common/access/access-policy.js';
+import { HttpError, notFound } from '../../common/errors/http-error.js';
 import type { AuthenticatedUser } from '../../common/types.js';
-import { aiService, describeAiError, extractAiFieldsFromRaw, neutralImageFilename } from '../ai/ai.service.js';
+import {
+  aiService,
+  anonymizeImageForExternalAi,
+  describeAiError,
+  extractAiFieldsFromRaw,
+  neutralImageFilename
+} from '../ai/ai.service.js';
+import { imageVault, looksLikeImage } from '../images/image-vault.js';
 import { patientDao } from '../patients/patient.dao.js';
 import { consultationDao } from './consultation.dao.js';
 import { resolveUrgency } from './urgency.js';
@@ -155,6 +163,9 @@ const persistAiFailure = async (
   return toLegacyOrlCase(withError!, viewerRole);
 };
 
+const isUniqueViolation = (error: unknown) =>
+  error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002';
+
 const findExistingConsultationForClientKey = async (input: {
   createdByUserId: string;
   clientLocalId?: string;
@@ -215,31 +226,56 @@ export const consultationService = {
       return toLegacyOrlCase(existing, input.viewerRole);
     }
 
+    // Une vraie photo (signature du fichier), pas un autre contenu renommé :
+    // vérifié avant d'enregistrer quoi que ce soit.
+    if (input.image && !looksLikeImage(input.image.buffer, input.image.mimetype)) {
+      throw new HttpError(400, 'INVALID_IMAGE_TYPE', 'Le fichier envoyé n’est pas une photo JPEG, PNG ou WebP.');
+    }
+
     const urgency = await resolveUrgency(input);
-    const consultation = existing
-      ? // Draft réutilisé : on recalcule l'urgence (les symptômes ont pu changer
-        // depuis la création du brouillon) pour garder le serveur autoritaire.
-        await consultationDao.update(existing.id, { urgency })
-      : await consultationDao.create({
+    let consultation;
+    if (existing) {
+      // Draft réutilisé : on recalcule l'urgence (les symptômes ont pu changer
+      // depuis la création du brouillon) pour garder le serveur autoritaire.
+      consultation = await consultationDao.update(existing.id, { urgency });
+    } else {
+      try {
+        consultation = await consultationDao.create({
           ...input,
           urgency,
           status: ConsultationStatus.PENDING_AI
         });
+      } catch (error) {
+        // Même consultation envoyée deux fois en même temps (envoi direct et
+        // file hors ligne) : la seconde renvoie la première, sans doublon ni
+        // second appel à l'IA.
+        const sameKey = isUniqueViolation(error) ? await findExistingConsultationForClientKey(input) : undefined;
+        if (sameKey) return toLegacyOrlCase(sameKey, input.viewerRole);
+        throw error;
+      }
+    }
 
     if (input.image || (input.imageDescription && input.imageDescription.trim().length > 0)) {
+      // La photo est nettoyée (métadonnées EXIF retirées) puis conservée chiffrée
+      // AVANT l'appel à l'IA : le spécialiste la verra, et une analyse en échec
+      // pourra être relancée avec elle.
+      const sanitized = input.image ? await anonymizeImageForExternalAi(input.image) : undefined;
+      const storageKey = sanitized ? await imageVault.save(sanitized) : undefined;
       await consultationDao.createOtoscopicImage({
         consultationId: consultation.id,
         earSide: input.earSide,
         mimeType: input.image?.mimetype ?? 'text/plain',
         fileName: input.image ? neutralImageFilename(input.image.mimetype) : undefined,
-        byteSize: input.image?.size,
-        description: input.imageDescription
+        byteSize: sanitized?.length,
+        description: input.imageDescription,
+        storageKey
       });
 
-      if (input.image) {
+      if (input.image && sanitized) {
         try {
           const rawJson = await aiService.diagnoseSeparate({
-            image: input.image,
+            image: { ...input.image, buffer: sanitized, size: sanitized.length },
+            sanitized: true,
             symptoms: input.clinicalNarrative,
             showSources: input.showSources
           });
@@ -322,21 +358,14 @@ export const consultationService = {
 
   /**
    * Rejoue l'analyse IA d'une consultation en échec (statut AI_FAILED ou
-   * PENDING_AI bloqué). L'image otoscopique n'étant pas conservée côté serveur,
-   * le retry s'appuie sur l'analyse RAG du récit clinique.
+   * PENDING_AI bloqué), avec la photo conservée s'il y en a une, sinon sur le
+   * seul récit clinique.
    */
   async retryDiagnosis(id: string, user: AuthenticatedUser) {
+    // Accès et accord du patient vérifiés par le contrôleur.
     const viewerRole = user.role;
     const consultation = await consultationDao.findById(id);
     if (!consultation) throw notFound('Consultation introuvable');
-
-    // Contrôle d'appartenance : un patient ne peut relancer que ses propres cas.
-    if (user.role === 'PATIENT') {
-      const owns =
-        consultation.createdByUserId === user.id ||
-        (user.linkedPatientId && consultation.patientId === user.linkedPatientId);
-      if (!owns) throw forbidden('Accès refusé à cette consultation.');
-    }
 
     if (consultation.aiResponse) {
       // Analyse déjà aboutie : on renvoie l'existant (idempotent).
@@ -350,19 +379,31 @@ export const consultationService = {
     });
 
     try {
-      const rawJson = await aiService.ragAnalyze({
-        symptoms: consultation.clinicalNarrative,
-        showSources: true
-      });
+      const photo = await consultationDao.findStoredImage(id);
+      const rawJson = photo?.storageKey
+        ? await aiService.diagnoseSeparate({
+            image: {
+              buffer: await imageVault.read(photo.storageKey),
+              mimetype: photo.mimeType,
+              originalname: neutralImageFilename(photo.mimeType)
+            } as Express.Multer.File,
+            sanitized: true,
+            symptoms: consultation.clinicalNarrative,
+            showSources: true
+          })
+        : await aiService.ragAnalyze({
+            symptoms: consultation.clinicalNarrative,
+            showSources: true
+          });
 
       return await persistAiAndFinalize(
         id,
         {
           createdByUserId: consultation.createdByUserId,
           requestSpecialistReview: false,
-          // Retry = analyse RAG texte uniquement (l'image n'est pas conservée) :
-          // on ne présente pas le résultat comme un diagnostic sur image.
-          hadOtoscopicImage: false,
+          // Sans photo conservée, le résultat ne doit pas être présenté comme
+          // un diagnostic sur image.
+          hadOtoscopicImage: Boolean(photo?.storageKey),
           viewerRole
         },
         rawJson
@@ -377,26 +418,8 @@ export const consultationService = {
   },
 
   async listForUser(user: AuthenticatedUser) {
-    const consultations = await consultationDao.list();
-    const filtered =
-      user.role === 'NURSE' || user.role === 'ADMIN'
-        ? consultations
-        : user.role === 'SPECIALIST'
-          ? consultations.filter(
-              (c) =>
-                c.status === ConsultationStatus.PENDING_SPECIALIST_REVIEW ||
-                c.assignedSpecialistId === user.id ||
-                c.expertiseRequest?.assignedToUserId === user.id
-            )
-          : user.role === 'PATIENT'
-            ? consultations.filter(
-                (c) =>
-                  c.createdByUserId === user.id ||
-                  (user.linkedPatientId && c.patientId === user.linkedPatientId)
-              )
-            : consultations;
-
-    return filtered.map((c) => toLegacyOrlCase(c, user.role));
+    const consultations = await consultationDao.list(consultationScope(user));
+    return consultations.map((c) => toLegacyOrlCase(c, user.role));
   },
 
   async requestSpecialistReview(
