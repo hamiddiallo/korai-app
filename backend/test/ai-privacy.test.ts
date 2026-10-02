@@ -49,4 +49,18 @@ describe('données envoyées au service IA externe', () => {
     assert.equal(neutralImageFilename('image/jpeg'), 'otoscopie.jpg');
     assert.equal(neutralImageFilename('image/png'), 'otoscopie.png');
   });
+
+  it('tunnel IA coupé (ngrok hors ligne) : panne à relancer, pas un refus', async () => {
+    const { describeAiError, isRetryableAiError } = await import('../src/modules/ai/ai.service.js');
+    stub(globalThis, 'fetch', (async () =>
+      new Response('<!DOCTYPE html><html>ERR_NGROK_3200 endpoint is offline</html>', {
+        status: 404,
+        headers: { 'content-type': 'text/html', 'ngrok-error-code': 'ERR_NGROK_3200' }
+      })) as typeof fetch);
+    const error = await aiService.ragAnalyze({ symptoms: 'Otalgie' }).catch((e: unknown) => e);
+    const described = describeAiError(error);
+    assert.equal(described.code, 'AI_UNREACHABLE');
+    assert.equal(isRetryableAiError(described.code), true);
+    assert.match(described.message, /injoignable/);
+  });
 });

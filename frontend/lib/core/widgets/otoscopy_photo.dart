@@ -206,7 +206,9 @@ class _FullScreenPhotoState extends State<_FullScreenPhoto> {
       appBar: AppBar(
         backgroundColor: k.hero,
         foregroundColor: k.onHero,
-        title: Text(widget.title),
+        // Couleur explicite : le thème de l'app écrit les titres en encre
+        // sombre, invisible sur ce fond.
+        title: Text(widget.title, style: context.text.titleMedium?.copyWith(color: k.onHero)),
         leading: IconButton(
           tooltip: 'Fermer',
           icon: const Icon(Icons.close_rounded),

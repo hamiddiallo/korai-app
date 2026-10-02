@@ -4,6 +4,7 @@ import '../../../../core/design/design.dart';
 import '../../domain/ai_case.dart';
 import '../nurse_workspace.dart';
 import '../widgets/ai_proposal_block.dart';
+import '../../../../core/widgets/otoscopy_photo.dart';
 
 /// Résultat d'une consultation qui vient d'être analysée : urgence, proposition
 /// de l'IA, et l'action suivante (demander un avis ou terminer).
@@ -36,7 +37,8 @@ class _ConsultationResultPageState extends State<ConsultationResultPage> {
       if (!mounted) return;
       setState(() => _case = updated);
       if (updated.isAiFailed) {
-        KSnack.show(context, 'L’analyse n’a toujours pas abouti. Réessayez un peu plus tard depuis l’historique.', tone: KTone.warning);
+        KSnack.show(context, 'L’analyse n’a toujours pas abouti. Réessayez un peu plus tard depuis l’historique.',
+            tone: KTone.warning);
       }
     } catch (e) {
       if (mounted) KSnack.error(context, e);
@@ -53,7 +55,8 @@ class _ConsultationResultPageState extends State<ConsultationResultPage> {
           builder: (ctx) => KResultScreen(
             kind: KResultKind.success,
             title: 'Demande d’avis envoyée',
-            message: 'Un spécialiste ORL va examiner le dossier de ${widget.patientName}. Vous serez notifié·e dès sa réponse.',
+            message:
+                'Un spécialiste ORL va examiner le dossier de ${widget.patientName}. Vous serez notifié·e dès sa réponse.',
             primaryLabel: 'Retour à l’accueil',
             onPrimary: () => Navigator.of(ctx).popUntil((route) => route.isFirst),
           ),
@@ -115,7 +118,8 @@ class _ConsultationResultPageState extends State<ConsultationResultPage> {
                 const SizedBox(height: 2),
                 Semantics(
                   header: true,
-                  child: Text(failed ? 'Analyse non aboutie' : 'Résultat de l’analyse', style: context.text.headlineMedium),
+                  child: Text(failed ? 'Analyse non aboutie' : 'Résultat de l’analyse',
+                      style: context.text.headlineMedium),
                 ),
                 const SizedBox(height: KSpace.md),
                 if (widget.infoMessage != null) ...[
@@ -132,7 +136,8 @@ class _ConsultationResultPageState extends State<ConsultationResultPage> {
                           children: [
                             Icon(Icons.cloud_off_rounded, color: k.warning),
                             const SizedBox(width: KSpace.xs),
-                            Expanded(child: Text('Le service d’analyse n’a pas répondu', style: context.text.titleSmall)),
+                            Expanded(
+                                child: Text('Le service d’analyse n’a pas répondu', style: context.text.titleSmall)),
                           ],
                         ),
                         const SizedBox(height: 4),
@@ -141,7 +146,11 @@ class _ConsultationResultPageState extends State<ConsultationResultPage> {
                           style: context.text.bodyMedium?.copyWith(color: k.inkMuted),
                         ),
                         const SizedBox(height: KSpace.sm),
-                        KAsyncButton(label: 'Relancer l’analyse', busyLabel: 'Analyse en cours…', icon: Icons.refresh_rounded, onPressed: _retry),
+                        KAsyncButton(
+                            label: 'Relancer l’analyse',
+                            busyLabel: 'Analyse en cours…',
+                            icon: Icons.refresh_rounded,
+                            onPressed: _retry),
                       ],
                     ),
                   )
@@ -153,6 +162,7 @@ class _ConsultationResultPageState extends State<ConsultationResultPage> {
                   ],
                 ],
                 const SizedBox(height: KSpace.md),
+                if (c.images.isNotEmpty) OtoscopyPhotos(images: c.images),
                 ClinicalFactsCard(consultation: c),
                 const SizedBox(height: KSpace.md),
                 Text(

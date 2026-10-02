@@ -176,7 +176,22 @@ const callAiService = async (path: string, init: RequestInit): Promise<unknown> 
     });
 
     if (!response.ok) {
-      const errorText = await response.text();
+      const errorText = (await response.text()).slice(0, 500);
+      // Tunnel ou passerelle coupé (ngrok hors ligne, page HTML d'erreur) : le
+      // service IA n'a jamais reçu la requête. Panne temporaire, à relancer —
+      // pas un refus de la requête.
+      const tunnelDown =
+        Boolean(response.headers.get('ngrok-error-code')) ||
+        /ERR_NGROK_\d+/.test(errorText) ||
+        (response.headers.get('content-type') ?? '').includes('text/html');
+      if (tunnelDown) {
+        throw new HttpError(
+          503,
+          'AI_UNREACHABLE',
+          "Le service d'analyse IA est injoignable pour le moment. Réessayez plus tard.",
+          response.headers.get('ngrok-error-code') ?? `HTTP ${response.status}`
+        );
+      }
       // 4xx applicatif (hors 408/429) = requête invalide, inutile de réessayer.
       const isClientError =
         response.status >= 400 &&

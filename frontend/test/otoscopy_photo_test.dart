@@ -97,6 +97,12 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Tympan · Oreille gauche'), findsOneWidget);
     expect(find.byType(InteractiveViewer), findsOneWidget);
+    final k = tester.element(find.byType(InteractiveViewer)).k;
+    expect(
+      tester.widget<Text>(find.text('Tympan · Oreille gauche')).style?.color,
+      k.onHero,
+      reason: 'titre lisible sur le fond sombre',
+    );
 
     await tester.tap(find.byTooltip('Fermer'));
     await tester.pumpAndSettle();
