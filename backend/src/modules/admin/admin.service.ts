@@ -50,6 +50,25 @@ export const adminService = {
     return toPublicUser(user);
   },
 
+  /** Active un compte en attente (spécialiste inscrit depuis l'application, infirmier…). */
+  async approveUser(id: string) {
+    const existing = await userDao.findById(id);
+    if (!existing) throw notFound('Utilisateur introuvable');
+    if (existing.accountStatus !== 'PENDING') {
+      throw new HttpError(409, 'ACCOUNT_NOT_PENDING', 'Ce compte n’est pas en attente de validation.');
+    }
+    return toPublicUser(await userDao.setAccountStatus(id, 'ACTIVE', null));
+  },
+
+  async rejectUser(id: string, reason?: string) {
+    const existing = await userDao.findById(id);
+    if (!existing) throw notFound('Utilisateur introuvable');
+    if (existing.accountStatus !== 'PENDING') {
+      throw new HttpError(409, 'ACCOUNT_NOT_PENDING', 'Ce compte n’est pas en attente de validation.');
+    }
+    return toPublicUser(await userDao.setAccountStatus(id, 'REJECTED', reason?.trim() || null));
+  },
+
   async deleteUser(id: string, currentUserId: string) {
     if (id === currentUserId) throw forbidden('Un admin ne peut pas supprimer son propre compte');
 

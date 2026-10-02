@@ -62,7 +62,12 @@ export const clinicalReferenceDao = {
     await prisma.clinicalReferenceItem.delete({ where: { id } });
   },
 
-  async upsertByTypeAndLabel(item: {
+  /**
+   * Crée l'élément s'il n'existe pas encore. N'écrase jamais un élément
+   * existant : les réglages de l'administrateur (score de danger, définition)
+   * survivent aux redémarrages.
+   */
+  async createIfMissing(item: {
     type: ClinicalReferenceType;
     label: string;
     description?: string;
@@ -72,16 +77,6 @@ export const clinicalReferenceDao = {
     const existing = await prisma.clinicalReferenceItem.findFirst({
       where: { type: item.type, label: item.label }
     });
-    if (!existing) {
-      return prisma.clinicalReferenceItem.create({ data: item });
-    }
-    return prisma.clinicalReferenceItem.update({
-      where: { id: existing.id },
-      data: {
-        description: item.description,
-        sortOrder: item.sortOrder,
-        dangerScore: item.dangerScore
-      }
-    });
+    return existing ?? prisma.clinicalReferenceItem.create({ data: item });
   }
 };

@@ -6,6 +6,10 @@ export class AuthController {
     res.json(await authService.login(req.body));
   }
 
+  async refresh(req: Request, res: Response) {
+    res.json(await authService.refresh(req.body.refreshToken));
+  }
+
   async registerPatient(req: Request, res: Response) {
     res.status(201).json(await authService.registerPatient(req.body));
   }

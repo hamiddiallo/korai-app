@@ -1,6 +1,6 @@
 import cors from 'cors';
 import express from 'express';
-import { env } from './config/env.js';
+import { corsOrigins, env } from './config/env.js';
 import { errorMiddleware } from './common/errors/error.middleware.js';
 import { authRouter } from './modules/auth/auth.routes.js';
 import { adminRouter } from './modules/admin/admin.routes.js';
@@ -16,7 +16,16 @@ import { registrationRouter } from './modules/registrations/registration.routes.
 export const createApp = () => {
   const app = express();
 
-  app.use(cors({ origin: env.CORS_ORIGIN === '*' ? true : env.CORS_ORIGIN }));
+  app.disable('x-powered-by');
+  if (env.TRUST_PROXY > 0) app.set('trust proxy', env.TRUST_PROXY);
+  app.use((_req, res, next) => {
+    // En-têtes de sécurité de base (API JSON, pas de rendu HTML).
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('X-Frame-Options', 'DENY');
+    res.setHeader('Referrer-Policy', 'no-referrer');
+    next();
+  });
+  app.use(cors({ origin: corsOrigins(env.CORS_ORIGIN) }));
   app.use(express.json({ limit: '1mb' }));
 
   app.get('/health', (_req, res) => {

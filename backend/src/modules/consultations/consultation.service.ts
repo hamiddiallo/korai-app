@@ -1,11 +1,10 @@
 import { ConsultationStatus, EarSide, UrgencyLevel } from '@prisma/client';
 import { forbidden, notFound } from '../../common/errors/http-error.js';
 import type { AuthenticatedUser } from '../../common/types.js';
-import { aiService, describeAiError, extractAiFieldsFromRaw } from '../ai/ai.service.js';
-import { clinicalReferenceDao } from '../clinical-reference/clinical-reference.dao.js';
+import { aiService, describeAiError, extractAiFieldsFromRaw, neutralImageFilename } from '../ai/ai.service.js';
 import { patientDao } from '../patients/patient.dao.js';
 import { consultationDao } from './consultation.dao.js';
-import { computeUrgency } from './urgency.js';
+import { resolveUrgency } from './urgency.js';
 import { toLegacyOrlCase } from './consultation.types.js';
 import { expertiseService } from '../expertise/expertise.service.js';
 
@@ -156,24 +155,6 @@ const persistAiFailure = async (
   return toLegacyOrlCase(withError!, viewerRole);
 };
 
-/**
- * Niveau d'urgence calculé automatiquement à partir des scores de danger des
- * symptômes et antécédents sélectionnés (le serveur fait autorité).
- */
-const resolveUrgency = async (
-  symptomIds?: string[],
-  medicalHistoryIds?: string[]
-): Promise<UrgencyLevel> => {
-  const symIds = symptomIds ?? [];
-  const histIds = medicalHistoryIds ?? [];
-  const scores = await clinicalReferenceDao.dangerScoresByIds([
-    ...new Set([...symIds, ...histIds])
-  ]);
-  const symptomScores = symIds.map((id) => scores.get(id) ?? 0);
-  const historyScores = histIds.map((id) => scores.get(id) ?? 0);
-  return computeUrgency(symptomScores, historyScores);
-};
-
 const findExistingConsultationForClientKey = async (input: {
   createdByUserId: string;
   clientLocalId?: string;
@@ -208,7 +189,7 @@ export const consultationService = {
 
     const consultation = await consultationDao.create({
       ...input,
-      urgency: await resolveUrgency(input.symptomIds, input.medicalHistoryIds),
+      urgency: await resolveUrgency(input),
       status: ConsultationStatus.DRAFT
     });
     return toLegacyOrlCase(consultation, viewerRole);
@@ -234,7 +215,7 @@ export const consultationService = {
       return toLegacyOrlCase(existing, input.viewerRole);
     }
 
-    const urgency = await resolveUrgency(input.symptomIds, input.medicalHistoryIds);
+    const urgency = await resolveUrgency(input);
     const consultation = existing
       ? // Draft réutilisé : on recalcule l'urgence (les symptômes ont pu changer
         // depuis la création du brouillon) pour garder le serveur autoritaire.
@@ -250,7 +231,7 @@ export const consultationService = {
         consultationId: consultation.id,
         earSide: input.earSide,
         mimeType: input.image?.mimetype ?? 'text/plain',
-        fileName: input.image?.originalname,
+        fileName: input.image ? neutralImageFilename(input.image.mimetype) : undefined,
         byteSize: input.image?.size,
         description: input.imageDescription
       });

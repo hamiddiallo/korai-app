@@ -46,6 +46,8 @@ export const authService = {
     const payload = jwt.verify(token, env.JWT_ACCESS_SECRET) as JwtPayload;
     let user = await userDao.findById(payload.sub);
     if (!user) throw unauthorized('Session invalide');
+    // Compte refusé ou remis en attente : ses jetons déjà émis ne valent plus rien.
+    if (user.accountStatus !== 'ACTIVE') throw unauthorized('Compte inactif');
 
     if (user.role === 'PATIENT' && !user.linkedPatientId) {
       user = await this.ensurePatientProfileLinked(user);
@@ -84,8 +86,9 @@ export const authService = {
 
   /**
    * Inscription d'un spécialiste : son matricule doit exister dans le registre
-   * Medecin et ne pas être déjà rattaché à un compte. Le compte est actif
-   * immédiatement (vérification par le registre).
+   * Medecin et ne pas être déjà rattaché à un compte. Le compte reste en
+   * attente (PENDING) : un administrateur vérifie l'identité avant de
+   * l'activer — connaître un matricule ne suffit pas pour accéder aux dossiers.
    */
   async registerSpecialist(input: {
     fullName: string;
@@ -124,12 +127,18 @@ export const authService = {
       email: input.email,
       password: input.password,
       role: 'SPECIALIST',
-      accountStatus: 'ACTIVE',
+      accountStatus: 'PENDING',
       matricule,
       phone: input.phone,
       healthFacility: input.healthFacility
     });
-    return authPayload(user);
+    return {
+      pending: true as const,
+      fullName: user.fullName,
+      email: user.email,
+      message:
+        'Inscription enregistrée. Un administrateur doit vérifier votre identité et activer votre compte avant que vous puissiez vous connecter.'
+    };
   },
 
   /**
@@ -249,7 +258,9 @@ export const authService = {
       throw new HttpError(
         403,
         'ACCOUNT_PENDING',
-        "Votre inscription est en attente de validation par votre encadrant."
+        user.role === 'NURSE'
+          ? 'Votre inscription est en attente de validation par votre encadrant.'
+          : 'Votre inscription est en attente de validation par un administrateur.'
       );
     }
     if (user.accountStatus === 'REJECTED') {
@@ -262,6 +273,25 @@ export const authService = {
       );
     }
 
+    return authPayload(user);
+  },
+
+  /**
+   * Renouvelle la session avec le jeton de rafraîchissement (30 j) : le jeton
+   * d'accès ne dure que 30 min. Mêmes contrôles de compte qu'à la connexion,
+   * utilisateur relu en base (rôle à jour) ; renvoie un nouveau couple de jetons.
+   */
+  async refresh(refreshToken: string) {
+    let payload: JwtPayload;
+    try {
+      payload = jwt.verify(refreshToken, env.JWT_REFRESH_SECRET) as JwtPayload;
+    } catch {
+      throw unauthorized('Session expirée, reconnectez-vous');
+    }
+    const user = await userDao.findById(payload.sub);
+    if (!user || user.accountStatus === 'PENDING' || user.accountStatus === 'REJECTED') {
+      throw unauthorized('Session expirée, reconnectez-vous');
+    }
     return authPayload(user);
   },
 

@@ -3,6 +3,7 @@ import sharp from 'sharp';
 import { env } from '../../config/env.js';
 import { HttpError } from '../../common/errors/http-error.js';
 import type { AiSummary } from '../../common/types.js';
+import { collectSources } from '../../common/utils/sources.js';
 
 type DiagnoseInput = {
   image: Express.Multer.File;
@@ -13,16 +14,6 @@ type DiagnoseInput = {
 const pickString = (value: unknown): string | undefined => {
   if (typeof value === 'string' && value.trim()) return value;
   return undefined;
-};
-
-const collectSources = (value: unknown): string[] => {
-  if (!value || typeof value !== 'object') return [];
-  const objectValue = value as Record<string, unknown>;
-  const candidates = [objectValue.sources, objectValue.rag_sources, objectValue.references];
-  return candidates.flatMap((candidate) => {
-    if (!Array.isArray(candidate)) return [];
-    return candidate.map(String).filter(Boolean);
-  });
 };
 
 export type AiResponseExtract = {
@@ -97,6 +88,29 @@ export const toAiSummary = (raw: unknown, extract: AiResponseExtract): AiSummary
   sources: extract.sources,
   raw
 });
+
+/**
+ * Lignes d'identité du récit clinique (« Patient: Awa Diop », « Telephone: … »,
+ * « Adresse: … »). Elles ne doivent jamais quitter le backend : seules les
+ * données cliniques partent vers le service IA externe.
+ */
+const IDENTITY_LINE = /^\s*(patient|nom|pr[ée]nom|t[ée]l[ée]phone|t[ée]l|adresse|email|e-mail)\s*:/i;
+
+/** Retire l'identité du patient du texte envoyé au service IA. */
+export function redactIdentityForExternalAi(text: string): string {
+  return text
+    .split('\n')
+    .filter((line) => !IDENTITY_LINE.test(line))
+    .join('\n')
+    .trim();
+}
+
+/** Nom de fichier neutre : le nom d'origine peut contenir celui du patient. */
+export function neutralImageFilename(mimetype: string): string {
+  if (mimetype === 'image/png') return 'otoscopie.png';
+  if (mimetype === 'image/webp') return 'otoscopie.webp';
+  return 'otoscopie.jpg';
+}
 
 /** Retire les metadonnees EXIF et re-encode l'image avant envoi Deep4ORL. */
 export async function anonymizeImageForExternalAi(file: Express.Multer.File): Promise<Buffer> {
@@ -216,7 +230,7 @@ export const aiService = {
   /** Proxy formulaire → FastAPI POST /rag/analyze */
   ragAnalyze(input: { symptoms: string; showSources?: boolean }) {
     const body = new URLSearchParams({
-      symptoms: input.symptoms,
+      symptoms: redactIdentityForExternalAi(input.symptoms),
       show_sources: String(input.showSources ?? true)
     });
 
@@ -233,10 +247,10 @@ export const aiService = {
 
     const form = new FormData();
     form.append('file', sanitizedBuffer, {
-      filename: input.image.originalname,
+      filename: neutralImageFilename(input.image.mimetype),
       contentType: input.image.mimetype
     });
-    form.append('symptoms', input.symptoms);
+    form.append('symptoms', redactIdentityForExternalAi(input.symptoms));
     form.append('show_sources', String(input.showSources));
 
     return callAiService('/diagnose-separate', {

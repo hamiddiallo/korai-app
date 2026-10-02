@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { requireAuth, requireRoles } from '../../common/middleware/auth.middleware.js';
 import { asyncHandler } from '../../common/utils/async-handler.js';
 import { validateBody } from '../../common/middleware/validate.middleware.js';
-import { createPatientSchema } from './patient.schemas.js';
+import { createPatientSchema, updatePatientSchema } from './patient.schemas.js';
 import { patientController } from './patient.controller.js';
 
 export const patientRouter = Router();
@@ -28,4 +28,9 @@ patientRouter.get(
   asyncHandler((req, res) => patientController.getById(req, res))
 );
 
-patientRouter.patch('/:id', asyncHandler((req, res) => patientController.update(req, res)));
+patientRouter.patch(
+  '/:id',
+  requireRoles('NURSE', 'ADMIN', 'PATIENT'),
+  validateBody(updatePatientSchema),
+  asyncHandler((req, res) => patientController.update(req, res))
+);

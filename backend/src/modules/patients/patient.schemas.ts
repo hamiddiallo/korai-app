@@ -13,6 +13,21 @@ export const createPatientSchema = z.object({
   clientMutationId: z.string().min(1).optional()
 });
 
-export const updatePatientSchema = createPatientSchema.partial().extend({
-  isValidated: z.boolean().optional()
-});
+/**
+ * Champs modifiables d'une fiche patient. Liste fermée (`strict`) : toute autre
+ * clé (relations Prisma comme `creator`, `account`, `consultations`, ou champs
+ * techniques) est refusée — elle permettait d'écrire dans d'autres tables.
+ */
+export const updatePatientSchema = z
+  .object({
+    firstName: z.string().trim().min(1).max(100).optional(),
+    lastName: z.string().trim().min(1).max(100).optional(),
+    birthDate: z.string().max(40).nullable().optional(),
+    sex: z.enum(['F', 'M']).optional(),
+    phone: z.string().max(30).optional(),
+    address: z.string().max(200).optional(),
+    consentForAi: z.boolean().optional(),
+    consentForTeleExpertise: z.boolean().optional(),
+    isValidated: z.boolean().optional()
+  })
+  .strict();

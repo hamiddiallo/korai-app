@@ -7,6 +7,7 @@ import {
   createClinicalItemSchema,
   createMedecinSchema,
   updateAdminPatientSchema,
+  rejectAdminUserSchema,
   updateAdminUserSchema,
   updateClinicalItemSchema,
   updateMedecinSchema
@@ -21,6 +22,12 @@ adminRouter.get('/users', asyncHandler((req, res) => adminController.listUsers(r
 adminRouter.post('/users', validateBody(createAdminUserSchema), asyncHandler((req, res) => adminController.createUser(req, res)));
 adminRouter.patch('/users/:id', validateBody(updateAdminUserSchema), asyncHandler((req, res) => adminController.updateUser(req, res)));
 adminRouter.delete('/users/:id', asyncHandler((req, res) => adminController.deleteUser(req, res)));
+adminRouter.post('/users/:id/approve', asyncHandler((req, res) => adminController.approveUser(req, res)));
+adminRouter.post(
+  '/users/:id/reject',
+  validateBody(rejectAdminUserSchema),
+  asyncHandler((req, res) => adminController.rejectUser(req, res))
+);
 
 adminRouter.get('/patients', asyncHandler((req, res) => adminController.listPatients(req, res)));
 adminRouter.get('/patients/deleted', asyncHandler((req, res) => adminController.listDeletedPatients(req, res)));

@@ -1,6 +1,7 @@
 import { userDao } from '../modules/users/user.dao.js';
 import { clinicalReferenceDao } from '../modules/clinical-reference/clinical-reference.dao.js';
 import { medecinDao } from '../modules/medecins/medecin.dao.js';
+import { authService } from '../modules/auth/auth.service.js';
 
 const MEDECINS_TO_SEED = [
   { matricule: 'ORL001', nom: 'Demo', prenom: 'ORL' },
@@ -41,8 +42,22 @@ const CLINICAL_ITEMS_TO_SEED = [
   { type: 'TOUCH_CHECK' as const, label: 'Ganglions cervicaux palpables', description: "Présence d'adénopathies cervicales sensibles ou non dans le territoire de drainage de l'oreille.", sortOrder: 40, dangerScore: 1 }
 ];
 
+/** Exécute une étape du seed sans jamais bloquer le démarrage du serveur. */
+const step = async (label: string, run: () => Promise<unknown>) => {
+  try {
+    await run();
+  } catch (error) {
+    console.warn(`Seed de démonstration — étape « ${label} » ignorée : ${(error as Error).message}`);
+  }
+};
+
+/**
+ * Données de démonstration (développement uniquement, voir `shouldSeedDemo`).
+ * Idempotent et non destructif : crée seulement ce qui manque.
+ */
 export async function runSeed() {
-  if ((await userDao.count()) === 0) {
+  await step('comptes de démonstration', async () => {
+    if ((await userDao.count()) > 0) return;
     await userDao.create({
       fullName: 'Infirmier Demo',
       email: 'nurse@korai.local',
@@ -62,14 +77,34 @@ export async function runSeed() {
       password: 'Password123!',
       role: 'ADMIN'
     });
-  }
+  });
+
+  // Patient de démonstration (espace patient), créé s'il manque, via le même
+  // parcours qu'une inscription depuis l'application (dossier non validé).
+  await step('patient de démonstration', async () => {
+    if (await userDao.emailTaken('patient@korai.local')) return;
+    await authService.registerPatient({
+      firstName: 'Patient',
+      lastName: 'Demo',
+      email: 'patient@korai.local',
+      password: 'Password123!',
+      birthDate: 'Age: 34 ans',
+      sex: 'F',
+      phone: '770000000',
+      address: 'Dakar',
+      consentForAi: true,
+      consentForTeleExpertise: true
+    });
+  });
 
   for (const medecin of MEDECINS_TO_SEED) {
-    const existing = await medecinDao.findByMatricule(medecin.matricule);
-    if (!existing) await medecinDao.create(medecin);
+    await step(`médecin ${medecin.matricule}`, async () => {
+      const existing = await medecinDao.findByMatricule(medecin.matricule);
+      if (!existing) await medecinDao.create(medecin);
+    });
   }
 
   for (const item of CLINICAL_ITEMS_TO_SEED) {
-    await clinicalReferenceDao.upsertByTypeAndLabel(item);
+    await step(`référentiel « ${item.label} »`, () => clinicalReferenceDao.createIfMissing(item));
   }
 }

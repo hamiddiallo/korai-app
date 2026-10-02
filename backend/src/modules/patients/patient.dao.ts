@@ -2,6 +2,19 @@ import type { Sex } from '@prisma/client';
 import { prisma } from '../../common/prisma.js';
 import type { PatientRecord } from './patient.types.js';
 
+/** Seuls champs d'une fiche patient modifiables par une mise à jour. */
+export const PATIENT_UPDATABLE_FIELDS = [
+  'firstName',
+  'lastName',
+  'birthDate',
+  'sex',
+  'phone',
+  'address',
+  'consentForAi',
+  'consentForTeleExpertise',
+  'isValidated'
+] as const;
+
 const nullable = <T>(value: T | null): T | undefined => value ?? undefined;
 
 const mapPatient = (patient: {
@@ -110,7 +123,7 @@ export const patientDao = {
     patch: Partial<{
       firstName: string;
       lastName: string;
-      birthDate?: string;
+      birthDate?: string | null;
       sex?: Sex;
       phone?: string;
       address?: string;
@@ -119,10 +132,13 @@ export const patientDao = {
       isValidated: boolean;
     }>
   ) {
-    const patient = await prisma.patient.update({
-      where: { id },
-      data: patch
-    });
+    // Copie champ par champ : jamais d'objet reçu transmis tel quel à Prisma
+    // (les relations imbriquées permettraient d'écrire dans d'autres tables).
+    const data: Record<string, unknown> = {};
+    for (const key of PATIENT_UPDATABLE_FIELDS) {
+      if (patch[key] !== undefined) data[key] = patch[key];
+    }
+    const patient = await prisma.patient.update({ where: { id }, data });
     return mapPatient(patient);
   },
 

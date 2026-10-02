@@ -2,9 +2,11 @@ import { Router } from 'express';
 import { asyncHandler } from '../../common/utils/async-handler.js';
 import { validateBody } from '../../common/middleware/validate.middleware.js';
 import { requireAuth, requireRoles } from '../../common/middleware/auth.middleware.js';
+import { rateLimit } from '../../common/middleware/rate-limit.middleware.js';
 import {
   adminRegisterSchema,
   loginSchema,
+  refreshSchema,
   registerNurseSchema,
   registerSpecialistSchema,
   registerPatientSchema,
@@ -15,7 +17,39 @@ import { authController } from './auth.controller.js';
 
 export const authRouter = Router();
 
-authRouter.post('/login', validateBody(loginSchema), asyncHandler((req, res) => authController.login(req, res)));
+const FIFTEEN_MINUTES = 15 * 60 * 1000;
+
+// Force brute : par adresse IP (large, plusieurs soignants peuvent partager la
+// connexion d'un centre) et par compte visé.
+const loginByIp = rateLimit({ name: 'login-ip', windowMs: FIFTEEN_MINUTES, max: 30 });
+const loginByAccount = rateLimit({
+  name: 'login-account',
+  windowMs: FIFTEEN_MINUTES,
+  max: 10,
+  key: (req) => `${req.ip}:${String(req.body?.email ?? '').trim().toLowerCase()}`,
+  message: 'Trop de tentatives de connexion pour ce compte. Réessayez dans 15 minutes.'
+});
+const registerByIp = rateLimit({ name: 'register', windowMs: 60 * 60 * 1000, max: 10 });
+const refreshByIp = rateLimit({ name: 'refresh', windowMs: FIFTEEN_MINUTES, max: 60 });
+const passwordByIp = rateLimit({ name: 'password', windowMs: FIFTEEN_MINUTES, max: 10 });
+
+authRouter.post(
+  '/login',
+  loginByIp,
+  loginByAccount,
+  validateBody(loginSchema),
+  asyncHandler((req, res) => authController.login(req, res))
+);
+
+// Renouvellement du jeton d'accès (30 min) avec le jeton de rafraîchissement.
+authRouter.post(
+  '/refresh',
+  refreshByIp,
+  validateBody(refreshSchema),
+  asyncHandler((req, res) => authController.refresh(req, res))
+);
+
+authRouter.use('/register', registerByIp);
 
 authRouter.post(
   '/register/patient',
@@ -54,6 +88,7 @@ authRouter.patch(
 
 authRouter.patch(
   '/me/password',
+  passwordByIp,
   requireAuth,
   validateBody(updatePasswordSchema),
   asyncHandler((req, res) => authController.updatePassword(req, res))

@@ -4,23 +4,14 @@ import type { AuthenticatedUser } from '../../common/types.js';
 import { aiService } from '../ai/ai.service.js';
 import { chatDao } from './chat.dao.js';
 import type { ChatConversationRecord, ChatMessageRecord } from './chat.types.js';
+import { collectSources } from '../../common/utils/sources.js';
 
 const defaultAssistantFailure =
-  'Le service IA est momentanement indisponible. Votre question a ete conservee dans cette conversation.';
+  'Le service IA est momentanément indisponible. Votre question a été conservée dans cette conversation.';
 
 const pickString = (value: unknown): string | undefined => {
   if (typeof value === 'string' && value.trim()) return value.trim();
   return undefined;
-};
-
-const collectSources = (value: unknown): string[] => {
-  if (!value || typeof value !== 'object') return [];
-  const objectValue = value as Record<string, unknown>;
-  const candidates = [objectValue.sources, objectValue.rag_sources, objectValue.references];
-  return candidates.flatMap((candidate) => {
-    if (!Array.isArray(candidate)) return [];
-    return candidate.map(String).filter(Boolean);
-  });
 };
 
 const extractAiChatResponse = (

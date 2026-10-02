@@ -1,0 +1,33 @@
+{
+  "description": "Cas de référence du niveau d'urgence, partagés par backend/test/urgency.test.ts et frontend/test/clinical_urgency_test.dart : le serveur et l'aperçu de l'app doivent donner exactement les mêmes résultats. « signs » = scores des symptômes cochés et des vérifications au toucher anormales ; « histories » = scores des antécédents cochés.",
+  "cases": [
+    { "name": "aucun élément", "signs": [], "histories": [], "expected": "LOW" },
+    { "name": "signe bénin seul", "signs": [0], "histories": [], "expected": "LOW" },
+    { "name": "signe à surveiller seul", "signs": [1], "histories": [], "expected": "LOW" },
+    { "name": "plusieurs signes à surveiller ne s'additionnent pas", "signs": [1, 1, 1, 1], "histories": [], "expected": "LOW" },
+    { "name": "signe préoccupant seul", "signs": [2], "histories": [], "expected": "MEDIUM" },
+    { "name": "signe critique seul", "signs": [3], "histories": [], "expected": "HIGH" },
+    { "name": "cumul de deux signes préoccupants", "signs": [2, 2], "histories": [], "expected": "HIGH" },
+    { "name": "signe préoccupant sur terrain fragile (synergie)", "signs": [2], "histories": [2], "expected": "HIGH" },
+    { "name": "signe préoccupant sur terrain critique", "signs": [2], "histories": [3], "expected": "HIGH" },
+    { "name": "signe à surveiller sur terrain fragile", "signs": [1], "histories": [2], "expected": "MEDIUM" },
+    { "name": "signe à surveiller sur terrain critique", "signs": [1], "histories": [3], "expected": "MEDIUM" },
+    { "name": "antécédent à surveiller seul", "signs": [], "histories": [1], "expected": "LOW" },
+    { "name": "antécédent préoccupant seul", "signs": [], "histories": [2], "expected": "MEDIUM" },
+    { "name": "antécédent critique seul : plafonné à moyen", "signs": [], "histories": [3], "expected": "MEDIUM" },
+    { "name": "signe bénin et antécédent critique : plafonné à moyen", "signs": [0], "histories": [3], "expected": "MEDIUM" },
+    { "name": "tout au maximum reste élevé", "signs": [3, 3], "histories": [3], "expected": "HIGH" },
+    { "name": "score négatif ramené à 0", "signs": [-2], "histories": [-1], "expected": "LOW" },
+    { "name": "score trop grand ramené à 3", "signs": [], "histories": [9], "expected": "MEDIUM" }
+  ],
+  "touchObservations": [
+    { "observation": "Anormal — léger", "abnormal": true },
+    { "observation": "Anormal — modéré", "abnormal": true },
+    { "observation": "Anormal — sévère", "abnormal": true },
+    { "observation": "  anormal", "abnormal": true },
+    { "observation": "Normal (négatif)", "abnormal": false },
+    { "observation": "Non réalisé", "abnormal": false },
+    { "observation": "", "abnormal": false },
+    { "observation": null, "abnormal": false }
+  ]
+}

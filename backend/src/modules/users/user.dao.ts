@@ -55,6 +55,12 @@ export const userDao = {
     return user ? mapUser(user) : undefined;
   },
 
+  /** Y compris les comptes supprimés (l'e-mail reste réservé par la contrainte d'unicité). */
+  async emailTaken(email: string) {
+    const user = await prisma.user.findFirst({ where: { email: email.toLowerCase() } });
+    return Boolean(user);
+  },
+
   async findById(id: string) {
     const user = await prisma.user.findFirst({ where: { id, deletedAt: null } });
     return user ? mapUser(user) : undefined;

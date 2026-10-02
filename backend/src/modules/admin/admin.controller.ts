@@ -16,6 +16,14 @@ export class AdminController {
     res.json({ user: await adminService.updateUser(String(req.params.id), req.body) });
   }
 
+  async approveUser(req: Request, res: Response) {
+    res.json({ user: await adminService.approveUser(String(req.params.id)) });
+  }
+
+  async rejectUser(req: Request, res: Response) {
+    res.json({ user: await adminService.rejectUser(String(req.params.id), req.body.reason) });
+  }
+
   async deleteUser(req: Request, res: Response) {
     res.json(await adminService.deleteUser(String(req.params.id), req.user!.id));
   }

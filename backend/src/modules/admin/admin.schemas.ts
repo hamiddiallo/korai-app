@@ -15,6 +15,10 @@ export const createAdminUserSchema = z.object({
 
 export const updateAdminUserSchema = createAdminUserSchema.partial().omit({ password: true });
 
+export const rejectAdminUserSchema = z.object({
+  reason: z.string().trim().max(300).optional()
+});
+
 export const updateAdminPatientSchema = z.object({
   firstName: z.string().min(1).optional(),
   lastName: z.string().min(1).optional(),

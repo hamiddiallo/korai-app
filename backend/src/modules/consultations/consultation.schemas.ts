@@ -1,5 +1,6 @@
 import { EarSide, UrgencyLevel } from '@prisma/client';
 import { z } from 'zod';
+import { booleanish } from '../../common/utils/zod.js';
 
 /** Parse tableaux envoyés en JSON string depuis multipart/form-data. */
 const multipartStringArray = z.preprocess((value) => {
@@ -43,8 +44,8 @@ export const createConsultationSchema = z.object({
   clinicalNotes: z.string().optional(),
   urgency: z.nativeEnum(UrgencyLevel).default(UrgencyLevel.MEDIUM),
   earSide: z.nativeEnum(EarSide).default(EarSide.BOTH),
-  showSources: z.coerce.boolean().default(true),
-  requestSpecialistReview: z.coerce.boolean().default(false),
+  showSources: booleanish(true),
+  requestSpecialistReview: booleanish(false),
   symptomIds: multipartStringArray,
   symptomLabels: multipartStringArray,
   medicalHistoryIds: multipartStringArray,

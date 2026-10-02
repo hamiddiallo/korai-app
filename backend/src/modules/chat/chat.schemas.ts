@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { booleanish } from '../../common/utils/zod.js';
 
 export const createConversationSchema = z.object({
   title: z.string().trim().min(1).max(80).optional()
@@ -15,7 +16,7 @@ export const updateConversationSchema = z
 
 export const sendMessageSchema = z.object({
   message: z.string().trim().min(1).max(4000),
-  showSources: z.coerce.boolean().default(true)
+  showSources: booleanish(true)
 });
 
 export const listConversationsQuerySchema = z.object({

@@ -38,7 +38,10 @@ export const buildEffectiveSummary = (input: {
       confidenceLabel: 'UNKNOWN',
       expertValidated: false,
       patientVisible: false,
-      patientStatusLabel: 'Votre consultation est en cours d’analyse par un spécialiste.'
+      // Ne parler du spécialiste que si un avis lui a réellement été demandé.
+      patientStatusLabel: expertise
+        ? 'Votre consultation est en cours d’examen par un spécialiste.'
+        : 'Votre soignant vous communiquera le résultat après son examen.'
     };
   }
 
