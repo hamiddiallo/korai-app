@@ -13,7 +13,7 @@ const upload = multer({
   storage: multer.memoryStorage(),
   limits: {
     fileSize: 8 * 1024 * 1024,
-    files: 1
+    files: 2 // une photo par oreille
   },
   fileFilter: (_req, file, callback) => {
     if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.mimetype)) {
@@ -36,7 +36,13 @@ consultationRouter.get(
 consultationRouter.post(
   '/diagnose',
   requireRoles('NURSE', 'ADMIN', 'PATIENT'),
-  upload.single('file'),
+  // Une photo par oreille (fileRight, fileLeft) ; `file` seul reste accepté (parcours patient,
+  // envois hors ligne d'une version précédente de l'app), avec l'oreille indiquée par earSide.
+  upload.fields([
+    { name: 'file', maxCount: 1 },
+    { name: 'fileRight', maxCount: 1 },
+    { name: 'fileLeft', maxCount: 1 }
+  ]),
   validateBody(createConsultationSchema),
   asyncHandler((req, res) => consultationController.diagnose(req, res))
 );

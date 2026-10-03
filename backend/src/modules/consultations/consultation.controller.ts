@@ -1,3 +1,4 @@
+import { EarSide } from '@prisma/client';
 import type { Request, Response } from 'express';
 import { access } from '../../common/access/access-policy.js';
 import { assertConsent } from '../../common/access/consent.js';
@@ -5,11 +6,39 @@ import { HttpError, notFound } from '../../common/errors/http-error.js';
 import type { AuthenticatedUser } from '../../common/types.js';
 import { audit } from '../audit/audit.service.js';
 import { patientDao } from '../patients/patient.dao.js';
-import { consultationService } from './consultation.service.js';
+import { consultationService, type IncomingPhoto } from './consultation.service.js';
 import { consultationDao } from './consultation.dao.js';
 import { patientService } from '../patients/patient.service.js';
 import { imageVault } from '../images/image-vault.js';
 import { neutralImageFilename } from '../ai/ai.service.js';
+
+type UploadedFiles = Partial<Record<'file' | 'fileRight' | 'fileLeft', Express.Multer.File[]>>;
+
+/**
+ * Photos reçues : une par oreille (fileRight, fileLeft), ou `file` seul pour l'oreille indiquée
+ * par earSide (parcours patient, envois hors ligne d'une version précédente de l'app).
+ */
+export const photosFromRequest = (files: UploadedFiles | undefined, declaredEar: EarSide): IncomingPhoto[] => {
+  const single = files?.file?.[0];
+  const right = files?.fileRight?.[0];
+  const left = files?.fileLeft?.[0];
+  if (single && (right || left)) {
+    throw new HttpError(
+      400,
+      'VALIDATION_ERROR',
+      'Envoyez une photo par oreille (fileRight, fileLeft) ou une seule photo (file), pas les deux.'
+    );
+  }
+  if (single) return [{ earSide: declaredEar, file: single }];
+  return [
+    ...(right ? [{ earSide: EarSide.RIGHT, file: right }] : []),
+    ...(left ? [{ earSide: EarSide.LEFT, file: left }] : [])
+  ];
+};
+
+/** Oreilles examinées : celles déclarées et celles photographiées (droite et gauche → les deux). */
+export const examinedEars = (declared: EarSide, photos: IncomingPhoto[]): EarSide =>
+  photos.reduce<EarSide>((ears, photo) => (ears === photo.earSide ? ears : EarSide.BOTH), declared);
 
 /** Patient d'une consultation existante, pour vérifier ses accords. */
 const patientOfConsultation = async (consultationId: string) => {
@@ -40,13 +69,14 @@ export class ConsultationController {
   async diagnose(req: Request, res: Response) {
     const body = req.body;
     const user = req.user!;
+    const photos = photosFromRequest(req.files as UploadedFiles | undefined, body.earSide);
     const baseInput = {
       createdByUserId: user.id,
       patientId: body.patientId,
       clinicalNarrative: body.symptoms,
       clinicalNotes: body.clinicalNotes,
       urgency: body.urgency,
-      earSide: body.earSide,
+      earSide: examinedEars(body.earSide, photos),
       symptomIds: body.symptomIds,
       symptomLabels: body.symptomLabels,
       medicalHistoryIds: body.medicalHistoryIds,
@@ -86,7 +116,7 @@ export class ConsultationController {
 
     const orlCase = await consultationService.submitDiagnosis({
       ...baseInput,
-      image: req.file,
+      images: photos,
       showSources: body.showSources,
       requestSpecialistReview: body.requestSpecialistReview,
       viewerRole: user.role
@@ -97,7 +127,7 @@ export class ConsultationController {
       entityType: 'CONSULTATION',
       entityId: orlCase.id,
       patientId: patient.id,
-      details: { withImage: Boolean(req.file), requestSpecialistReview: Boolean(body.requestSpecialistReview) }
+      details: { withImage: photos.length > 0, photoCount: photos.length, requestSpecialistReview: Boolean(body.requestSpecialistReview) }
     });
     res.status(201).json({ case: orlCase });
   }

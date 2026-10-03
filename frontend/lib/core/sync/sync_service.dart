@@ -186,15 +186,12 @@ class SyncService {
       );
     }
 
-    final image = record.image;
     final Map<String, dynamic> response;
-    if (image != null) {
-      response = await _apiClient.postMultipartBytes(
+    if (record.images.isNotEmpty) {
+      // Une photo par oreille (fileRight, fileLeft), envoyées avec la consultation.
+      response = await _apiClient.postMultipartUploads(
         path: '/cases/diagnose',
-        fileField: 'file',
-        bytes: image.bytes,
-        fileName: image.fileName,
-        mimeType: image.mimeType,
+        uploads: [for (final image in record.images) image.toUpload()],
         fields: record.toMultipartFields(),
       );
     } else {

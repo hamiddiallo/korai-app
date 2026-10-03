@@ -19,6 +19,17 @@ enum EarSide {
         EarSide.right => 'Oreille droite',
         EarSide.both => 'Les deux oreilles',
       };
+
+  /// Oreilles concrètes : droite puis gauche pour « les deux » (ordre de l'audiogramme).
+  List<EarSide> get sides => this == EarSide.both ? const [EarSide.right, EarSide.left] : [this];
+
+  /// Champ de la photo de cette oreille dans l'envoi au serveur. `file` : une seule photo,
+  /// pour l'oreille indiquée par earSide (envois d'une version précédente de l'app).
+  String get photoField => switch (this) {
+        EarSide.right => 'fileRight',
+        EarSide.left => 'fileLeft',
+        EarSide.both => 'file',
+      };
 }
 
 enum ConsultationStatus {

@@ -35,6 +35,50 @@ type CreateInput = {
   clinicalFingerprint?: string;
 };
 
+/** Photo du tympan reçue avec la consultation, et l'oreille qu'elle montre. */
+export type IncomingPhoto = { earSide: EarSide; file: Express.Multer.File };
+
+/** Photo nettoyée (métadonnées retirées), telle que conservée et envoyée à l'IA. */
+type CleanPhoto = { earSide: EarSide; buffer: Buffer; mimetype: string };
+
+/** Ordre de lecture des oreilles : droite puis gauche, comme sur un audiogramme. */
+const EAR_ORDER: Record<EarSide, number> = { RIGHT: 0, LEFT: 1, BOTH: 2 };
+
+const asMulterFile = (photo: CleanPhoto) =>
+  ({
+    buffer: photo.buffer,
+    mimetype: photo.mimetype,
+    size: photo.buffer.length,
+    originalname: neutralImageFilename(photo.mimetype)
+  }) as Express.Multer.File;
+
+/**
+ * Analyse IA des photos. Le modèle de vision classe une photo par appel : le premier tympan
+ * part avec les symptômes (/diagnose-separate, image et analyse documentaire), le second en
+ * analyse d'image seule (/vision/predict), en même temps. Avec deux photos, la réponse garde
+ * celle de chaque oreille dans `ears`.
+ */
+const analyzePhotos = async (photos: CleanPhoto[], symptoms: string, showSources: boolean) => {
+  const bySide = new Map(photos.map((photo) => [photo.earSide, photo])); // une photo par oreille au plus
+  const [first, second] = [...bySide.values()].sort((a, b) => EAR_ORDER[a.earSide] - EAR_ORDER[b.earSide]);
+  const withSymptoms = () =>
+    aiService.diagnoseSeparate({ image: asMulterFile(first), sanitized: true, symptoms, showSources });
+  if (!second) return withSymptoms();
+
+  const [firstResult, secondVision] = await Promise.all([
+    withSymptoms(),
+    aiService.visionPredict({ image: asMulterFile(second), sanitized: true })
+  ]);
+  const raw = (firstResult && typeof firstResult === 'object' ? firstResult : {}) as Record<string, unknown>;
+  return {
+    ...raw,
+    ears: [
+      { side: first.earSide, vision: raw.vision },
+      { side: second.earSide, vision: secondVision }
+    ]
+  };
+};
+
 const persistAiAndFinalize = async (
   consultationId: string,
   input: {
@@ -207,11 +251,11 @@ export const consultationService = {
   },
 
   /**
-   * Analyse IA : image presente → /diagnose-separate ; sinon → /rag/analyze.
+   * Analyse IA : photo(s) du tympan → `analyzePhotos` (une ou deux oreilles) ; sinon → /rag/analyze.
    */
   async submitDiagnosis(
     input: CreateInput & {
-      image?: Express.Multer.File;
+      images?: IncomingPhoto[];
       imageDescription?: string;
       showSources: boolean;
       requestSpecialistReview: boolean;
@@ -226,9 +270,10 @@ export const consultationService = {
       return toLegacyOrlCase(existing, input.viewerRole);
     }
 
-    // Une vraie photo (signature du fichier), pas un autre contenu renommé :
+    // De vraies photos (signature du fichier), pas un autre contenu renommé :
     // vérifié avant d'enregistrer quoi que ce soit.
-    if (input.image && !looksLikeImage(input.image.buffer, input.image.mimetype)) {
+    const photos = input.images ?? [];
+    if (photos.some((photo) => !looksLikeImage(photo.file.buffer, photo.file.mimetype))) {
       throw new HttpError(400, 'INVALID_IMAGE_TYPE', 'Le fichier envoyé n’est pas une photo JPEG, PNG ou WebP.');
     }
 
@@ -255,30 +300,37 @@ export const consultationService = {
       }
     }
 
-    if (input.image || (input.imageDescription && input.imageDescription.trim().length > 0)) {
-      // La photo est nettoyée (métadonnées EXIF retirées) puis conservée chiffrée
+    if (photos.length || (input.imageDescription && input.imageDescription.trim().length > 0)) {
+      // Chaque photo est nettoyée (métadonnées EXIF retirées) puis conservée chiffrée
       // AVANT l'appel à l'IA : le spécialiste la verra, et une analyse en échec
       // pourra être relancée avec elle.
-      const sanitized = input.image ? await anonymizeImageForExternalAi(input.image) : undefined;
-      const storageKey = sanitized ? await imageVault.save(sanitized) : undefined;
-      await consultationDao.createOtoscopicImage({
-        consultationId: consultation.id,
-        earSide: input.earSide,
-        mimeType: input.image?.mimetype ?? 'text/plain',
-        fileName: input.image ? neutralImageFilename(input.image.mimetype) : undefined,
-        byteSize: sanitized?.length,
-        description: input.imageDescription,
-        storageKey
-      });
+      const cleanPhotos: CleanPhoto[] = [];
+      for (const [index, photo] of photos.entries()) {
+        const sanitized = await anonymizeImageForExternalAi(photo.file);
+        await consultationDao.createOtoscopicImage({
+          consultationId: consultation.id,
+          earSide: photo.earSide,
+          mimeType: photo.file.mimetype,
+          fileName: neutralImageFilename(photo.file.mimetype),
+          byteSize: sanitized.length,
+          description: index === 0 ? input.imageDescription : undefined,
+          storageKey: await imageVault.save(sanitized)
+        });
+        cleanPhotos.push({ earSide: photo.earSide, buffer: sanitized, mimetype: photo.file.mimetype });
+      }
+      if (!photos.length) {
+        // Description de l'oreille, sans photo.
+        await consultationDao.createOtoscopicImage({
+          consultationId: consultation.id,
+          earSide: input.earSide,
+          mimeType: 'text/plain',
+          description: input.imageDescription
+        });
+      }
 
-      if (input.image && sanitized) {
+      if (cleanPhotos.length) {
         try {
-          const rawJson = await aiService.diagnoseSeparate({
-            image: { ...input.image, buffer: sanitized, size: sanitized.length },
-            sanitized: true,
-            symptoms: input.clinicalNarrative,
-            showSources: input.showSources
-          });
+          const rawJson = await analyzePhotos(cleanPhotos, input.clinicalNarrative, input.showSources);
 
           return await persistAiAndFinalize(
             consultation.id,
@@ -379,18 +431,17 @@ export const consultationService = {
     });
 
     try {
-      const photo = await consultationDao.findStoredImage(id);
-      const rawJson = photo?.storageKey
-        ? await aiService.diagnoseSeparate({
-            image: {
-              buffer: await imageVault.read(photo.storageKey),
-              mimetype: photo.mimeType,
-              originalname: neutralImageFilename(photo.mimeType)
-            } as Express.Multer.File,
-            sanitized: true,
-            symptoms: consultation.clinicalNarrative,
-            showSources: true
-          })
+      // Photos conservées (une ou deux oreilles), déjà nettoyées à l'enregistrement.
+      const stored = await consultationDao.findStoredImages(id);
+      const photos: CleanPhoto[] = await Promise.all(
+        stored.map(async (photo) => ({
+          earSide: photo.earSide,
+          buffer: await imageVault.read(photo.storageKey!),
+          mimetype: photo.mimeType
+        }))
+      );
+      const rawJson = photos.length
+        ? await analyzePhotos(photos, consultation.clinicalNarrative, true)
         : await aiService.ragAnalyze({
             symptoms: consultation.clinicalNarrative,
             showSources: true
@@ -403,7 +454,7 @@ export const consultationService = {
           requestSpecialistReview: false,
           // Sans photo conservée, le résultat ne doit pas être présenté comme
           // un diagnostic sur image.
-          hadOtoscopicImage: Boolean(photo?.storageKey),
+          hadOtoscopicImage: photos.length > 0,
           viewerRole
         },
         rawJson

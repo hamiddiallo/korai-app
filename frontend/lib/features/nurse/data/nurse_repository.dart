@@ -1,7 +1,10 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:path/path.dart' as p;
+
 import '../../../core/api/api_client.dart';
+import '../../../core/domain/korai_enums.dart';
 import '../../../core/domain/consultation_create_payload.dart';
 import '../../../core/storage/clinical_reference_local_dao.dart';
 import '../domain/ai_case.dart';
@@ -135,28 +138,28 @@ class NurseRepository {
   Future<LocalConsultationDraft> savePendingDiagnosisDraft({
     required Patient patient,
     required ConsultationCreatePayload payload,
-    File? image,
+    Map<EarSide, File> photos = const {},
   }) {
     return _localDao.savePendingDiagnosisDraft(
       patient: patient,
       payload: payload,
-      image: image,
+      photos: photos,
     );
   }
 
-  /// Sans image → backend appelle `/rag/analyze` ; avec image → `/diagnose-separate`.
+  /// Sans photo → le serveur analyse les symptômes seuls ; avec une photo par oreille
+  /// (fileRight, fileLeft) → analyse de chaque tympan et des symptômes.
   Future<AiCase> diagnose({
     required ConsultationCreatePayload payload,
-    File? image,
+    Map<EarSide, File> photos = const {},
     String? localConsultationId,
   }) async {
     try {
       final Map<String, dynamic> response;
-      if (image != null) {
-        response = await apiClient.postMultipart(
+      if (photos.isNotEmpty) {
+        response = await apiClient.postMultipartUploads(
           path: '/cases/diagnose',
-          fileField: 'file',
-          file: image,
+          uploads: await _photoUploads(photos),
           fields: {
             ...payload.toMultipartFields(),
             if (localConsultationId != null) 'clientLocalId': localConsultationId,
@@ -192,6 +195,24 @@ class NurseRepository {
       if (localConsultationId != null) await _localDao.releaseDiagnosisForSync(localConsultationId);
       rethrow;
     }
+  }
+
+  /// Photos à envoyer : type lu dans le contenu du fichier (JPEG, PNG ou WebP attendus par le
+  /// serveur ; sans lui, l'envoi partirait en application/octet-stream).
+  static Future<List<MultipartUpload>> _photoUploads(Map<EarSide, File> photos) async {
+    final uploads = <MultipartUpload>[];
+    for (final MapEntry(key: side, value: photo) in photos.entries) {
+      final bytes = await photo.readAsBytes();
+      uploads.add(
+        MultipartUpload(
+          field: side.photoField,
+          bytes: bytes,
+          fileName: p.basename(photo.path),
+          mimeType: sniffImageMimeType(bytes),
+        ),
+      );
+    }
+    return uploads;
   }
 
   /// Relance l'analyse IA d'une consultation en échec (statut AI_FAILED).

@@ -94,7 +94,7 @@ describe('photo d’une consultation', () => {
     clinicalNarrative: 'Otalgie gauche',
     urgency: 'LOW' as const,
     earSide: 'LEFT' as const,
-    image,
+    images: [{ earSide: 'LEFT' as const, file: image }],
     showSources: true,
     requestSpecialistReview: false,
     viewerRole: 'NURSE' as const
@@ -152,7 +152,9 @@ describe('photo d’une consultation', () => {
   it('une analyse relancée repart de la photo conservée', async () => {
     const photo = await sharp(await photoWithExif()).jpeg().toBuffer();
     const storageKey = await imageVault.save(photo);
-    stub(consultationDao, 'findStoredImage', (async () => ({ id: 'img-1', mimeType: 'image/jpeg', storageKey })) as any);
+    stub(consultationDao, 'findStoredImages', (async () => [
+      { id: 'img-1', earSide: 'LEFT', mimeType: 'image/jpeg', storageKey }
+    ]) as any);
     stub(consultationDao, 'createAiResponse', (async () => ({})) as any);
     let withImage: Buffer | undefined;
     let textOnly = false;

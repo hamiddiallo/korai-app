@@ -19,11 +19,13 @@ import '../../../../core/design/feedback.dart';
 class LocalConsultationDraft {
   const LocalConsultationDraft({
     required this.localId,
-    this.imageLocalId,
+    this.imageLocalIds = const [],
   });
 
   final String localId;
-  final String? imageLocalId;
+
+  /// Photos enregistrées avec la consultation (une par oreille photographiée).
+  final List<String> imageLocalIds;
 }
 
 class LocalOtoscopicImageSyncRecord {
@@ -32,12 +34,19 @@ class LocalOtoscopicImageSyncRecord {
     required this.bytes,
     required this.mimeType,
     required this.fileName,
+    required this.earSide,
   });
 
   final String localId;
   final Uint8List bytes;
   final String mimeType;
   final String fileName;
+
+  /// Oreille photographiée ; détermine le champ de l'envoi (fileRight, fileLeft, ou file).
+  final EarSide earSide;
+
+  MultipartUpload toUpload() =>
+      MultipartUpload(field: earSide.photoField, bytes: bytes, fileName: fileName, mimeType: mimeType);
 }
 
 class LocalDiagnosisSyncRecord {
@@ -57,7 +66,7 @@ class LocalDiagnosisSyncRecord {
     required this.touchCheckIds,
     required this.touchCheckLabels,
     required this.touchObservations,
-    this.image,
+    this.images = const [],
   });
 
   final String localId;
@@ -75,7 +84,9 @@ class LocalDiagnosisSyncRecord {
   final List<String> touchCheckIds;
   final List<String> touchCheckLabels;
   final Map<String, String> touchObservations;
-  final LocalOtoscopicImageSyncRecord? image;
+
+  /// Photos à envoyer avec la consultation (une par oreille photographiée).
+  final List<LocalOtoscopicImageSyncRecord> images;
 
   bool get canSync => serverPatientId != null && serverPatientId!.isNotEmpty;
 
@@ -409,13 +420,13 @@ class NurseLocalDao {
   Future<LocalConsultationDraft> savePendingDiagnosisDraft({
     required Patient patient,
     required ConsultationCreatePayload payload,
-    File? image,
+    Map<EarSide, File> photos = const {},
   }) async {
     final db = await _database.database;
     final now = DateTime.now().toUtc().toIso8601String();
     final localPatientId = await _resolveLocalPatientId(patient);
     final consultationId = '$localIdPrefix${_uuid.v4()}';
-    final imageId = image == null ? null : '$localIdPrefix${_uuid.v4()}';
+    final imageIds = {for (final side in photos.keys) side: '$localIdPrefix${_uuid.v4()}'};
 
     await db.transaction((txn) async {
       await txn.insert(
@@ -440,22 +451,23 @@ class NurseLocalDao {
           'status': 'PENDING_AI',
           'sync_status': SyncStatus.pendingSync.value,
           // Empreinte uniquement pour les consultations SANS image (dédup IA).
-          'clinical_fingerprint': image == null ? payload.clinicalFingerprint : null,
+          'clinical_fingerprint': photos.isEmpty ? payload.clinicalFingerprint : null,
           'created_at': now,
           'updated_at': now,
         },
       );
 
-      if (image != null && imageId != null) {
-        final bytes = await image.readAsBytes();
+      // Une ligne par oreille photographiée, avec son côté.
+      for (final MapEntry(key: side, value: photo) in photos.entries) {
+        final bytes = await photo.readAsBytes();
         await txn.insert(
           'local_otoscopic_images',
           {
-            'local_id': imageId,
+            'local_id': imageIds[side],
             'local_consultation_id': consultationId,
-            'ear_side': payload.earSide.value,
+            'ear_side': side.value,
             'mime_type': sniffImageMimeType(bytes),
-            'file_name': p.basename(image.path),
+            'file_name': p.basename(photo.path),
             'bytes': bytes,
             'byte_size': bytes.length,
             'sync_status': SyncStatus.pendingSync.value,
@@ -480,7 +492,7 @@ class NurseLocalDao {
           'patientName': patient.fullName,
           if (!isLocalId(patient.id)) 'serverPatientId': patient.id,
           'diagnosisPayload': payload.toJsonBody(),
-          if (imageId != null) 'imageLocalId': imageId,
+          if (imageIds.isNotEmpty) 'imageLocalIds': imageIds.values.toList(),
         },
         priority: 20,
       );
@@ -488,7 +500,7 @@ class NurseLocalDao {
 
     return LocalConsultationDraft(
       localId: consultationId,
-      imageLocalId: imageId,
+      imageLocalIds: imageIds.values.toList(),
     );
   }
 
@@ -750,16 +762,20 @@ class NurseLocalDao {
       'local_otoscopic_images',
       where: 'local_consultation_id = ?',
       whereArgs: [consultationLocalId],
-      limit: 1,
+      orderBy: 'rowid',
     );
-    final image = imageRows.isEmpty
-        ? null
-        : LocalOtoscopicImageSyncRecord(
-            localId: imageRows.first['local_id'].toString(),
-            bytes: imageRows.first['bytes'] as Uint8List,
-            mimeType: imageRows.first['mime_type']?.toString() ?? 'image/jpeg',
-            fileName: imageRows.first['file_name']?.toString() ?? 'otoscopie.jpg',
-          );
+    // Une photo par oreille. Une seule photo enregistrée par une version précédente garde
+    // le côté de la consultation (champ `file` si c'était « les deux »).
+    final images = [
+      for (final row in imageRows)
+        LocalOtoscopicImageSyncRecord(
+          localId: row['local_id'].toString(),
+          bytes: row['bytes'] as Uint8List,
+          mimeType: row['mime_type']?.toString() ?? 'image/jpeg',
+          fileName: row['file_name']?.toString() ?? 'otoscopie.jpg',
+          earSide: EarSide.fromApi(row['ear_side']?.toString()),
+        ),
+    ];
 
     return LocalDiagnosisSyncRecord(
       localId: consultationLocalId,
@@ -777,7 +793,7 @@ class NurseLocalDao {
       touchCheckIds: _decodeStringList(row['touch_check_ids_json']),
       touchCheckLabels: _decodeStringList(row['touch_check_labels_json']),
       touchObservations: _decodeStringMap(row['touch_observations_json']),
-      image: image,
+      images: images,
     );
   }
 

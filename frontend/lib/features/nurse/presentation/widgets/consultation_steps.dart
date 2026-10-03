@@ -474,7 +474,7 @@ class RecapStep extends StatelessWidget {
     required this.symptoms,
     required this.histories,
     required this.touchChecks,
-    required this.image,
+    required this.photos,
     required this.urgency,
     required this.notesController,
     this.error,
@@ -489,7 +489,9 @@ class RecapStep extends StatelessWidget {
   final List<String> symptoms;
   final List<String> histories;
   final List<String> touchChecks;
-  final File? image;
+
+  /// Photos à envoyer, par oreille (droite puis gauche).
+  final Map<EarSide, File> photos;
   final UrgencyLevel urgency;
   final TextEditingController notesController;
   final String? error;
@@ -560,15 +562,37 @@ class RecapStep extends StatelessWidget {
               KInfoRow(label: 'Antécédents', value: histories.isEmpty ? 'Aucun' : histories.join(', ')),
               KInfoRow(label: 'Au toucher', value: touchChecks.isEmpty ? 'Non réalisé' : touchChecks.join('\n')),
               KInfoRow(
-                label: 'Photo',
-                value: image == null ? 'Aucune : analyse des symptômes seule' : 'Jointe : analyse image + symptômes',
-                valueColor: image == null ? k.warningInk : k.successInk,
+                label: photos.length > 1 ? 'Photos' : 'Photo',
+                value: switch (photos.length) {
+                  0 => 'Aucune : analyse des symptômes seule',
+                  1 => 'Jointe (${KLabels.earShort(photos.keys.single)}) : analyse image + symptômes',
+                  _ => 'Deux tympans : analyse de chaque image + symptômes',
+                },
+                valueColor: photos.isEmpty ? k.warningInk : k.successInk,
               ),
-              if (image != null) ...[
+              if (photos.isNotEmpty) ...[
                 const SizedBox(height: KSpace.xs),
-                ClipRRect(
-                  borderRadius: KRadius.controlAll,
-                  child: Image.file(image!, height: 150, width: double.infinity, fit: BoxFit.cover),
+                Row(
+                  children: [
+                    for (final MapEntry(key: side, value: photo) in photos.entries) ...[
+                      if (side != photos.keys.first) const SizedBox(width: KSpace.sm),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            ClipRRect(
+                              borderRadius: KRadius.controlAll,
+                              child: Image.file(photo, height: 150, width: double.infinity, fit: BoxFit.cover),
+                            ),
+                            if (photos.length > 1) ...[
+                              const SizedBox(height: 4),
+                              Text(KLabels.earWithMark(side), style: context.text.labelMedium),
+                            ],
+                          ],
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
               ],
             ],
@@ -598,9 +622,10 @@ class RecapStep extends StatelessWidget {
 /// Écran d'attente pendant l'analyse : les étapes réelles défilent, avec un
 /// délai indicatif (l'analyse peut prendre jusqu'à deux minutes).
 class AnalysisProgressView extends StatefulWidget {
-  const AnalysisProgressView({super.key, required this.hasImage});
+  const AnalysisProgressView({super.key, required this.photoCount});
 
-  final bool hasImage;
+  /// Photos envoyées (0, 1, ou 2 pour les deux tympans).
+  final int photoCount;
 
   @override
   State<AnalysisProgressView> createState() => _AnalysisProgressViewState();
@@ -609,8 +634,8 @@ class AnalysisProgressView extends StatefulWidget {
 class _AnalysisProgressViewState extends State<AnalysisProgressView> {
   late final List<String> _phases = [
     'Enregistrement sur l’appareil',
-    if (widget.hasImage) 'Anonymisation de la photo',
-    if (widget.hasImage) 'Analyse de l’image du tympan',
+    if (widget.photoCount == 1) ...['Anonymisation de la photo', 'Analyse de l’image du tympan'],
+    if (widget.photoCount > 1) ...['Anonymisation des photos', 'Analyse des images des deux tympans'],
     'Croisement avec les symptômes',
   ];
   int _current = 0;

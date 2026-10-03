@@ -66,7 +66,12 @@ class AiProposalBlock extends StatelessWidget {
             ),
           ],
           if (!compact) ...[
-            if (_has(summary.imageOpinion)) _Opinion(title: 'Sur l’image', text: summary.imageOpinion!),
+            if (_has(summary.imageOpinion))
+              _Opinion(
+                // Deux tympans : un avis par oreille, une ligne chacun.
+                title: summary.imageOpinion!.contains('\n') ? 'Sur les images' : 'Sur l’image',
+                text: summary.imageOpinion!,
+              ),
             // L'avis RAG reprend souvent mot pour mot le diagnostic : déjà lisible via « Lire l'analyse complète ».
             if (_has(summary.ragOpinion) && summary.ragOpinion!.trim() != diagnosis)
               _Opinion(title: 'Sur les symptômes', text: summary.ragOpinion!, foldLong: true),

@@ -62,6 +62,64 @@ describe('lecture des réponses de serviceIA', () => {
     ]);
   });
 
+  describe('deux tympans photographiés', () => {
+    const ear = (side: string, prediction: string, confidence: number, other?: [string, number]) => ({
+      side,
+      vision: {
+        prediction,
+        confidence,
+        top3: [{ class: prediction, confidence }, ...(other ? [{ class: other[0], confidence: other[1] }] : [])]
+      }
+    });
+    const twoEars = (right: ReturnType<typeof ear>, left: ReturnType<typeof ear>) => ({
+      ...separate(right.vision.confidence),
+      vision: right.vision,
+      ears: [right, left]
+    });
+
+    it('un avis par oreille, l’oreille atteinte en diagnostic, la confiance la plus faible des deux', () => {
+      const extract = extractAiFieldsFromRaw(
+        twoEars(
+          ear('RIGHT', 'otite moyenne aigue', 96.8, ['perforation tympanique', 2.1]),
+          ear('LEFT', 'tympan normal', 62, ['otite séromuqueuse', 30])
+        ),
+        { hadOtoscopicImage: true }
+      );
+      assert.equal(extract.likelyDiagnosis, 'Otite moyenne aiguë (oreille droite)');
+      assert.equal(extract.confidenceLabel, 'MEDIUM', '62 % pour l’oreille gauche');
+      assert.equal(
+        extract.imageOpinion,
+        'Oreille droite : Otite moyenne aiguë (97 %). Autres possibilités : Perforation tympanique (2 %).\n' +
+          'Oreille gauche : Tympan normal (62 %). Autres possibilités : Otite séromuqueuse (30 %).'
+      );
+      assert.equal(extract.ragOpinion, SUMMARY, 'symptômes analysés une seule fois');
+      assert.deepEqual(extract.warnings, []);
+    });
+
+    it('même résultat des deux côtés, ou deux atteintes différentes', () => {
+      const diagnosis = (right: ReturnType<typeof ear>, left: ReturnType<typeof ear>) =>
+        extractAiFieldsFromRaw(twoEars(right, left), { hadOtoscopicImage: true }).likelyDiagnosis;
+      assert.equal(diagnosis(ear('RIGHT', 'tympan normal', 90), ear('LEFT', 'tympan normal', 85)), 'Tympan normal (deux oreilles)');
+      assert.equal(
+        diagnosis(ear('RIGHT', 'otite moyenne aigue', 90), ear('LEFT', 'otite moyenne aigue', 80)),
+        'Otite moyenne aiguë (deux oreilles)'
+      );
+      assert.equal(
+        diagnosis(ear('RIGHT', 'otite moyenne aigue', 90), ear('LEFT', 'otomycose', 80)),
+        'Otite moyenne aiguë (oreille droite) · Otomycose (oreille gauche)'
+      );
+    });
+
+    it('un tympan douteux suffit : confiance faible, avertissement qui nomme l’oreille', () => {
+      const extract = extractAiFieldsFromRaw(
+        twoEars(ear('RIGHT', 'tympan normal', 91), ear('LEFT', 'otite séromuqueuse', 30)),
+        { hadOtoscopicImage: true }
+      );
+      assert.equal(extract.confidenceLabel, 'LOW');
+      assert.deepEqual(extract.warnings, ['Confiance IA faible (oreille gauche) : demander une validation ORL.']);
+    });
+  });
+
   it('photo peu reconnue (24 %) : confiance faible et avertissement', () => {
     const extract = extractAiFieldsFromRaw(separate(24.16), { hadOtoscopicImage: true });
     assert.equal(extract.confidenceLabel, 'LOW');

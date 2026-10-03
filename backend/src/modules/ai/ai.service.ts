@@ -68,6 +68,26 @@ const describeVision = (vision: Record<string, unknown>) => {
   return others.length ? `${head}. Autres possibilités : ${others.join(', ')}.` : `${head}.`;
 };
 
+const EAR_NAMES: Record<string, string> = { LEFT: 'oreille gauche', RIGHT: 'oreille droite' };
+const earName = (side: string) => EAR_NAMES[side] ?? 'oreille';
+const capitalize = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
+
+type EarVision = { side: string; vision: Record<string, unknown>; label: string; unit: number };
+
+/**
+ * Diagnostic de deux tympans : la ou les oreilles atteintes, « (deux oreilles) » quand le
+ * résultat est le même des deux côtés.
+ */
+const combineEarDiagnoses = (ears: EarVision[]) => {
+  const normal = VISION_LABELS['tympan normal'];
+  const abnormal = ears.filter((ear) => ear.label !== normal);
+  if (!abnormal.length) return `${normal} (deux oreilles)`;
+  if (abnormal.length === ears.length && new Set(abnormal.map((ear) => ear.label)).size === 1) {
+    return `${abnormal[0].label} (deux oreilles)`;
+  }
+  return abnormal.map((ear) => `${ear.label} (${earName(ear.side)})`).join(' · ');
+};
+
 /**
  * Première cause probable d'une analyse documentaire structurée
  * (« 1. Causes probables : X (…), Y… » ou « X : explication… ») : seul le nom
@@ -123,10 +143,24 @@ export const extractAiFieldsFromRaw = (
   const hasRagContent = Boolean(ragAi || ragSummary || pickString(objectValue.rag_diagnosis));
   // serviceIA renvoie la photo analysée même quand l'analyse des symptômes a échoué.
   const ragUnavailable = Boolean(pickString(objectValue.rag_error)) && !hasRagContent;
+  // Deux tympans photographiés : une analyse d'image par oreille (`ears`), celle des symptômes une fois.
+  const ears: EarVision[] = (Array.isArray(objectValue.ears) ? objectValue.ears : []).flatMap((entry) => {
+    const ear = asRecord(entry);
+    const earVision = asRecord(ear?.vision);
+    const prediction = pickString(earVision?.prediction);
+    const value = Number(earVision?.confidence);
+    return ear && earVision && prediction && Number.isFinite(value)
+      ? [{ side: String(ear.side), vision: earVision, label: visionLabel(prediction), unit: fromVisionPercent(value) }]
+      : [];
+  });
+  const twoEars = ears.length >= 2;
 
   const visionConfidence = Number(vision?.confidence);
-  const confidence =
-    visionPrediction && Number.isFinite(visionConfidence)
+  // Deux oreilles : la confiance retenue est la plus faible, pour qu'un doute sur un seul
+  // tympan suffise à demander la validation de l'ORL.
+  const confidence = twoEars
+    ? Math.min(...ears.map((ear) => ear.unit))
+    : visionPrediction && Number.isFinite(visionConfidence)
       ? fromVisionPercent(visionConfidence)
       : toUnit(
           Number(
@@ -136,11 +170,15 @@ export const extractAiFieldsFromRaw = (
 
   const confidenceLabel =
     Number.isNaN(confidence) ? 'UNKNOWN' : confidence >= 0.75 ? 'HIGH' : confidence >= 0.45 ? 'MEDIUM' : 'LOW';
+  const uncertainEars = ears.filter((ear) => ear.unit < 0.45).map((ear) => earName(ear.side));
 
   const expectImage = options?.hadOtoscopicImage ?? false;
 
   return {
     imageOpinion:
+      (twoEars
+        ? ears.map((ear) => `${capitalize(earName(ear.side))} : ${describeVision(ear.vision)}`).join('\n')
+        : undefined) ??
       (vision && visionPrediction ? describeVision(vision) : undefined) ??
       pickString(imageAi?.diagnosis) ??
       pickString(imageAi?.label) ??
@@ -153,13 +191,20 @@ export const extractAiFieldsFromRaw = (
     likelyDiagnosis:
       pickString(objectValue.likely_diagnosis) ??
       pickString(objectValue.final_diagnosis) ??
+      (twoEars ? combineEarDiagnoses(ears) : undefined) ??
       (visionPrediction ? visionLabel(visionPrediction) : undefined) ??
       pickString(imageAi?.diagnosis) ??
       pickString(ragAi?.diagnosis) ??
       firstProbableCause(ragSummary),
     confidenceLabel,
     warnings: [
-      ...(confidenceLabel === 'LOW' ? ['Confiance IA faible : demander une validation ORL.'] : []),
+      ...(confidenceLabel === 'LOW'
+        ? [
+            twoEars && uncertainEars.length
+              ? `Confiance IA faible (${uncertainEars.join(', ')}) : demander une validation ORL.`
+              : 'Confiance IA faible : demander une validation ORL.'
+          ]
+        : []),
       ...(expectImage && !imageAi && !visionPrediction ? ['Avis IA sur l’image absent ou non reconnu dans la réponse.'] : []),
       ...(ragUnavailable
         ? ['Avis IA sur les symptômes indisponible (service d’analyse en panne) : seule la photo a été analysée.']
@@ -379,5 +424,21 @@ export const aiService = {
     form.append('show_sources', String(input.showSources));
 
     return callAiService('/diagnose-separate', { method: 'POST', body: form });
+  },
+
+  /**
+   * Proxy multipart (image anonymisée) → FastAPI POST /vision/predict : analyse d'image seule,
+   * pour le second tympan (le modèle classe une photo par appel ; les symptômes, eux, ne sont
+   * analysés qu'une fois, avec le premier).
+   */
+  async visionPredict(input: { image: Express.Multer.File; sanitized?: boolean }) {
+    const buffer = input.sanitized ? input.image.buffer : await anonymizeImageForExternalAi(input.image);
+    const form = new FormData();
+    form.append(
+      'file',
+      new Blob([new Uint8Array(buffer)], { type: input.image.mimetype }),
+      neutralImageFilename(input.image.mimetype)
+    );
+    return callAiService('/vision/predict', { method: 'POST', body: form });
   }
 };

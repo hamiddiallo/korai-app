@@ -341,6 +341,15 @@ export const consultationDao = {
   },
 
   /** Photo conservée d'une consultation (null si absente, supprimée ou d'une autre consultation). */
+  /** Photos conservées d'une consultation (une par oreille photographiée), à réanalyser. */
+  async findStoredImages(consultationId: string) {
+    return prisma.otoscopicImage.findMany({
+      where: { consultationId, deletedAt: null, storageKey: { not: null } },
+      orderBy: { createdAt: 'asc' },
+      select: { id: true, earSide: true, mimeType: true, storageKey: true }
+    });
+  },
+
   async findStoredImage(consultationId: string, imageId?: string) {
     return prisma.otoscopicImage.findFirst({
       where: {

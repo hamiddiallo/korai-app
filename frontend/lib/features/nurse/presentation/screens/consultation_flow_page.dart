@@ -74,12 +74,12 @@ class _ConsultationFlowPageState extends State<ConsultationFlowPage> {
       ..patient = p
       ..consentForAi = p?.consentForAi ?? false
       ..consentForTeleExpertise = p?.consentForTeleExpertise ?? false
-      ..image = null
       ..aiCase = null
       ..errorMessage = null
       ..infoMessage = null
       ..imageDescription = ''
       ..earSide = EarSide.left;
+    vm.photos.clear();
     vm.selectedSymptomIds.clear();
     vm.selectedMedicalHistoryIds.clear();
     vm.selectedTouchCheckIds.clear();
@@ -170,10 +170,6 @@ class _ConsultationFlowPageState extends State<ConsultationFlowPage> {
         KSnack.show(context, error, tone: KTone.warning);
         return;
       }
-    }
-    if (step == 4 && vm.earSide == EarSide.both) {
-      KSnack.show(context, 'Choisissez l’oreille examinée avant de continuer.', tone: KTone.warning);
-      return;
     }
     if (step < ConsultationFlowPage.steps.length - 1) {
       vm.nextStep();
@@ -280,7 +276,7 @@ class _ConsultationFlowPageState extends State<ConsultationFlowPage> {
                     step: step,
                     busy: vm.isSubmitting,
                     urgency: urgency,
-                    noPhoto: step == 4 && vm.image == null,
+                    noPhoto: step == 4 && !vm.hasPhotos,
                     onBack: step == 0 ? null : vm.previousStep,
                     onNext: _next,
                   ),
@@ -297,7 +293,7 @@ class _ConsultationFlowPageState extends State<ConsultationFlowPage> {
     if (vm.isSubmitting) {
       return SingleChildScrollView(
         padding: const EdgeInsets.symmetric(horizontal: KSpace.gutter),
-        child: AnalysisProgressView(hasImage: vm.image != null),
+        child: AnalysisProgressView(photoCount: vm.photosToSend.length),
       );
     }
     final clinicalStep = step >= 1 && step <= 3;
@@ -368,22 +364,25 @@ class _ConsultationFlowPageState extends State<ConsultationFlowPage> {
       4 => Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const StepQuestion(title: 'Photographiez le tympan', hint: 'Choisissez d’abord l’oreille examinée.'),
+            const StepQuestion(
+              title: 'Photographiez le tympan',
+              hint: 'Choisissez l’oreille examinée, ou les deux pour photographier chaque tympan.',
+            ),
             OrlImageCaptureStep(
-              image: vm.image,
-              isEditing: vm.isEditingImage,
+              photos: vm.photos,
               earSide: vm.earSide,
               onEarSideChanged: vm.setEarSide,
+              editingSide: vm.editingSide,
               description: vm.imageDescription,
               onDescriptionChanged: vm.setImageDescription,
-              onCamera: () => _pick(ImageSource.camera),
-              onGallery: () => _pick(ImageSource.gallery),
-              onRotateLeft: () => vm.rotateImage(clockwise: false),
-              onRotateRight: () => vm.rotateImage(clockwise: true),
+              onCamera: (side) => _pick(ImageSource.camera, side),
+              onGallery: (side) => _pick(ImageSource.gallery, side),
+              onRotateLeft: (side) => vm.rotateImage(side, clockwise: false),
+              onRotateRight: (side) => vm.rotateImage(side, clockwise: true),
               onFlipHorizontal: vm.flipImageHorizontal,
-              onBrighten: () => vm.adjustImageBrightness(brighter: true),
-              onDarken: () => vm.adjustImageBrightness(brighter: false),
-              onRemove: vm.clearImage,
+              onBrighten: (side) => vm.adjustImageBrightness(side, brighter: true),
+              onDarken: (side) => vm.adjustImageBrightness(side, brighter: false),
+              onRemove: vm.removePhoto,
             ),
           ],
         ),
@@ -396,7 +395,7 @@ class _ConsultationFlowPageState extends State<ConsultationFlowPage> {
           symptoms: vm.labelsFor(vm.symptoms, vm.selectedSymptomIds),
           histories: vm.labelsFor(vm.medicalHistories, vm.selectedMedicalHistoryIds),
           touchChecks: vm.touchCheckSummaries(),
-          image: vm.image,
+          photos: vm.photosToSend,
           urgency: vm.computedUrgency(),
           notesController: _notes,
           error: vm.errorMessage,
@@ -429,9 +428,9 @@ class _ConsultationFlowPageState extends State<ConsultationFlowPage> {
     );
   }
 
-  Future<void> _pick(ImageSource source) async {
+  Future<void> _pick(ImageSource source, EarSide side) async {
     try {
-      await vm.pickImage(source);
+      await vm.pickImage(source, side: side);
     } catch (e) {
       if (mounted) {
         KSnack.show(

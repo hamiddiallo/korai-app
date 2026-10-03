@@ -37,14 +37,21 @@ class NurseConsultationViewModel extends Cubit<NurseConsultationState> {
   final ImagePicker _imagePicker;
 
   Patient? patient;
-  File? image;
+
+  /// Photos du tympan, une par oreille au plus. Gardées si l'oreille examinée change (rien n'est
+  /// perdu sur un toucher maladroit) ; seules celles des oreilles choisies partent (`photosToSend`).
+  final Map<EarSide, File> photos = {};
   AiCase? aiCase;
   int currentStep = 0;
   bool isLoading = false;
   bool isSubmitting = false;
   bool isEditingImage = false;
-  // Défaut sur une oreille concrète : l'option « les deux » a été retirée du
-  // workflow (le service IA analyse une image à la fois).
+
+  /// Oreille dont la photo est en cours de retouche.
+  EarSide? editingSide;
+
+  /// Oreille(s) examinée(s). « Les deux » : une photo par tympan, chacune analysée par l'IA
+  /// (le modèle classe une photo à la fois ; les symptômes ne sont analysés qu'une fois).
   EarSide earSide = EarSide.left;
   String? errorMessage;
   String? infoMessage;
@@ -339,7 +346,15 @@ class NurseConsultationViewModel extends Cubit<NurseConsultationState> {
     _emitState();
   }
 
-  Future<void> pickImage(ImageSource source) async {
+  /// Photos des oreilles choisies, droite puis gauche.
+  Map<EarSide, File> get photosToSend => {
+        for (final side in earSide.sides)
+          if (photos[side] != null) side: photos[side]!,
+      };
+
+  bool get hasPhotos => photosToSend.isNotEmpty;
+
+  Future<void> pickImage(ImageSource source, {required EarSide side}) async {
     final picked = await _imagePicker.pickImage(
       source: source,
       // Assez pour l'IA et le spécialiste, sans saturer la file hors ligne.
@@ -348,55 +363,42 @@ class NurseConsultationViewModel extends Cubit<NurseConsultationState> {
       imageQuality: 86,
     );
     if (picked == null) return;
-    image = File(picked.path);
+    photos[side] = File(picked.path);
     errorMessage = null;
     infoMessage = null;
     _emitState();
   }
 
-  void clearImage() {
-    image = null;
-    imageDescription = '';
+  void removePhoto(EarSide side) {
+    photos.remove(side);
+    if (photosToSend.isEmpty) imageDescription = '';
     errorMessage = null;
     infoMessage = null;
     _emitState();
   }
 
-  Future<void> rotateImage({required bool clockwise}) async {
-    await _editImage(() async {
-      final current = image;
-      if (current == null) return;
-      image = await OrlImageEditor.rotate(current, clockwise: clockwise);
-    });
-  }
+  Future<void> rotateImage(EarSide side, {required bool clockwise}) =>
+      _editImage(side, (photo) => OrlImageEditor.rotate(photo, clockwise: clockwise));
 
-  Future<void> flipImageHorizontal() async {
-    await _editImage(() async {
-      final current = image;
-      if (current == null) return;
-      image = await OrlImageEditor.flipHorizontal(current);
-    });
-  }
+  Future<void> flipImageHorizontal(EarSide side) => _editImage(side, OrlImageEditor.flipHorizontal);
 
-  Future<void> adjustImageBrightness({required bool brighter}) async {
-    await _editImage(() async {
-      final current = image;
-      if (current == null) return;
-      image = await OrlImageEditor.adjustBrightness(current, brighter: brighter);
-    });
-  }
+  Future<void> adjustImageBrightness(EarSide side, {required bool brighter}) =>
+      _editImage(side, (photo) => OrlImageEditor.adjustBrightness(photo, brighter: brighter));
 
-  Future<void> _editImage(Future<void> Function() action) async {
-    if (image == null) return;
+  Future<void> _editImage(EarSide side, Future<File> Function(File photo) transform) async {
+    final current = photos[side];
+    if (current == null || isEditingImage) return;
     isEditingImage = true;
+    editingSide = side;
     errorMessage = null;
     _emitState();
     try {
-      await action();
+      photos[side] = await transform(current);
     } catch (error) {
       errorMessage = friendlyError(error);
     } finally {
       isEditingImage = false;
+      editingSide = null;
       _emitState();
     }
   }
@@ -410,7 +412,7 @@ class NurseConsultationViewModel extends Cubit<NurseConsultationState> {
     required String sex,
     required String notes,
   }) async {
-    final selectedImage = image;
+    final selectedPhotos = photosToSend;
 
     isSubmitting = true;
     errorMessage = null;
@@ -443,7 +445,7 @@ class NurseConsultationViewModel extends Cubit<NurseConsultationState> {
       final localDraft = await _repository.savePendingDiagnosisDraft(
         patient: currentPatient,
         payload: localPayload,
-        image: selectedImage,
+        photos: selectedPhotos,
       );
 
       try {
@@ -461,7 +463,7 @@ class NurseConsultationViewModel extends Cubit<NurseConsultationState> {
             sex: sex,
             notes: notes,
           ),
-          image: selectedImage,
+          photos: selectedPhotos,
           localConsultationId: localDraft.localId,
         );
       } on ApiException catch (error) {
@@ -470,7 +472,7 @@ class NurseConsultationViewModel extends Cubit<NurseConsultationState> {
             localConsultationId: localDraft.localId,
             patient: currentPatient,
             payload: localPayload,
-            hasImage: selectedImage != null,
+            hasImage: selectedPhotos.isNotEmpty,
           );
           if (reused != null) {
             aiCase = reused;
@@ -515,7 +517,7 @@ class NurseConsultationViewModel extends Cubit<NurseConsultationState> {
     aiCase = null;
     _emitState();
 
-    final selectedImage = image;
+    final selectedPhotos = photosToSend;
     final currentPatient = patient ??
         Patient(
           id: patientId,
@@ -541,12 +543,12 @@ class NurseConsultationViewModel extends Cubit<NurseConsultationState> {
       final localDraft = await _repository.savePendingDiagnosisDraft(
         patient: currentPatient,
         payload: payload,
-        image: selectedImage,
+        photos: selectedPhotos,
       );
       try {
         aiCase = await _repository.diagnose(
           payload: payload,
-          image: selectedImage,
+          photos: selectedPhotos,
           localConsultationId: localDraft.localId,
         );
       } on ApiException catch (error) {
@@ -555,7 +557,7 @@ class NurseConsultationViewModel extends Cubit<NurseConsultationState> {
             localConsultationId: localDraft.localId,
             patient: currentPatient,
             payload: payload,
-            hasImage: selectedImage != null,
+            hasImage: selectedPhotos.isNotEmpty,
           );
           if (reused != null) {
             aiCase = reused;

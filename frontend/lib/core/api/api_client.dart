@@ -8,6 +8,16 @@ import 'package:http_parser/http_parser.dart';
 
 import 'api_config.dart';
 
+/// Fichier d'un envoi multipart : une photo de tympan et son champ (fileRight, fileLeft…).
+class MultipartUpload {
+  const MultipartUpload({required this.field, required this.bytes, required this.fileName, required this.mimeType});
+
+  final String field;
+  final Uint8List bytes;
+  final String fileName;
+  final String mimeType;
+}
+
 class ApiException implements Exception {
   ApiException(this.message, {this.code, this.statusCode});
 
@@ -227,6 +237,32 @@ class ApiClient {
         await http.MultipartFile.fromPath(fileField, file.path, contentType: MediaType.parse(sniffImageMimeType(head))),
       );
 
+      final streamed = await _httpClient.send(request);
+      final response = await http.Response.fromStream(streamed);
+      return _decode(response);
+    });
+  }
+
+  /// Envoi multipart de plusieurs fichiers : une photo par oreille (fileRight, fileLeft).
+  Future<Map<String, dynamic>> postMultipartUploads({
+    required String path,
+    required Map<String, String> fields,
+    required List<MultipartUpload> uploads,
+  }) async {
+    return _send(path, () async {
+      final request = http.MultipartRequest('POST', _uri(path));
+      request.headers.addAll(_headers);
+      request.fields.addAll(fields);
+      for (final upload in uploads) {
+        request.files.add(
+          http.MultipartFile.fromBytes(
+            upload.field,
+            upload.bytes,
+            filename: upload.fileName,
+            contentType: MediaType.parse(upload.mimeType),
+          ),
+        );
+      }
       final streamed = await _httpClient.send(request);
       final response = await http.Response.fromStream(streamed);
       return _decode(response);

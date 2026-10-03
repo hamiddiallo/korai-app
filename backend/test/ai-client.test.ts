@@ -50,6 +50,19 @@ describe('requêtes vers serviceIA', () => {
     assert.equal(parsed.get('show_sources'), 'true');
   });
 
+  it('seconde oreille : analyse d’image seule, multipart lisible, sans les symptômes', async () => {
+    const sent = captureFetch(() => json({ prediction: 'tympan normal', confidence: 88, top3: [] }));
+    await aiService.visionPredict({ image, sanitized: true });
+
+    assert.equal(sent[0].url, `${env.AI_SERVICE_BASE_URL}/vision/predict`);
+    assert.equal(sent[0].headers.authorization, 'Bearer jeton-ia-de-test');
+    const parsed = await new Request('http://ia.test', { method: 'POST', body: sent[0].init.body }).formData();
+    const file = parsed.get('file') as File;
+    assert.equal(file.name, 'otoscopie.jpg');
+    assert.deepEqual(Buffer.from(await file.arrayBuffer()), photo);
+    assert.equal(parsed.get('symptoms'), null);
+  });
+
   it('chaque appel porte le jeton partagé', async () => {
     const sent = captureFetch(() => json({ summary: '1. Causes probables : Otite externe.' }));
     await aiService.ragAnalyze({ symptoms: 'Otalgie' });
