@@ -6,8 +6,10 @@
 #   ./demarrer.sh                 tout lancer (recompile l'app)
 #   ./demarrer.sh --sans-build    rouvrir l'app déjà installée, sans recompiler
 #   ./demarrer.sh --sans-ios      sans le simulateur iOS (de même : --sans-android)
+#   ./demarrer.sh --detache       serveurs laissés en arrière-plan, le script rend la main
+#                                 (arrêt : ./arreter.sh) ; utilisé par demarrer-ios.sh et demarrer-android.sh
 #
-# Ctrl-C arrête les serveurs lancés par le script ; les émulateurs restent ouverts.
+# Sans --detache, Ctrl-C arrête les serveurs lancés par le script ; les émulateurs restent ouverts.
 # Autres appareils : variables KORAI_IOS_SIM (identifiant du simulateur) et KORAI_AVD (AVD Android).
 
 set -uo pipefail
@@ -26,13 +28,14 @@ export ANDROID_HOME="${ANDROID_HOME:-$HOME/Library/Android/sdk}"
 ADB="$ANDROID_HOME/platform-tools/adb"
 EMULATOR="$ANDROID_HOME/emulator/emulator"
 
-BUILD=1 IOS=1 ANDROID=1
+BUILD=1 IOS=1 ANDROID=1 DETACHE=0
 for arg in "$@"; do
   case "$arg" in
     --sans-build) BUILD=0 ;;
     --sans-ios) IOS=0 ;;
     --sans-android) ANDROID=0 ;;
-    -h | --aide | --help) sed -n '2,11p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    --detache) DETACHE=1 ;;
+    -h | --aide | --help) sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) printf 'Option inconnue : %s (voir ./demarrer.sh --aide)\n' "$arg" >&2; exit 2 ;;
   esac
 done
@@ -186,10 +189,11 @@ lancer_serveur() { # lancer_serveur <nom> <port> <url de santé> <dossier> <comm
   local nom=$1 port=$2 sante=$3 dossier=$4
   shift 4
   if curl -fsS -m 2 "$sante" >/dev/null 2>&1; then
-    ok "$nom déjà lancé sur le port $port (réutilisé : Ctrl-C ne l'arrêtera pas)"
+    if [ "$DETACHE" = 1 ]; then ok "$nom déjà lancé sur le port $port"; else ok "$nom déjà lancé sur le port $port (réutilisé : Ctrl-C ne l'arrêtera pas)"; fi
   elif port_occupe "$port"; then
     echec "Le port $port est pris par un autre programme, $nom ne peut pas démarrer (voir : lsof -nP -iTCP:$port)."
   else
+    rm -f "$LOG_DIR/$nom.pid" # reste d'un serveur arrêté autrement que par arreter.sh
     lancer_en_fond "$LOG_DIR/$nom.log" "$dossier" "$@"
     LANCES="$LANCES $nom:$DERNIER_PID"
     ok "$nom en cours de démarrage (journal : logs/$nom.log)"
@@ -311,7 +315,12 @@ if [ "$IOS" = 1 ]; then info "Face ID sur le simulateur : notifyutil -p com.appl
 if [ "$ANDROID" = 1 ]; then info "Empreinte sur l'émulateur : \"\$ANDROID_HOME/platform-tools/adb\" -e emu finger touch 1"; fi
 info "Journaux : logs/"
 
-if [ -n "$LANCES" ]; then
+if [ "$DETACHE" = 1 ]; then
+  # Les serveurs lancés ici survivent au script : leur PID est noté pour ./arreter.sh.
+  for entree in $LANCES; do printf '%s\n' "${entree##*:}" >"$LOG_DIR/${entree%%:*}.pid"; done
+  LANCES=""
+  info "Backend et serviceIA tournent en arrière-plan : ./arreter.sh pour les arrêter."
+elif [ -n "$LANCES" ]; then
   JOURNAUX=""
   for entree in $LANCES; do JOURNAUX="$JOURNAUX $LOG_DIR/${entree%%:*}.log"; done
   printf '\n%sJournaux des serveurs ci-dessous. Ctrl-C arrête les serveurs (les émulateurs restent ouverts).%s\n\n' "$GRAS" "$FIN"
