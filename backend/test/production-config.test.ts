@@ -16,7 +16,8 @@ const prodEnv = {
   CORS_ORIGIN: 'https://app.korai.sn',
   JWT_ACCESS_SECRET: strong('a'),
   JWT_REFRESH_SECRET: strong('b'),
-  IMAGE_ENCRYPTION_KEY: Buffer.alloc(32, 1).toString('base64')
+  IMAGE_ENCRYPTION_KEY: Buffer.alloc(32, 1).toString('base64'),
+  AI_SERVICE_API_KEY: strong('c')
 };
 
 describe('configuration de production', () => {
@@ -36,6 +37,14 @@ describe('configuration de production', () => {
     assert.throws(
       () => parseEnv({ ...prodEnv, IMAGE_ENCRYPTION_KEY: Buffer.alloc(16).toString('base64') }),
       /32 octets/
+    );
+  });
+
+  it('exige le jeton partagé avec le service IA en production seulement', () => {
+    assert.throws(() => parseEnv({ ...prodEnv, AI_SERVICE_API_KEY: undefined }), /AI_SERVICE_API_KEY/);
+    assert.throws(() => parseEnv({ ...prodEnv, AI_SERVICE_API_KEY: 'court' }), /AI_SERVICE_API_KEY/);
+    assert.doesNotThrow(() =>
+      parseEnv({ ...prodEnv, NODE_ENV: 'development', AI_SERVICE_API_KEY: undefined, JWT_ACCESS_SECRET: 'dev_access_secret_x' })
     );
   });
 

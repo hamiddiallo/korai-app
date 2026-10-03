@@ -25,6 +25,27 @@ void main() {
     expect(DiagnosisText.hasDetails('Otite moyenne aiguë'), isFalse);
   });
 
+  test('rapport réel de serviceIA : titres sans deux-points ni puce', () {
+    const real = '1. Causes probables :\n'
+        '   - Otite externe maligne (ou otite nécrosante) : liée au diabète.\n'
+        '   - Otite externe diffuse : baignades fréquentes.\n\n'
+        '2. Signes associés :\n'
+        '   - Otorrhée : écoulement muqueux.\n\n'
+        '3. Conduite à tenir :\n'
+        '   - Traitement médical urgent :\n'
+        '     - Antalgiques : paracétamol.';
+    final sections = DiagnosisText.sections(real);
+    expect(
+      sections.map((s) => s.title),
+      ['Causes probables', 'Signes associés', 'Conduite à tenir', 'Traitement médical urgent'],
+    );
+    expect(
+      sections.first.body,
+      '• Otite externe maligne (ou otite nécrosante) : liée au diabète.\n• Otite externe diffuse : baignades fréquentes.',
+    );
+    expect(sections.last.body, '• Antalgiques : paracétamol.');
+  });
+
   test('reconnaît un échec technique sans filtrer un vrai rapport', () {
     expect(DiagnosisText.isTechnicalFailure('Échec technique du service IA'), isTrue);
     expect(DiagnosisText.isTechnicalFailure(report), isFalse);

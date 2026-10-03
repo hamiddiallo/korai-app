@@ -69,7 +69,7 @@ class AiProposalBlock extends StatelessWidget {
             if (_has(summary.imageOpinion)) _Opinion(title: 'Sur l’image', text: summary.imageOpinion!),
             // L'avis RAG reprend souvent mot pour mot le diagnostic : déjà lisible via « Lire l'analyse complète ».
             if (_has(summary.ragOpinion) && summary.ragOpinion!.trim() != diagnosis)
-              _Opinion(title: 'Sur les symptômes', text: summary.ragOpinion!),
+              _Opinion(title: 'Sur les symptômes', text: summary.ragOpinion!, foldLong: true),
           ],
           if (summary.warnings.isNotEmpty) ...[
             const SizedBox(height: KSpace.md),
@@ -170,26 +170,57 @@ class _FullReportState extends State<FullReport> {
   }
 }
 
-class _Opinion extends StatelessWidget {
-  const _Opinion({required this.title, required this.text});
+class _Opinion extends StatefulWidget {
+  const _Opinion({required this.title, required this.text, this.foldLong = false});
 
   final String title;
   final String text;
 
+  /// Avis long de l'IA (souvent plus de 3 000 caractères) : seule la première
+  /// partie (« Causes probables ») est affichée, le reste à la demande.
+  final bool foldLong;
+
+  @override
+  State<_Opinion> createState() => _OpinionState();
+}
+
+class _OpinionState extends State<_Opinion> {
+  static const _foldAbove = 600;
+  bool _open = false;
+
   @override
   Widget build(BuildContext context) {
-    final sections = DiagnosisText.sections(text);
+    final sections = DiagnosisText.sections(widget.text);
+    final foldable = widget.foldLong && sections.length > 1 && widget.text.length > _foldAbove;
+    final visible = foldable && !_open ? sections.take(1) : sections;
     return Padding(
       padding: const EdgeInsets.only(top: KSpace.md),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(title, style: context.text.titleSmall),
-          for (final s in sections) ...[
-            const SizedBox(height: 4),
-            if (s.title != null) Text(s.title!, style: context.text.labelLarge),
-            if (s.body.isNotEmpty) Text(s.body, style: context.text.bodyMedium),
-          ],
+          Text(widget.title, style: context.text.titleSmall),
+          AnimatedSize(
+            duration: KMotion.of(context, KMotion.base),
+            curve: KMotion.enter,
+            alignment: Alignment.topCenter,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                for (final s in visible) ...[
+                  const SizedBox(height: 4),
+                  if (s.title != null) Text(s.title!, style: context.text.labelLarge),
+                  if (s.body.isNotEmpty) Text(s.body, style: context.text.bodyMedium),
+                ],
+              ],
+            ),
+          ),
+          if (foldable)
+            TextButton.icon(
+              style: TextButton.styleFrom(padding: EdgeInsets.zero, minimumSize: const Size(0, 40)),
+              onPressed: () => setState(() => _open = !_open),
+              icon: Icon(_open ? Icons.expand_less_rounded : Icons.expand_more_rounded),
+              label: Text(_open ? 'Réduire l’avis' : 'Lire tout l’avis'),
+            ),
         ],
       ),
     );

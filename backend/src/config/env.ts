@@ -19,12 +19,17 @@ const envSchema = z
     SEED_DEMO: z.enum(['true', 'false']).optional(),
     /** Nombre de proxys de confiance devant l'API (adresse IP réelle du client). */
     TRUST_PROXY: z.coerce.number().int().min(0).default(0),
-    /** URL publique du service FastAPI (tunnel ngrok), sans slash final. */
+    /** URL du service IA (`serviceIA/backend`, FastAPI), sans slash final. */
     AI_SERVICE_BASE_URL: z.string().url({
-      message:
-        'Definir AI_SERVICE_BASE_URL dans .env (URL ngrok du service IA, ex. https://xxxx.ngrok-free.app)'
+      message: 'Definir AI_SERVICE_BASE_URL dans .env (adresse du service IA, ex. http://127.0.0.1:8000)'
     }),
     AI_SERVICE_TIMEOUT_MS: z.coerce.number().default(120000),
+    /**
+     * Jeton partagé avec le service IA (`SERVICE_API_TOKEN` de serviceIA), envoyé en
+     * `Authorization: Bearer`. Sans lui, n'importe qui joignant le service IA pourrait
+     * lancer des analyses ou lire les cas : obligatoire en production.
+     */
+    AI_SERVICE_API_KEY: z.string().trim().optional(),
     /**
      * Clé de chiffrement des photos du tympan (AES-256-GCM) : 32 octets en
      * base64. Sans elle, les photos stockées sont illisibles : la conserver
@@ -51,6 +56,14 @@ const envSchema = z
     }
     if (e.JWT_ACCESS_SECRET === e.JWT_REFRESH_SECRET) {
       ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['JWT_REFRESH_SECRET'], message: 'Les deux secrets JWT doivent être différents' });
+    }
+    const aiKey = e.AI_SERVICE_API_KEY ?? '';
+    if (aiKey.length < 32 || WEAK_SECRET.test(aiKey)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['AI_SERVICE_API_KEY'],
+        message: "AI_SERVICE_API_KEY : jeton aléatoire d'au moins 32 caractères requis en production (SERVICE_API_TOKEN de serviceIA)"
+      });
     }
     if (e.CORS_ORIGIN.trim() === '*') {
       ctx.addIssue({

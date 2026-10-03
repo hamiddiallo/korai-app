@@ -15,6 +15,8 @@ process.env.NODE_ENV ??= 'test';
 // (port fermé) au lieu de lire ou d'écrire dans la base de développement.
 process.env.DATABASE_URL = 'postgresql://test:test@127.0.0.1:1/korai_tests_sans_base';
 process.env.AI_SERVICE_BASE_URL ??= 'http://ai.test';
+// Jeton propre aux tests : jamais celui du .env de développement.
+process.env.AI_SERVICE_API_KEY = 'jeton-ia-de-test';
 process.env.JWT_ACCESS_SECRET ??= 'test_access_secret_0123456789abcdef';
 process.env.JWT_REFRESH_SECRET ??= 'test_refresh_secret_0123456789abcdef';
 // Clé et dossier propres aux tests : jamais le coffre de développement.

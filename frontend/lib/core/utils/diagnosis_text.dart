@@ -18,10 +18,14 @@ class DiagnosisText {
       line.replaceAll('**', '').replaceAll('__', '').replaceFirst(RegExp(r'^[-*•]\s+'), '• ').trim();
 
   /// Titre de section : court, numéroté ou en titre markdown, sans point final.
+  /// « 1. Causes probables : » et « - Traitement : » donnent « Causes probables »
+  /// et « Traitement » (sans deux-points ni puce).
   static String? _heading(String line) {
     final l = _clean(line);
     final m = _markdownHeading.firstMatch(l) ?? _numbered.firstMatch(l);
-    final candidate = m?.group(1)?.trim() ?? (l.endsWith(':') ? l.substring(0, l.length - 1).trim() : null);
+    final candidate = (m?.group(1)?.trim() ?? (l.endsWith(':') ? l.substring(0, l.length - 1).trim() : null))
+        ?.replaceFirst(RegExp(r'\s*:$'), '')
+        .replaceFirst(RegExp(r'^•\s*'), '');
     if (candidate == null || candidate.isEmpty || candidate.length > 50 || candidate.endsWith('.')) return null;
     return candidate;
   }
