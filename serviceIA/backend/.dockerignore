@@ -1,0 +1,15 @@
+.env
+.env.*
+client_secret*.json
+token*.json
+*.tar.gz
+test_set/
+dataset/
+evaluation/
+scripts/
+utils/checkpoints/
+**/__pycache__/
+*.pyc
+.venv/
+venv/
+*:Zone.Identifier

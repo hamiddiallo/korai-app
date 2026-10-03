@@ -1,0 +1,68 @@
+==================== TEST DE BIAIS – CLASSES F1=0 ====================
+
+Pour chaque classe problématique : on prédit toutes ses images et
+on regarde vers quoi le modèle les redirige systématiquement.
+
+─── Classe : cholestéatome ───
+  Nombre d'images : 5
+  IMG_0095.JPG                                  → cholestéatome (52.3%)
+  IMG_0096.JPG                                  → cholestéatome (56.5%)
+  PHOTO-2024-07-06-13-11-38 2.jpg               → cholestéatome (44.5%)
+  PHOTO-2024-10-09-17-06-40.jpg                 → cholestéatome (81.6%)
+  PHOTO-2024-10-09-17-06-41 2.jpg               → perforation tympanique (71.2%)
+
+  Résumé des prédictions :
+    ✅ cholestéatome                            4x  (conf moy: 58.7%)
+    ❌ perforation tympanique                   1x  (conf moy: 71.2%)
+  Précision brute : 4/5 = 80%
+
+─── Classe : corps étranger oreille ───
+  Nombre d'images : 4
+  PHOTO-2024-07-06-13-11-31.jpg                 → corps étranger oreille (60.7%)
+  PHOTO-2024-07-06-13-11-35 4.jpg               → corps étranger oreille (86.5%)
+  PHOTO-2024-10-09-17-06-51 2.jpg               → cholestéatome (25.9%)
+  PHOTO-2024-10-09-17-07-07 2.jpg               → perforation tympanique (34.5%)
+
+  Résumé des prédictions :
+    ✅ corps étranger oreille                   2x  (conf moy: 73.6%)
+    ❌ cholestéatome                            1x  (conf moy: 25.9%)
+    ❌ perforation tympanique                   1x  (conf moy: 34.5%)
+  Précision brute : 2/4 = 50%
+
+─── Classe : otomycose ───
+  Nombre d'images : 2
+  PHOTO-2024-07-06-13-11-28 5.jpg               → otomycose (55.0%)
+  PHOTO-2024-07-06-13-11-30 3.jpg               → otomycose (71.5%)
+
+  Résumé des prédictions :
+    ✅ otomycose                                2x  (conf moy: 63.2%)
+  Précision brute : 2/2 = 100%
+
+─── Classe : otite moyenne aigue ───
+  Nombre d'images : 3
+  PHOTO-2024-07-06-13-11-28 2.jpg               → otite moyenne aigue (96.8%)
+  PHOTO-2024-10-09-17-06-54 2.jpg               → otite moyenne aigue (93.1%)
+  PHOTO-2024-10-09-17-06-54 3.jpg               → otite moyenne aigue (81.2%)
+
+  Résumé des prédictions :
+    ✅ otite moyenne aigue                      3x  (conf moy: 90.3%)
+  Précision brute : 3/3 = 100%
+
+─── Classe : otite séromuqueuse ───
+  Nombre d'images : 9
+  IMG_0230.JPG                                  → otite séromuqueuse (79.6%)
+  PHOTO-2024-07-06-13-11-26 - copie.jpg         → otite séromuqueuse (91.1%)
+  PHOTO-2024-07-06-13-11-33 3.jpg               → otite séromuqueuse (31.7%)
+  PHOTO-2024-07-06-13-11-34 2.jpg               → perforation tympanique (33.7%)
+  PHOTO-2024-07-06-13-11-34.jpg                 → otite séromuqueuse (34.7%)
+  PHOTO-2024-07-08-08-02-42 2.jpg               → tympan normal (32.7%)
+  PHOTO-2024-10-09-17-06-57 3.jpg               → otite séromuqueuse (41.0%)
+  PHOTO-2024-10-09-17-06-58 5.jpg               → otite séromuqueuse (60.2%)
+  PHOTO-2024-10-09-17-06-58.jpg                 → perforation tympanique (38.7%)
+
+  Résumé des prédictions :
+    ✅ otite séromuqueuse                       6x  (conf moy: 56.4%)
+    ❌ perforation tympanique                   2x  (conf moy: 36.2%)
+    ❌ tympan normal                            1x  (conf moy: 32.7%)
+  Précision brute : 6/9 = 67%
+

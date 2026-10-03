@@ -1,0 +1,28 @@
+# Lancement complet : docker compose up -d --build
+# Frontend : http://localhost:8080  (nginx sert l'interface et redirige /api vers le backend)
+services:
+  backend:
+    build: ./backend
+    env_file: ./backend/.env
+    environment:
+      - ALLOWED_ORIGINS=http://localhost:8080
+    volumes:
+      # cache du modèle d'embeddings Hugging Face (évite de le retélécharger)
+      - hf_cache:/root/.cache/huggingface
+    expose:
+      - "8000"
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_API_URL: /api
+    ports:
+      - "8080:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  hf_cache:

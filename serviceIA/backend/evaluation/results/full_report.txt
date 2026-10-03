@@ -1,0 +1,22 @@
+======================================================================
+  RAPPORT D'ÉVALUATION — EfficientNet-B0 ONNX (KORAI ORL)
+======================================================================
+
+Nombre d'images de test : 45
+Nombre de classes      : 10
+
+PERFORMANCES GLOBALES
+----------------------------------------------------------------------
+Top-1 accuracy           : 77.78 %
+Top-3 accuracy           : 97.78 %
+Précision macro-moyenne  : 87.76 %
+Rappel macro-moyen       : 78.67 %
+F1-score macro-moyen     : 80.80 %
+
+LATENCE D'INFÉRENCE (par image)
+----------------------------------------------------------------------
+Moyenne                  : 23.21 ms
+Médiane                  : 22.57 ms
+95e percentile           : 28.79 ms
+99e percentile           : 34.53 ms
+Min / Max                : 16.81 / 35.55 ms

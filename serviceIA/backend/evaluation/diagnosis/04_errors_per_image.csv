@@ -1,0 +1,46 @@
+image,dossier,vrai_label,predit_raw,predit_corrige,confiance_%,top3_correct,latence_ms
+PHOTO-2024-10-09-17-06-41 2.jpg,cholestéatome,cholestéatome,perforation tympanique,perforation tympanique,71.2,oui,17.7
+IMG_0047.JPG,perforation tympanique,perforation tympanique,otite séromuqueuse,otite séromuqueuse,48.5,oui,24.0
+PHOTO-2024-07-06-13-11-38.jpg,tympan normal,tympan normal,otite moyenne aigue,otite moyenne aigue,40.7,oui,39.8
+PHOTO-2024-10-09-17-06-58.jpg,otite séromuqueuse,otite séromuqueuse,perforation tympanique,perforation tympanique,38.7,oui,18.4
+PHOTO-2024-07-06-13-11-35 3.jpg,aspect post tympanoplastie,aspect post tympanoplastie,otite séromuqueuse,otite séromuqueuse,35.1,oui,19.8
+PHOTO-2024-10-09-17-07-07 2.jpg,corps étranger oreille,corps étranger oreille,perforation tympanique,perforation tympanique,34.5,oui,16.1
+PHOTO-2024-07-06-13-11-34 2.jpg,otite séromuqueuse,otite séromuqueuse,perforation tympanique,perforation tympanique,33.7,oui,25.1
+PHOTO-2024-07-08-08-02-42 2.jpg,otite séromuqueuse,otite séromuqueuse,tympan normal,tympan normal,32.7,oui,20.4
+PHOTO-2024-10-09-17-06-51 2.jpg,corps étranger oreille,corps étranger oreille,cholestéatome,cholestéatome,25.9,non,18.4
+PHOTO-2024-07-06-13-11-35 2.jpg,myringosclerose,myringosclerose,perforation tympanique,perforation tympanique,24.0,oui,18.1
+PHOTO-2024-07-06-13-11-28 2.jpg,otite moyenne aigue,otite moyenne aigue,otite moyenne aigue,otite moyenne aigue,96.8,oui,21.2
+PHOTO-2024-07-06-13-11-31 2.jpg,myringosclerose,myringosclerose,myringosclerose,myringosclerose,93.5,oui,23.7
+PHOTO-2024-10-09-17-06-54 2.jpg,otite moyenne aigue,otite moyenne aigue,otite moyenne aigue,otite moyenne aigue,93.1,oui,19.0
+PHOTO-2024-07-06-13-11-26 - copie.jpg,otite séromuqueuse,otite séromuqueuse,otite séromuqueuse,otite séromuqueuse,91.1,oui,23.1
+PHOTO-2024-07-06-13-11-32.jpg,perforation tympanique,perforation tympanique,perforation tympanique,perforation tympanique,88.3,oui,27.9
+PHOTO-2024-10-09-17-07-12.jpg,myringosclerose,myringosclerose,myringosclerose,myringosclerose,88.2,oui,18.5
+PHOTO-2024-07-06-13-11-35 4.jpg,corps étranger oreille,corps étranger oreille,corps étranger oreille,corps étranger oreille,86.5,oui,23.0
+PHOTO-2024-10-09-17-06-50.jpg,perforation tympanique,perforation tympanique,perforation tympanique,perforation tympanique,86.3,oui,22.6
+PHOTO-2024-07-06-13-11-37 3.jpg,bouchon de cerumen,bouchon de cerumen,bouchon de cerumen,bouchon de cerumen,82.8,oui,21.7
+PHOTO-2024-10-09-17-07-02 2.jpg,perforation tympanique,perforation tympanique,perforation tympanique,perforation tympanique,81.9,oui,22.4
+PHOTO-2024-10-09-17-06-40.jpg,cholestéatome,cholestéatome,cholestéatome,cholestéatome,81.6,oui,20.5
+PHOTO-2024-10-09-17-06-54 3.jpg,otite moyenne aigue,otite moyenne aigue,otite moyenne aigue,otite moyenne aigue,81.2,oui,20.8
+IMG_0230.JPG,otite séromuqueuse,otite séromuqueuse,otite séromuqueuse,otite séromuqueuse,79.6,oui,26.9
+PHOTO-2024-07-06-13-11-27 4.jpg,aspect post tympanoplastie,aspect post tympanoplastie,aspect post tympanoplastie,aspect post tympanoplastie,79.1,oui,21.3
+PHOTO-2024-10-09-17-07-15 3.jpg,perforation tympanique,perforation tympanique,perforation tympanique,perforation tympanique,74.6,oui,20.0
+PHOTO-2024-10-09-17-07-05.jpg,perforation tympanique,perforation tympanique,perforation tympanique,perforation tympanique,72.9,oui,24.4
+PHOTO-2024-07-06-13-11-30 3.jpg,otomycose,otomycose,otomycose,otomycose,71.5,oui,20.2
+PHOTO-2024-07-06-13-11-31 6.jpg,perforation tympanique,perforation tympanique,perforation tympanique,perforation tympanique,70.0,oui,20.8
+PHOTO-2024-10-09-17-06-42.jpg,perforation tympanique,perforation tympanique,perforation tympanique,perforation tympanique,62.9,oui,20.0
+PHOTO-2024-10-09-17-07-04 4.jpg,tympan normal,tympan normal,tympan normal,tympan normal,61.7,oui,31.7
+PHOTO-2024-10-09-17-06-49 2.jpg,perforation tympanique,perforation tympanique,perforation tympanique,perforation tympanique,60.8,oui,18.4
+PHOTO-2024-07-06-13-11-31.jpg,corps étranger oreille,corps étranger oreille,corps étranger oreille,corps étranger oreille,60.7,oui,19.5
+PHOTO-2024-10-09-17-06-58 5.jpg,otite séromuqueuse,otite séromuqueuse,otite séromuqueuse,otite séromuqueuse,60.2,oui,17.9
+IMG_0096.JPG,cholestéatome,cholestéatome,cholestéatome,cholestéatome,56.5,oui,25.4
+PHOTO-2024-07-06-13-11-26 4.jpg,tympan normal,tympan normal,tympan normal,tympan normal,56.1,oui,29.9
+PHOTO-2024-07-06-13-11-28 5.jpg,otomycose,otomycose,otomycose,otomycose,55.0,oui,23.6
+PHOTO-2024-10-09-17-07-14.jpg,perforation tympanique,perforation tympanique,perforation tympanique,perforation tympanique,54.4,oui,22.6
+IMG_0095.JPG,cholestéatome,cholestéatome,cholestéatome,cholestéatome,52.3,oui,26.7
+PHOTO-2024-07-06-13-11-29.jpg,tympan normal,tympan normal,tympan normal,tympan normal,52.0,oui,31.1
+PHOTO-2024-07-06-13-11-38 2.jpg,cholestéatome,cholestéatome,cholestéatome,cholestéatome,44.5,oui,23.9
+PHOTO-2024-07-06-13-11-28 3.jpg,tympan normal,tympan normal,tympan normal,tympan normal,44.0,oui,27.3
+PHOTO-2024-10-09-17-06-57 3.jpg,otite séromuqueuse,otite séromuqueuse,otite séromuqueuse,otite séromuqueuse,41.0,oui,16.8
+PHOTO-2024-10-09-17-06-45 4.jpg,tympan normal,tympan normal,tympan normal,tympan normal,38.8,oui,31.4
+PHOTO-2024-07-06-13-11-34.jpg,otite séromuqueuse,otite séromuqueuse,otite séromuqueuse,otite séromuqueuse,34.7,oui,25.7
+PHOTO-2024-07-06-13-11-33 3.jpg,otite séromuqueuse,otite séromuqueuse,otite séromuqueuse,otite séromuqueuse,31.7,oui,25.4

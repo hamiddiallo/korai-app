@@ -1,0 +1,61 @@
+=============== AUDIT DES NOMS DE CLASSES – KORAI ORL ================
+
+#    PIPELINE (orl_Inference_pipeline.py)       EVAL SCRIPTS                               DOSSIERS test_set/
+----------------------------------------------------------------------------------------------------------------------------------
+[0] aspect post tympanoplastie                 aspect post tympanoplastie                 aspect post tympanoplastie
+[1] bouchon de cerumen                         bouchon de cerumen                         bouchon de cerumen
+[2] cholestéatome                              cholestéatome                              cholestéatome
+[3] corps étranger oreille                     corps étranger oreille                     corps étranger oreille
+[4] myringosclerose                            myringosclerose                            myringosclerose
+[5] otite moyenne aigue                        otomycose                                  otite moyenne aigue [DIFF!] [DIFF!]
+[6] otite séromuqueuse                         otite moyenne aigue                        otite séromuqueuse [DIFF!] [DIFF!]
+[7] otomycose                                  otite séromuqueuse                         otomycose [DIFF!] [DIFF!]
+[8] perforation tympanique                     perforation tympanique                     perforation tympanique
+[9] tympan normal                              tympan normal                              tympan normal
+
+============== DÉTAIL UNICODE DES CLASSES AVEC ACCENTS ===============
+
+Classe (pipeline NFC)                      Codepoints non-ASCII pipeline       Codepoints non-ASCII dossier
+------------------------------------------------------------------------------------------------------------------------
+aspect post tympanoplastie                 (aucun)                             (aucun)
+bouchon de cerumen                         (aucun)                             (aucun)
+cholestéatome                              U+00E9                              U+00E9
+corps étranger oreille                     U+00E9                              U+00E9
+myringosclerose                            (aucun)                             (aucun)
+otite moyenne aigue                        (aucun)                             (aucun)
+otite séromuqueuse                         U+00E9                              U+00E9
+otomycose                                  (aucun)                             (aucun)
+perforation tympanique                     (aucun)                             (aucun)
+tympan normal                              (aucun)                             (aucun)
+
+====================== RÉSUMÉ DES INCOHÉRENCES =======================
+
+⚠️  3 incohérence(s) détectée(s) :
+
+  Classe [5]
+    PIPELINE   : 'otite moyenne aigue'
+    EVAL       : 'otomycose'
+    → Impact : le modèle prédit 'otite moyenne aigue' mais l'évaluateur
+               attend 'otomycose' → F1 = 0 artificiellement
+
+  Classe [6]
+    PIPELINE   : 'otite séromuqueuse'
+    EVAL       : 'otite moyenne aigue'
+    → Impact : le modèle prédit 'otite séromuqueuse' mais l'évaluateur
+               attend 'otite moyenne aigue' → F1 = 0 artificiellement
+
+  Classe [7]
+    PIPELINE   : 'otomycose'
+    EVAL       : 'otite séromuqueuse'
+    → Impact : le modèle prédit 'otomycose' mais l'évaluateur
+               attend 'otite séromuqueuse' → F1 = 0 artificiellement
+
+================== MAPPING DE CORRECTION RECOMMANDÉ ==================
+
+Renommer le dossier test_set/ et corriger orl_Inference_pipeline.py :
+  Dossier actuel              → Dossier corrigé
+  'corps étranger oreille'    → 'corps étrangers oreille'
+  (ou)  modifier pipeline : 'corps étrangers oreille' → 'corps étranger oreille'
+
+Recommandation : aligner sur le singulier 'corps étranger oreille'
+car c'est le terme médical standard français pour un CE auriculaire unique.

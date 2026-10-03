@@ -1,0 +1,25 @@
+================== ÉVALUATION CORRIGÉE – KORAI ORL ===================
+
+Corrections appliquées :
+  1. Normalisation Unicode NFC sur tous les noms
+  2. Mapping 'corps étrangers oreille' → 'corps étranger oreille'
+
+Images analysées : 45
+Top-1 Accuracy   : 77.78%
+Top-3 Accuracy   : 97.78%
+
+Classe                                      Précision     Rappel         F1    Support
+-------------------------------------------------------------------------------------
+aspect post tympanoplastie                      1.000      0.500      0.667          2
+bouchon de cerumen                              1.000      1.000      1.000          1
+cholestéatome                                   0.800      0.800      0.800          5
+corps étranger oreille                          1.000      0.500      0.667          4
+myringosclerose                                 1.000      0.667      0.800          3
+otite moyenne aigue                             0.750      1.000      0.857          3
+otite séromuqueuse                              0.750      0.667      0.706          9
+otomycose                                       1.000      1.000      1.000          2
+perforation tympanique                          0.643      0.900      0.750         10
+tympan normal                                   0.833      0.833      0.833          6
+
+Macro F1  : 0.808
+Weighted F1: 0.774

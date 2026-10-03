@@ -1,0 +1,42 @@
+# ---- Secrets : ne jamais versionner ----
+.env
+.env.*
+!.env.example
+client_secret*.json
+token*.json
+*.pem
+*.key
+
+# ---- Données patients et données générées ----
+backend/test_set/
+backend/dataset/
+backend/data/
+backend/KORAI-APP/
+**/chroma_db/
+*.db
+*.sqlite3
+*.tar.gz
+*.zip
+
+# ---- Modèles (distribués hors Git, voir README) ----
+*.onnx
+*.onnx.data
+*.pth
+
+# ---- Environnements et builds ----
+node_modules/
+dist/
+__pycache__/
+*.pyc
+.venv/
+venv/
+build/
+*.spec.bak
+
+# ---- Divers ----
+.DS_Store
+Thumbs.db
+*:Zone.Identifier
+.vscode/
+.idea/
+.claude/

@@ -1,0 +1,11 @@
+Classe,Précision,Rappel,F1,Support,Top3_recall
+aspect post tympanoplastie,1.000,0.500,0.667,2,1.000
+bouchon de cerumen,1.000,1.000,1.000,1,1.000
+cholestéatome,0.800,0.800,0.800,5,1.000
+corps étranger oreille,1.000,0.500,0.667,4,0.750
+myringosclerose,1.000,0.667,0.800,3,1.000
+otite moyenne aigue,0.750,1.000,0.857,3,1.000
+otite séromuqueuse,0.750,0.667,0.706,9,1.000
+otomycose,1.000,1.000,1.000,2,1.000
+perforation tympanique,0.643,0.900,0.750,10,1.000
+tympan normal,0.833,0.833,0.833,6,1.000
