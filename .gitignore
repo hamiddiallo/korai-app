@@ -35,3 +35,6 @@ GEMINI.md
 .codex/
 .aider*
 .github/copilot-instructions.md
+
+# Journaux et processus de demarrer.sh
+logs/
