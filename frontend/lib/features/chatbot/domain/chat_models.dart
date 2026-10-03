@@ -1,3 +1,5 @@
+import '../../../core/utils/source_label.dart';
+
 class ChatConversation {
   const ChatConversation({
     required this.id,
@@ -26,13 +28,9 @@ class ChatConversation {
       title: json['title']?.toString() ?? 'Nouvelle conversation',
       status: json['status']?.toString() ?? 'ACTIVE',
       messageCount: int.tryParse(json['messageCount']?.toString() ?? '') ?? 0,
-      lastMessageAt:
-          DateTime.tryParse(json['lastMessageAt']?.toString() ?? '') ??
-              DateTime.now(),
+      lastMessageAt: DateTime.tryParse(json['lastMessageAt']?.toString() ?? '') ?? DateTime.now(),
       externalConversationId: json['externalConversationId']?.toString(),
-      archivedAt: json['archivedAt'] == null
-          ? null
-          : DateTime.tryParse(json['archivedAt'].toString()),
+      archivedAt: json['archivedAt'] == null ? null : DateTime.tryParse(json['archivedAt'].toString()),
     );
   }
 
@@ -50,8 +48,7 @@ class ChatConversation {
       status: status ?? this.status,
       messageCount: messageCount ?? this.messageCount,
       lastMessageAt: lastMessageAt ?? this.lastMessageAt,
-      externalConversationId:
-          externalConversationId ?? this.externalConversationId,
+      externalConversationId: externalConversationId ?? this.externalConversationId,
       archivedAt: archivedAt ?? this.archivedAt,
     );
   }
@@ -101,8 +98,7 @@ class ChatMessage {
       deliveryStatus: json['deliveryStatus']?.toString() ?? 'COMPLETED',
       isRead: json['isRead'] == true,
       errorCode: json['errorCode']?.toString(),
-      createdAt: DateTime.tryParse(json['createdAt']?.toString() ?? '') ??
-          DateTime.now(),
+      createdAt: DateTime.tryParse(json['createdAt']?.toString() ?? '') ?? DateTime.now(),
     );
   }
 
@@ -125,6 +121,7 @@ class ChatMessage {
         }
       }
       if (label == null || label.isEmpty || label == '[object Object]') continue;
+      label = SourceLabel.clean(label);
       if (!labels.contains(label)) labels.add(label);
     }
     return labels;

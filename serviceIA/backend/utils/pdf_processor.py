@@ -23,7 +23,7 @@ class _E5Embeddings(HuggingFaceEmbeddings):
 
 
 def process_pdfs(
-    pdf_folder: str = r"C:\Users\DonutGiveUp\Documents\KORAI\documents_orl",
+    pdf_folder: str,
     chroma_dir: str = None,
     collection_name: str = "orl_knowledge_base",
     chunk_size: int = 500,
@@ -60,9 +60,12 @@ def process_pdfs(
         print(f"  Loading: {pdf_path.name}")
         loader = PyPDFLoader(str(pdf_path))
         pages = loader.load()
-        # Attach a clean filename so metadata is readable in retrieval logs
+        # Attach a clean filename so metadata is readable in retrieval logs.
+        # PyPDFLoader met le chemin complet dans `source` (C:\Users\<auteur>\…) : seul le nom du
+        # fichier est gardé, pour que la base ne révèle pas le poste qui l'a construite.
         for page in pages:
             page.metadata["filename"] = pdf_path.name
+            page.metadata["source"] = pdf_path.name
         docs.extend(pages)
 
     print(f"  {len(docs)} pages loaded from {len(pdf_files)} PDF(s)")
@@ -115,7 +118,7 @@ if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser(description="Index ORL PDFs into ChromaDB")
-    parser.add_argument("--pdf-folder", default=r"C:\Users\DonutGiveUp\Documents\KORAI\documents_orl")
+    parser.add_argument("--pdf-folder", required=True, help="Dossier des PDF du corpus ORL")
     parser.add_argument("--chroma-dir", default=None)
     parser.add_argument("--collection", default="orl_knowledge_base")
     parser.add_argument("--chunk-size", type=int, default=500)

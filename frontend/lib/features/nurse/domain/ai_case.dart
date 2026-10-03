@@ -1,4 +1,5 @@
 import '../../../core/domain/korai_enums.dart';
+import '../../../core/utils/source_label.dart';
 
 /// Photo du tympan conservée (chiffrée) par le serveur, lue via [url].
 class CaseImage {
@@ -303,7 +304,7 @@ class AiSummarySnapshot {
       likelyDiagnosis: json['likelyDiagnosis']?.toString(),
       confidenceLabel: json['confidenceLabel']?.toString(),
       warnings: (json['warnings'] as List<dynamic>? ?? const []).map((e) => e.toString()).toList(),
-      sources: (json['sources'] as List<dynamic>? ?? const []).map((e) => e.toString()).toList(),
+      sources: SourceLabel.cleanAll(json['sources']),
     );
   }
 }
@@ -332,7 +333,7 @@ class AiSummary {
       likelyDiagnosis: json['likelyDiagnosis']?.toString(),
       confidenceLabel: AiConfidenceLabel.fromApi(json['confidenceLabel']?.toString()),
       warnings: (json['warnings'] as List<dynamic>? ?? const []).map((item) => item.toString()).toList(),
-      sources: (json['sources'] as List<dynamic>? ?? const []).map((item) => item.toString()).toList(),
+      sources: SourceLabel.cleanAll(json['sources']),
     );
   }
 }

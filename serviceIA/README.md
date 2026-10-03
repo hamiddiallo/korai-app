@@ -39,7 +39,7 @@ VersionFinale/
 | `backend/KORAI-APP/chroma_db/` | 337 Mo | déjà copiée ici ; ou à reconstruire avec `pdf_processor.py` |
 | `backend/utils/checkpoints/best_efficientNetB0_final_all_ds.pth` | 16 Mo | déjà copié ici |
 | `backend/test_set/` (45 images patients) | 2 Mo | **non copié** : `Version4/backend/test_set/`, à placer ici seulement pour les évaluations |
-| Corpus PDF (23 documents) | — | `C:\Users\DonutGiveUp\Documents\KORAI\documents_orl` |
+| Corpus PDF (23 documents) | — | poste de l'auteur de la base (à demander) ; à indiquer avec `--pdf-folder` pour réindexer |
 | `backend/.env` | — | à créer depuis `.env.example`, avec vos propres clés |
 
 À partager via un espace de stockage de l'entreprise (ou Git LFS pour les modèles), jamais par e-mail.
