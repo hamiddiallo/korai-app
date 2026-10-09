@@ -1,13 +1,14 @@
 import 'package:flutter/foundation.dart';
 
 import '../../../core/domain/korai_enums.dart';
+import '../../../core/refresh/live_refresh.dart';
 import '../data/nurse_repository.dart';
 import '../domain/ai_case.dart';
 import '../domain/patient.dart';
 
 /// Données de travail du soignant (patients et consultations), partagées par
-/// tous ses écrans. Chaque écran écoute ce modèle : une relance ou une demande
-/// d'avis se reflète partout sans rechargement manuel.
+/// tous ses écrans. Chaque écran écoute ce modèle : une relance, une demande
+/// d'avis ou l'avis du spécialiste se reflète partout sans rechargement manuel.
 class NurseWorkspace extends ChangeNotifier {
   NurseWorkspace(this.repository);
 
@@ -19,27 +20,46 @@ class NurseWorkspace extends ChangeNotifier {
   bool loadedOnce = false;
   Object? error;
 
-  Future<void> refresh() async {
+  late final _refresh = SerialRefresh(_fetch);
+
+  /// Changements faits sur l'appareil pendant une lecture : elle est refaite
+  /// pour ne pas les écraser avec des données plus anciennes.
+  int _localChanges = 0;
+
+  /// Relit patients et consultations ; les données affichées restent en place
+  /// pendant la lecture (relectures automatiques invisibles).
+  Future<void> refresh() => _refresh();
+
+  Future<void> _fetch() async {
     loading = true;
-    error = null;
     notifyListeners();
     try {
-      // Les patients ont leur propre repli hors ligne (cache de l'appareil).
-      final patientsFuture = repository.listPatients();
+      List<Patient> freshPatients;
       List<AiCase>? serverCases;
-      try {
-        serverCases = await repository.listCases();
-      } catch (e) {
-        // Hors ligne : on garde les consultations déjà chargées, l'erreur est
-        // signalée, et celles saisies sur l'appareil restent visibles.
-        error = e;
-      }
-      patients = await patientsFuture;
+      Object? casesError;
+      int seen;
+      do {
+        seen = _localChanges;
+        // Les patients ont leur propre repli hors ligne (cache de l'appareil).
+        final patientsFuture = repository.listPatients();
+        try {
+          serverCases = await repository.listCases();
+          casesError = null;
+        } catch (e) {
+          // Hors ligne : on garde les consultations déjà chargées, l'erreur est
+          // signalée, et celles saisies sur l'appareil restent visibles.
+          serverCases = null;
+          casesError = e;
+        }
+        freshPatients = await patientsFuture;
+      } while (seen != _localChanges);
       final unsent = await repository.listUnsentConsultations().catchError((_) => <AiCase>[]);
       final known = serverCases ?? cases.where((c) => !c.isLocalOnly).toList();
+      patients = freshPatients;
       // Les consultations pas encore envoyées apparaissent aussi (dossier,
       // historique), marquées « À envoyer ».
       cases = [...unsent, ...known].sortedByNewest();
+      error = casesError;
       loadedOnce = true;
     } catch (e) {
       error = e;
@@ -50,6 +70,7 @@ class NurseWorkspace extends ChangeNotifier {
   }
 
   void upsertCase(AiCase updated) {
+    _localChanges++;
     final index = cases.indexWhere((c) => c.id == updated.id);
     final next = [...cases];
     if (index >= 0) {
@@ -142,6 +163,7 @@ class NurseWorkspace extends ChangeNotifier {
   /// Accords recueillis auprès du patient (réseau requis).
   Future<Patient> updateConsents(Patient p, {required bool ai, required bool teleExpertise}) async {
     final updated = await repository.updateConsents(p.id, consentForAi: ai, consentForTeleExpertise: teleExpertise);
+    _localChanges++;
     patients = [for (final existing in patients) existing.id == updated.id ? updated : existing];
     notifyListeners();
     return updated;

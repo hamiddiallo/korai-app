@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/api/api_client.dart';
 import '../../../core/design/design.dart';
+import '../../../core/refresh/live_refresh.dart';
 import '../../../core/utils/consultation_format.dart';
 import '../data/nurse_registration_repository.dart';
 
@@ -24,11 +25,12 @@ class NurseRequestsPage extends StatefulWidget {
   State<NurseRequestsPage> createState() => _NurseRequestsPageState();
 }
 
-class _NurseRequestsPageState extends State<NurseRequestsPage> {
+class _NurseRequestsPageState extends State<NurseRequestsPage> with LiveReloadState {
   late final NurseRegistrationRepository _repository = NurseRegistrationRepository(widget.apiClient);
 
   List<NurseRequest> _requests = const [];
   bool _loading = true;
+  bool _loadedOnce = false;
   Object? _error;
   _Tab _tab = _Tab.pending;
   final Set<String> _busy = {};
@@ -39,15 +41,30 @@ class _NurseRequestsPageState extends State<NurseRequestsPage> {
     _load();
   }
 
-  Future<void> _load() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
+  // Une nouvelle demande d'inscription est notifiée à l'encadrant.
+  @override
+  Set<LiveTopic> get liveTopics => const {LiveTopic.registrations};
+
+  @override
+  Future<void> liveReload() => _load();
+
+  /// Relit les demandes, une lecture à la fois ; celles déjà affichées restent
+  /// visibles pendant la lecture.
+  Future<void> _load() => _reload();
+
+  late final _reload = SerialRefresh(_fetch);
+
+  Future<void> _fetch() async {
+    if (!mounted) return;
+    setState(() => _loading = true);
     try {
       final requests = await _repository.list();
       if (!mounted) return;
-      setState(() => _requests = requests);
+      setState(() {
+        _requests = requests;
+        _error = null;
+        _loadedOnce = true;
+      });
       widget.onPendingCountChanged?.call(requests.where((r) => r.isPending).length);
     } catch (e) {
       if (mounted) setState(() => _error = e);
@@ -102,9 +119,9 @@ class _NurseRequestsPageState extends State<NurseRequestsPage> {
     final list = _tab == _Tab.pending ? pending : processed;
 
     final Widget body;
-    if (_loading) {
+    if (!_loadedOnce && _loading) {
       body = const KSkeletonList(count: 3);
-    } else if (_error != null) {
+    } else if (!_loadedOnce && _error != null) {
       body = KErrorView(error: _error!, onRetry: _load);
     } else {
       body = RefreshIndicator(
@@ -112,6 +129,16 @@ class _NurseRequestsPageState extends State<NurseRequestsPage> {
         child: ListView(
           padding: const EdgeInsets.fromLTRB(KSpace.gutter, KSpace.xs, KSpace.gutter, 120),
           children: [
+            if (_error != null) ...[
+              KBanner(
+                tone: KTone.warning,
+                title: 'Liste peut-être incomplète',
+                message: friendlyError(_error!),
+                actionLabel: 'Réessayer',
+                onAction: _load,
+              ),
+              const SizedBox(height: KSpace.sm),
+            ],
             KSegmented<_Tab>(
               segments: [
                 KSegment(value: _Tab.pending, label: 'En attente', count: pending.length),

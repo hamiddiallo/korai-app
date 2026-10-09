@@ -25,6 +25,8 @@ class ConsultationHistoryList extends StatelessWidget {
     this.onRequestExpertise,
     this.onConsultationUpdated,
     this.onRetryFailed,
+    this.updates,
+    this.latest,
   });
 
   final List<AiCase> consultations;
@@ -42,6 +44,10 @@ class ConsultationHistoryList extends StatelessWidget {
   /// consultation mise à jour.
   final Future<AiCase> Function(AiCase consultation)? onRetryFailed;
 
+  /// Source à jour des consultations : le détail ouvert suit ses relectures.
+  final Listenable? updates;
+  final CaseLookup? latest;
+
   static Future<void> openDetail(
     BuildContext context,
     AiCase consultation, {
@@ -51,6 +57,8 @@ class ConsultationHistoryList extends StatelessWidget {
     ValueChanged<AiCase>? onConsultationUpdated,
     Future<AiCase> Function(AiCase)? onRetry,
     ValueChanged<AiCase>? onResumeDraft,
+    Listenable? updates,
+    CaseLookup? latest,
   }) {
     return Navigator.of(context).push(
       MaterialPageRoute(
@@ -61,6 +69,8 @@ class ConsultationHistoryList extends StatelessWidget {
           onRequestExpertise: onRequestExpertise,
           onConsultationUpdated: onConsultationUpdated,
           onRetry: onRetry,
+          updates: updates,
+          latest: latest,
           onResumeDraft: onResumeDraft == null
               ? null
               : (draft) {
@@ -102,6 +112,8 @@ class ConsultationHistoryList extends StatelessWidget {
               onConsultationUpdated: onConsultationUpdated,
               onRetry: onRetryFailed,
               onResumeDraft: onResumeDraft,
+              updates: updates,
+              latest: latest,
             ),
           ),
           const SizedBox(height: KSpace.xs),

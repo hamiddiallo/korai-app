@@ -10,8 +10,9 @@ import '../widgets/inbox_card.dart';
 
 enum _UrgencyFilter { all, high, medium, low }
 
-/// File d'expertise : chiffres du jour, filtre par urgence, demandes triées
-/// de la plus urgente à la moins urgente.
+/// File d'expertise : chiffres du jour, filtre par urgence, demandes que
+/// personne n'a prises, de la plus urgente à la moins urgente. Un dossier pris
+/// en charge quitte la file pour « Mes dossiers ».
 class SpecialistQueueTab extends StatefulWidget {
   const SpecialistQueueTab({
     super.key,
@@ -19,12 +20,14 @@ class SpecialistQueueTab extends StatefulWidget {
     required this.userName,
     required this.onOpen,
     required this.onNotificationTap,
+    required this.onGoToMine,
   });
 
   final SpecialistInbox inbox;
   final String userName;
   final void Function(ExpertiseInboxItem item) onOpen;
   final NotificationTapCallback onNotificationTap;
+  final VoidCallback onGoToMine;
 
   @override
   State<SpecialistQueueTab> createState() => _SpecialistQueueTabState();
@@ -53,6 +56,7 @@ class _SpecialistQueueTabState extends State<SpecialistQueueTab> {
           _UrgencyFilter.low => queue.where((i) => i.urgency == UrgencyLevel.low || i.urgency == null).toList(),
         };
         final colleagues = inbox.items.where(inbox.isTakenByColleague).length;
+        final mine = inbox.mine.length;
 
         return RefreshIndicator(
           onRefresh: inbox.refresh,
@@ -101,6 +105,18 @@ class _SpecialistQueueTabState extends State<SpecialistQueueTab> {
                   toTake: inbox.toTakeCount,
                   averageWaiting: inbox.averageWaiting,
                 ),
+                if (mine > 0) ...[
+                  const SizedBox(height: KSpace.md),
+                  KBanner(
+                    tone: KTone.info,
+                    icon: Icons.assignment_ind_outlined,
+                    message: mine == 1
+                        ? 'Vous avez 1 dossier pris en charge, avis à rendre.'
+                        : 'Vous avez $mine dossiers pris en charge, avis à rendre.',
+                    actionLabel: 'Mes dossiers',
+                    onAction: widget.onGoToMine,
+                  ),
+                ],
                 const SizedBox(height: KSpace.lg),
                 KSectionHeader(title: 'Demandes d’avis', count: queue.isEmpty ? null : queue.length),
                 const SizedBox(height: KSpace.xs),
@@ -123,7 +139,8 @@ class _SpecialistQueueTabState extends State<SpecialistQueueTab> {
                     title: 'Aucune demande d’avis',
                     message: colleagues > 0
                         ? 'Les $colleagues dossier${colleagues > 1 ? 's' : ''} en cours sont déjà pris en charge par vos confrères.'
-                        : 'Les demandes des soignants apparaîtront ici, les plus urgentes en premier.',
+                        : 'Les demandes des soignants apparaîtront ici, les plus urgentes en premier. '
+                            'Un dossier pris en charge passe dans « Mes dossiers ».',
                     actionLabel: 'Actualiser',
                     onAction: inbox.refresh,
                     compact: true,

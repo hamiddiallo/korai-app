@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/design/design.dart';
+import '../../../core/refresh/live_refresh.dart';
 import '../data/admin_repository.dart';
 import '../domain/admin_models.dart';
 import 'admin_widgets.dart';
@@ -251,7 +252,7 @@ class FacilitiesView extends StatefulWidget {
   State<FacilitiesView> createState() => _FacilitiesViewState();
 }
 
-class _FacilitiesViewState extends State<FacilitiesView> {
+class _FacilitiesViewState extends State<FacilitiesView> with LiveReloadState {
   List<AdminFacility> _items = const [];
   bool _loading = false;
   bool _loadedOnce = false;
@@ -263,16 +264,18 @@ class _FacilitiesViewState extends State<FacilitiesView> {
     _load();
   }
 
+  // Relu au retour de l'application au premier plan (changements faits ailleurs).
+  @override
+  Future<void> liveReload() => _load();
+
   Future<void> _load() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
+    setState(() => _loading = true);
     try {
       final items = await widget.repository.listFacilities();
       if (mounted) {
         setState(() {
           _items = items;
+          _error = null;
           _loadedOnce = true;
         });
       }

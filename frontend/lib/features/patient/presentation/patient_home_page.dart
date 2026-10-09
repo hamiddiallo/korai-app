@@ -9,6 +9,7 @@ import '../../../core/auth/profile_sheets.dart';
 import '../../../core/auth/session_controller.dart';
 import '../../../core/design/design.dart';
 import '../../../core/notifications/notification_center.dart';
+import '../../../core/refresh/live_refresh.dart';
 import '../../../core/utils/patient_age.dart';
 import '../../../core/utils/validators.dart';
 import '../../chatbot/presentation/korai_chatbot_screen.dart';
@@ -30,11 +31,25 @@ class PatientHomePage extends StatefulWidget {
   State<PatientHomePage> createState() => _PatientHomePageState();
 }
 
-class _PatientHomePageState extends State<PatientHomePage> {
+class _PatientHomePageState extends State<PatientHomePage> with LiveReloadState {
   late final PatientConsultationViewModel viewModel;
   late final StreamSubscription<PatientConsultationState> _subscription;
   final form = PatientFormControllers();
   int _tab = 0; // 0 dossier, 1 assistant, 2 profil
+
+  /// Change à chaque mise à jour du dossier : le détail d'une consultation
+  /// ouvert suit les relectures (compte-rendu du spécialiste).
+  final _dossierVersion = ValueNotifier<int>(0);
+
+  // Validation du dossier : notifiée. Résultats d'un avis : relève toutes les 2 min.
+  @override
+  Set<LiveTopic> get liveTopics => const {LiveTopic.patients, LiveTopic.consultations};
+
+  @override
+  Duration? get livePollEvery => const Duration(minutes: 2);
+
+  @override
+  Future<void> liveReload() => viewModel.refresh();
 
   @override
   void initState() {
@@ -44,6 +59,7 @@ class _PatientHomePageState extends State<PatientHomePage> {
       session: widget.session,
     );
     _subscription = viewModel.stream.listen((_) {
+      _dossierVersion.value++;
       final p = viewModel.patient;
       if (p != null) form.fillOnce(p, fallbackPhone: widget.session.user?.phone);
       if (viewModel.isReadOnly && viewModel.readOnlyNotes != null) {
@@ -56,18 +72,21 @@ class _PatientHomePageState extends State<PatientHomePage> {
   @override
   void dispose() {
     _subscription.cancel();
+    _dossierVersion.dispose();
     form.dispose();
     viewModel.close();
     super.dispose();
   }
 
-  Future<void> _startPreconsultation() {
-    return Navigator.of(context).push(
+  Future<void> _startPreconsultation() async {
+    await Navigator.of(context).push(
       MaterialPageRoute(
         fullscreenDialog: true,
         builder: (_) => PatientPreconsultationPage(viewModel: viewModel, form: form),
       ),
     );
+    // Retour au dossier : la pré-consultation envoyée y figure.
+    viewModel.refresh();
   }
 
   @override
@@ -109,6 +128,7 @@ class _PatientHomePageState extends State<PatientHomePage> {
                   viewModel: viewModel,
                   userName: widget.session.user?.fullName ?? viewModel.patient!.fullName,
                   onStart: _startPreconsultation,
+                  updates: _dossierVersion,
                 ),
                 KoraiChatbotScreen(
                   apiClient: widget.session.apiClient,
@@ -163,11 +183,12 @@ class _Blocked extends StatelessWidget {
 // ---------------------------------------------------------------------------
 
 class _DossierTab extends StatelessWidget {
-  const _DossierTab({required this.viewModel, required this.userName, required this.onStart});
+  const _DossierTab({required this.viewModel, required this.userName, required this.onStart, required this.updates});
 
   final PatientConsultationViewModel viewModel;
   final String userName;
   final VoidCallback onStart;
+  final Listenable updates;
 
   String get _firstName {
     final parts = userName.trim().split(RegExp(r'\s+'));
@@ -234,6 +255,8 @@ class _DossierTab extends StatelessWidget {
           emptyMessage: 'Vos consultations apparaîtront ici après votre visite.',
           showStartButton: false,
           forPatient: true,
+          updates: updates,
+          latest: (id) => vm.consultations.where((c) => c.id == id).firstOrNull,
         ),
     ];
   }

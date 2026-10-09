@@ -9,27 +9,29 @@ import '../../../../core/widgets/otoscopy_photo.dart';
 import '../../../nurse/domain/ai_case.dart';
 import '../../../nurse/presentation/widgets/ai_proposal_block.dart';
 import '../../data/specialist_repository.dart';
+import '../specialist_inbox.dart';
 
 enum _Section { clinical, ai, opinion }
 
 /// Dossier d'une demande d'avis : données cliniques, proposition de l'IA et
 /// avis du spécialiste. L'action principale reste sous le pouce :
-/// « Prendre en charge », puis « Envoyer l'avis ».
+/// « Prendre en charge », puis « Envoyer l'avis ». L'écran suit la file : un
+/// dossier pris entre-temps par un confrère ne peut plus être pris.
 class SpecialistReviewPage extends StatefulWidget {
   const SpecialistReviewPage({
     super.key,
     required this.repository,
+    required this.inbox,
     required this.item,
     required this.currentUserId,
-    required this.onChanged,
   });
 
   final SpecialistRepository repository;
+
+  /// File partagée : mise à jour après une prise en charge ou un avis envoyé.
+  final SpecialistInbox inbox;
   final ExpertiseInboxItem item;
   final String? currentUserId;
-
-  /// Appelé après une prise en charge ou un avis envoyé (rafraîchir la file).
-  final VoidCallback onChanged;
 
   @override
   State<SpecialistReviewPage> createState() => _SpecialistReviewPageState();
@@ -48,10 +50,13 @@ class _SpecialistReviewPageState extends State<SpecialistReviewPage> {
   bool _assigned = false;
   bool _takenByColleague = false;
   bool _sent = false;
+
+  /// Le dossier n'est plus dans la file : pris par un confrère ou avis rendu.
+  bool _gone = false;
   ExpertDecision _decision = ExpertDecision.validated;
   _Section _section = _Section.clinical;
 
-  ExpertiseInboxItem get _item => widget.item;
+  ExpertiseInboxItem get _item => widget.inbox.find(widget.item.consultationId) ?? widget.item;
 
   @override
   void initState() {
@@ -59,11 +64,29 @@ class _SpecialistReviewPageState extends State<SpecialistReviewPage> {
     final me = widget.currentUserId;
     _assigned = _item.status == ExpertiseStatus.inReview && me != null && _item.assignedToUserId == me;
     _takenByColleague = _item.assignedToUserId != null && _item.assignedToUserId != me;
+    widget.inbox.addListener(_onInboxChanged);
     _load();
+  }
+
+  /// La file a été relue : un confrère a peut-être pris le dossier entre-temps.
+  void _onInboxChanged() {
+    if (_sent || !widget.inbox.loadedOnce) return;
+    final fresh = widget.inbox.find(widget.item.consultationId);
+    final me = widget.currentUserId;
+    final gone = fresh == null;
+    final assigned = _assigned || (fresh != null && me != null && fresh.assignedToUserId == me);
+    final takenByColleague = fresh != null && fresh.assignedToUserId != null && fresh.assignedToUserId != me;
+    if (gone == _gone && assigned == _assigned && takenByColleague == _takenByColleague) return;
+    setState(() {
+      _gone = gone;
+      _assigned = assigned;
+      _takenByColleague = takenByColleague;
+    });
   }
 
   @override
   void dispose() {
+    widget.inbox.removeListener(_onInboxChanged);
     _diagnosis.dispose();
     _clinicalSummary.dispose();
     _recommendation.dispose();
@@ -108,12 +131,13 @@ class _SpecialistReviewPageState extends State<SpecialistReviewPage> {
         _assigned = true;
         _section = _Section.opinion;
       });
-      widget.onChanged();
-      KSnack.success(context, 'Dossier pris en charge. Vous pouvez rédiger votre avis.');
+      // Le dossier quitte la file tout de suite et rejoint « Mes dossiers ».
+      widget.inbox.markTakenByMe(_item.consultationId);
+      KSnack.success(context, 'Dossier pris en charge : il est maintenant dans « Mes dossiers ».');
     } catch (e) {
       if (!mounted) return;
       KSnack.error(context, e);
-      widget.onChanged();
+      widget.inbox.refresh();
     }
   }
 
@@ -140,7 +164,7 @@ class _SpecialistReviewPageState extends State<SpecialistReviewPage> {
       );
       if (!mounted) return;
       setState(() => _sent = true);
-      widget.onChanged();
+      widget.inbox.remove(_item.consultationId);
       await Navigator.of(context).pushReplacement(
         MaterialPageRoute(
           builder: (ctx) => KResultScreen(
@@ -215,7 +239,7 @@ class _SpecialistReviewPageState extends State<SpecialistReviewPage> {
     }
 
     return PopScope(
-      canPop: _sent || !_assigned,
+      canPop: _sent || _gone || !_assigned,
       onPopInvokedWithResult: (didPop, _) => _onPop(didPop),
       child: Scaffold(
         appBar: appBar,
@@ -225,6 +249,17 @@ class _SpecialistReviewPageState extends State<SpecialistReviewPage> {
               padding: const EdgeInsets.fromLTRB(KSpace.gutter, KSpace.xs, KSpace.gutter, KSpace.sm),
               child: _Summary(item: _item, consultation: c),
             ),
+            if (_gone)
+              const Padding(
+                padding: EdgeInsets.fromLTRB(KSpace.gutter, 0, KSpace.gutter, KSpace.sm),
+                child: KBanner(
+                  tone: KTone.warning,
+                  icon: Icons.lock_outline_rounded,
+                  title: 'Dossier retiré de votre file',
+                  message:
+                      'Un confrère l’a pris en charge ou l’avis a déjà été rendu. Vous pouvez encore le consulter.',
+                ),
+              ),
             Padding(
               padding: const EdgeInsets.fromLTRB(KSpace.gutter, 0, KSpace.gutter, KSpace.sm),
               child: KSegmented<_Section>(
@@ -255,7 +290,7 @@ class _SpecialistReviewPageState extends State<SpecialistReviewPage> {
   }
 
   Widget? _bottomBar() {
-    if (_takenByColleague) return null;
+    if (_takenByColleague || _gone) return null;
     final k = context.k;
     final Widget action;
     if (!_assigned) {
@@ -301,6 +336,19 @@ class _SpecialistReviewPageState extends State<SpecialistReviewPage> {
             icon: Icons.lock_outline_rounded,
             title: 'Pris en charge par un confrère',
             message: 'Vous pouvez consulter ce dossier. Seul le spécialiste qui l’a pris en charge peut rendre l’avis.',
+          ),
+        ],
+      );
+    }
+    if (_gone) {
+      return ListView(
+        padding: const EdgeInsets.fromLTRB(KSpace.gutter, KSpace.lg, KSpace.gutter, KSpace.xl),
+        children: const [
+          KEmptyView(
+            icon: Icons.lock_outline_rounded,
+            title: 'Avis impossible sur ce dossier',
+            message: 'Revenez à la file pour choisir une autre demande.',
+            compact: true,
           ),
         ],
       );
@@ -437,9 +485,13 @@ class _Summary extends StatelessWidget {
                     Text('  ·  ', style: context.text.bodySmall),
                     Icon(Icons.schedule_rounded, size: 14, color: k.inkMuted),
                     const SizedBox(width: 3),
-                    Text(
-                      'attend depuis ${ConsultationFormat.formatWaiting(item.waiting)}',
-                      style: context.text.bodySmall,
+                    Flexible(
+                      child: Text(
+                        'attend depuis ${ConsultationFormat.formatWaiting(item.waiting)}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: context.text.bodySmall,
+                      ),
                     ),
                   ],
                 ),

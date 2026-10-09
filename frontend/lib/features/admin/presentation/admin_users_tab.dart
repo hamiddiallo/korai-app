@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/design/design.dart';
+import '../../../core/refresh/live_refresh.dart';
 import '../../../core/utils/validators.dart';
 import '../data/admin_repository.dart';
 import '../domain/admin_models.dart';
@@ -16,7 +17,7 @@ class AdminUsersTab extends StatefulWidget {
   State<AdminUsersTab> createState() => _AdminUsersTabState();
 }
 
-class _AdminUsersTabState extends State<AdminUsersTab> {
+class _AdminUsersTabState extends State<AdminUsersTab> with LiveReloadState {
   List<AdminUser> _users = const [];
   bool _loading = true;
   bool _loadedOnce = false;
@@ -32,6 +33,10 @@ class _AdminUsersTabState extends State<AdminUsersTab> {
     super.initState();
     _load();
   }
+
+  // Relu au retour de l'application au premier plan (changements faits ailleurs).
+  @override
+  Future<void> liveReload() => _load();
 
   Future<void> _load() async {
     setState(() => _loading = true);

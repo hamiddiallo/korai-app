@@ -36,6 +36,21 @@ class ExpertiseInboxItem {
   final EarSide earSide;
   final List<String> symptomLabels;
 
+  ExpertiseInboxItem copyWith({String? assignedToUserId, ExpertiseStatus? status}) => ExpertiseInboxItem(
+        expertiseId: expertiseId,
+        consultationId: consultationId,
+        status: status ?? this.status,
+        createdAt: createdAt,
+        assignedToUserId: assignedToUserId ?? this.assignedToUserId,
+        patientFirstName: patientFirstName,
+        patientLastName: patientLastName,
+        aiDiagnosis: aiDiagnosis,
+        aiConfidence: aiConfidence,
+        urgency: urgency,
+        earSide: earSide,
+        symptomLabels: symptomLabels,
+      );
+
   DateTime? get createdAtDate => DateTime.tryParse(createdAt);
 
   /// Temps d'attente depuis la demande d'avis.

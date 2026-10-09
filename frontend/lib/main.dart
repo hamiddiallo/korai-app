@@ -15,6 +15,7 @@ import 'core/auth/session_controller.dart';
 import 'core/design/design.dart';
 import 'core/notifications/notification_cubit.dart';
 import 'core/notifications/notification_repository.dart';
+import 'core/refresh/live_refresh.dart';
 import 'core/storage/local_data_conflict_page.dart';
 import 'core/storage/local_data_guard.dart';
 import 'core/sync/sync_cubit.dart';
@@ -77,6 +78,9 @@ class _KoraiAppState extends State<KoraiApp> {
   late final ProtectedImageLoader photoLoader = ProtectedImageLoader.api(apiClient);
   late final NotificationCubit notificationCubit;
   late final AppLockCubit appLock;
+
+  /// Relecture automatique des écrans (premier plan, notifications, relève).
+  final live = LiveRefresh();
   late final AppLifecycleListener _lifecycle;
   StreamSubscription<AuthState>? _authSubscription;
   StreamSubscription<AppLockState>? _lockSubscription;
@@ -104,7 +108,11 @@ class _KoraiAppState extends State<KoraiApp> {
     syncCubit = SyncCubit(syncService: SyncService(apiClient: apiClient));
     notificationCubit = NotificationCubit(
       repository: NotificationRepository(apiClient),
+      // Une notification annonce un changement (dossier pris, avis rendu,
+      // compte validé) : les écrans concernés se relisent sans attendre.
+      onNewNotifications: (fresh) => live.changed(LiveTopic.fromNotifications(fresh)),
     );
+    live.listen(reload: notificationCubit.refresh, pollEvery: const Duration(seconds: 30));
     appLock = AppLockCubit()..load();
     _lockSubscription = appLock.stream.listen((lock) {
       // Clavier fermé quand l'écran de verrouillage apparaît.
@@ -122,8 +130,10 @@ class _KoraiAppState extends State<KoraiApp> {
       case AppLifecycleState.hidden:
       case AppLifecycleState.paused:
         appLock.onBackgrounded();
+        live.paused();
       case AppLifecycleState.resumed:
         appLock.onForegrounded();
+        live.resumed();
       default:
         break;
     }
@@ -165,6 +175,7 @@ class _KoraiAppState extends State<KoraiApp> {
   void _onLocalDataReady() {
     syncCubit.start();
     notificationCubit.start();
+    live.start();
     if (_offerLockWhenReady) {
       _offerLockWhenReady = false;
       _offerAppLock();
@@ -174,6 +185,7 @@ class _KoraiAppState extends State<KoraiApp> {
   @override
   void dispose() {
     _lifecycle.dispose();
+    live.dispose();
     _lockSubscription?.cancel();
     appLock.close();
     _authSubscription?.cancel();
@@ -194,6 +206,7 @@ class _KoraiAppState extends State<KoraiApp> {
     } else if (!state.isAuthenticated && !state.isRestoring) {
       syncCubit.stop();
       notificationCubit.stop();
+      live.stop();
       _claimedUserId = null;
       _localData = null;
       _offerLockWhenReady = false;
@@ -225,50 +238,54 @@ class _KoraiAppState extends State<KoraiApp> {
 
   @override
   Widget build(BuildContext context) {
-    return MultiBlocProvider(
-      providers: [
-        RepositoryProvider<ProtectedImageLoader>.value(value: photoLoader),
-        BlocProvider<AuthCubit>.value(value: session),
-        BlocProvider<SyncCubit>.value(value: syncCubit),
-        BlocProvider<NotificationCubit>.value(value: notificationCubit),
-        BlocProvider<AppLockCubit>.value(value: appLock),
-      ],
-      child: BlocBuilder<AuthCubit, AuthState>(
-        bloc: session,
-        builder: (context, authState) => BlocBuilder<AppLockCubit, AppLockState>(
-          bloc: appLock,
-          buildWhen: (a, b) => a.ready != b.ready || a.locked != b.locked,
-          builder: (context, lock) {
-            final showLock = authState.isAuthenticated && lock.locked;
-            return MaterialApp(
-              navigatorKey: _navigatorKey,
-              debugShowCheckedModeBanner: false,
-              title: 'Korai ORL',
-              theme: KoraiTheme.light(),
-              darkTheme: KoraiTheme.dark(),
-              themeMode: ThemeMode.system,
-              scrollBehavior: MyCustomScrollBehavior(),
-              // Réglages du verrou lus avant d'afficher un espace : aucun
-              // dossier n'apparaît, même un instant, sur un appareil verrouillé.
-              home: _home(authState, lock),
-              builder: (context, child) => Stack(
-                children: [
-                  ExcludeSemantics(
-                    excluding: showLock,
-                    child: IgnorePointer(ignoring: showLock, child: child ?? const SizedBox.shrink()),
-                  ),
-                  if (showLock)
-                    Positioned.fill(
-                      child: LockScreen(
-                        userName: authState.user?.fullName ?? '',
-                        onUsePassword: session.logout,
-                      ),
+    return LiveRefreshScope(
+      live: live,
+      child: MultiBlocProvider(
+        providers: [
+          RepositoryProvider<ProtectedImageLoader>.value(value: photoLoader),
+          BlocProvider<AuthCubit>.value(value: session),
+          BlocProvider<SyncCubit>.value(value: syncCubit),
+          BlocProvider<NotificationCubit>.value(value: notificationCubit),
+          BlocProvider<AppLockCubit>.value(value: appLock),
+        ],
+        child: BlocBuilder<AuthCubit, AuthState>(
+          bloc: session,
+          builder: (context, authState) => BlocBuilder<AppLockCubit, AppLockState>(
+            bloc: appLock,
+            buildWhen: (a, b) => a.ready != b.ready || a.locked != b.locked,
+            builder: (context, lock) {
+              final showLock = authState.isAuthenticated && lock.locked;
+              return MaterialApp(
+                navigatorKey: _navigatorKey,
+                debugShowCheckedModeBanner: false,
+                title: 'Korai ORL',
+                theme: KoraiTheme.light(),
+                darkTheme: KoraiTheme.dark(),
+                themeMode: ThemeMode.system,
+                scrollBehavior: MyCustomScrollBehavior(),
+                // Réglages du verrou lus avant d'afficher un espace : aucun
+                // dossier n'apparaît, même un instant, sur un appareil verrouillé.
+                home: _home(authState, lock),
+                builder: (context, child) => Stack(
+                  children: [
+                    ExcludeSemantics(
+                      excluding: showLock,
+                      child: IgnorePointer(ignoring: showLock, child: child ?? const SizedBox.shrink()),
                     ),
-                  if (authState.isAuthenticated && _obscured && !showLock) const Positioned.fill(child: PrivacyCover()),
-                ],
-              ),
-            );
-          },
+                    if (showLock)
+                      Positioned.fill(
+                        child: LockScreen(
+                          userName: authState.user?.fullName ?? '',
+                          onUsePassword: session.logout,
+                        ),
+                      ),
+                    if (authState.isAuthenticated && _obscured && !showLock)
+                      const Positioned.fill(child: PrivacyCover()),
+                  ],
+                ),
+              );
+            },
+          ),
         ),
       ),
     );

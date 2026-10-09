@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/design/design.dart';
+import '../../../core/refresh/live_refresh.dart';
 import '../../../core/utils/validators.dart';
 import '../data/admin_repository.dart';
 import '../domain/admin_models.dart';
@@ -17,7 +18,7 @@ class MedecinsTab extends StatefulWidget {
   State<MedecinsTab> createState() => _MedecinsTabState();
 }
 
-class _MedecinsTabState extends State<MedecinsTab> {
+class _MedecinsTabState extends State<MedecinsTab> with LiveReloadState {
   List<Medecin> _items = const [];
   bool _loading = true;
   bool _loadedOnce = false;
@@ -28,6 +29,10 @@ class _MedecinsTabState extends State<MedecinsTab> {
     super.initState();
     _load();
   }
+
+  // Relu au retour de l'application au premier plan (changements faits ailleurs).
+  @override
+  Future<void> liveReload() => _load();
 
   Future<void> _load() async {
     setState(() => _loading = true);

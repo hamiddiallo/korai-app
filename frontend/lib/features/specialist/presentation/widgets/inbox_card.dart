@@ -70,9 +70,13 @@ class InboxCard extends StatelessWidget {
                                     Text('  ·  ', style: context.text.bodySmall),
                                     Icon(Icons.schedule_rounded, size: 14, color: k.inkMuted),
                                     const SizedBox(width: 3),
-                                    Text(
-                                      ConsultationFormat.formatWaiting(item.waiting),
-                                      style: context.text.bodySmall?.copyWith(fontFamily: KFonts.mono),
+                                    Flexible(
+                                      child: Text(
+                                        ConsultationFormat.formatWaiting(item.waiting),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: context.text.bodySmall?.copyWith(fontFamily: KFonts.mono),
+                                      ),
                                     ),
                                   ],
                                 ),

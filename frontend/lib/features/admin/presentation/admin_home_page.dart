@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../core/auth/logout.dart';
 import '../../../core/auth/session_controller.dart';
 import '../../../core/design/design.dart';
+import '../../../core/refresh/live_refresh.dart';
 import '../data/admin_repository.dart';
 import '../domain/admin_models.dart';
 import 'admin_audit_tab.dart';
@@ -59,7 +60,7 @@ class AdminHomePage extends StatefulWidget {
   State<AdminHomePage> createState() => _AdminHomePageState();
 }
 
-class _AdminHomePageState extends State<AdminHomePage> {
+class _AdminHomePageState extends State<AdminHomePage> with LiveReloadState {
   late final AdminRepository repository;
 
   _Section? _section;
@@ -75,6 +76,12 @@ class _AdminHomePageState extends State<AdminHomePage> {
     super.initState();
     repository = AdminRepository(widget.session.apiClient);
     _loadStats();
+  }
+
+  // Chiffres relus au retour au premier plan ; une rubrique ouverte se relit elle-même.
+  @override
+  Future<void> liveReload() async {
+    if (_section == null) await _loadStats();
   }
 
   Future<void> _loadStats() async {

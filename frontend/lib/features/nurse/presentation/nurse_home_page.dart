@@ -5,6 +5,7 @@ import '../../../core/auth/profile_page.dart';
 import '../../../core/auth/session_controller.dart';
 import '../../../core/design/design.dart';
 import '../../../core/notifications/notification_models.dart';
+import '../../../core/refresh/live_refresh.dart';
 import '../../chatbot/presentation/korai_chatbot_screen.dart';
 import '../data/nurse_repository.dart';
 import '../domain/ai_case.dart';
@@ -32,7 +33,7 @@ class NurseHomePage extends StatefulWidget {
   State<NurseHomePage> createState() => _NurseHomePageState();
 }
 
-class _NurseHomePageState extends State<NurseHomePage> {
+class _NurseHomePageState extends State<NurseHomePage> with LiveReloadState {
   late final NurseRepository _repository;
   late final NurseConsultationViewModel _viewModel;
   late final NurseWorkspace _workspace;
@@ -55,6 +56,17 @@ class _NurseHomePageState extends State<NurseHomePage> {
     _viewModel = NurseConsultationViewModel(repository: _repository)..loadClinicalReferences();
     _workspace = NurseWorkspace(_repository)..refresh();
   }
+
+  // Avis du spécialiste et dossier validé arrivent par notification ; la relève
+  // toutes les 2 min couvre le reste (patient inscrit seul, collègue du centre).
+  @override
+  Set<LiveTopic> get liveTopics => const {LiveTopic.consultations, LiveTopic.patients};
+
+  @override
+  Duration? get livePollEvery => const Duration(minutes: 2);
+
+  @override
+  Future<void> liveReload() => _workspace.refresh();
 
   @override
   void dispose() {
@@ -108,6 +120,8 @@ class _NurseHomePageState extends State<NurseHomePage> {
       onRequestExpertise: _workspace.requestExpertise,
       onConsultationUpdated: _workspace.upsertCase,
       onRetry: _workspace.retryDiagnosis,
+      updates: _workspace,
+      latest: _workspace.caseById,
       onResumeDraft: (draft) => _startConsultation(
         patient: _workspace.patientById(draft.patientId),
         prefill: draft.symptoms,
@@ -129,18 +143,22 @@ class _NurseHomePageState extends State<NurseHomePage> {
     );
   }
 
-  void _onNotificationTap(AppNotification notification) {
-    final consultation = notification.consultationId == null ? null : _workspace.caseById(notification.consultationId!);
+  Future<void> _onNotificationTap(AppNotification notification) async {
+    final consultationId = notification.consultationId;
+    var consultation = consultationId == null ? null : _workspace.caseById(consultationId);
+    var patient = _workspace.patientById(notification.patientId);
+    if (consultation == null && patient == null) {
+      // Annoncé par la notification mais pas encore chargé : relire d'abord.
+      await _workspace.refresh();
+      if (!mounted) return;
+      consultation = consultationId == null ? null : _workspace.caseById(consultationId);
+      patient = _workspace.patientById(notification.patientId);
+    }
     if (consultation != null) {
       _openConsultation(consultation);
-      return;
-    }
-    final patient = _workspace.patientById(notification.patientId);
-    if (patient != null) {
+    } else if (patient != null) {
       _openPatient(patient);
-      return;
     }
-    _workspace.refresh();
   }
 
   /// En-tête épinglé du centre de notifications : comptes patients à valider.

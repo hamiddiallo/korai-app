@@ -8,8 +8,12 @@ import '../widgets/ai_proposal_block.dart';
 import '../widgets/expertise_request_panel.dart';
 import '../../../../core/widgets/otoscopy_photo.dart';
 
+/// Version à jour d'une consultation (`null` : inconnue de la source).
+typedef CaseLookup = AiCase? Function(String consultationId);
+
 /// Détail d'une consultation, en page (plus d'accordéons imbriqués).
-/// Partagé par le soignant et le patient.
+/// Partagé par le soignant et le patient. Avec [updates] et [latest], la page
+/// suit les relectures : l'avis du spécialiste y apparaît dès qu'il arrive.
 class ConsultationDetailPage extends StatefulWidget {
   const ConsultationDetailPage({
     super.key,
@@ -20,6 +24,8 @@ class ConsultationDetailPage extends StatefulWidget {
     this.onConsultationUpdated,
     this.onRetry,
     this.onResumeDraft,
+    this.updates,
+    this.latest,
   });
 
   final AiCase consultation;
@@ -30,12 +36,33 @@ class ConsultationDetailPage extends StatefulWidget {
   final Future<AiCase> Function(AiCase consultation)? onRetry;
   final ValueChanged<AiCase>? onResumeDraft;
 
+  /// Prévient quand la source des consultations a été relue.
+  final Listenable? updates;
+  final CaseLookup? latest;
+
   @override
   State<ConsultationDetailPage> createState() => _ConsultationDetailPageState();
 }
 
 class _ConsultationDetailPageState extends State<ConsultationDetailPage> {
   late AiCase _case = widget.consultation;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.updates?.addListener(_onUpdates);
+  }
+
+  @override
+  void dispose() {
+    widget.updates?.removeListener(_onUpdates);
+    super.dispose();
+  }
+
+  void _onUpdates() {
+    final fresh = widget.latest?.call(_case.id);
+    if (fresh != null && !identical(fresh, _case) && mounted) setState(() => _case = fresh);
+  }
 
   void _updated(AiCase c) {
     setState(() => _case = c);

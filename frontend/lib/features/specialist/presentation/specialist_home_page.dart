@@ -4,6 +4,7 @@ import '../../../core/auth/profile_page.dart';
 import '../../../core/auth/session_controller.dart';
 import '../../../core/design/design.dart';
 import '../../../core/notifications/notification_models.dart';
+import '../../../core/refresh/live_refresh.dart';
 import '../data/specialist_repository.dart';
 import 'nurse_requests_page.dart';
 import 'screens/specialist_queue_tab.dart';
@@ -12,6 +13,8 @@ import 'specialist_inbox.dart';
 
 /// Onglets : 0 File, 1 Mes dossiers, 2 Inscriptions, 3 Profil.
 const _queueTab = 0;
+const _mineTab = 1;
+const _registrationsTab = 2;
 
 /// Espace du spécialiste : file d'avis, dossiers pris en charge, inscriptions
 /// des soignants encadrés et profil.
@@ -24,7 +27,7 @@ class SpecialistHomePage extends StatefulWidget {
   State<SpecialistHomePage> createState() => _SpecialistHomePageState();
 }
 
-class _SpecialistHomePageState extends State<SpecialistHomePage> {
+class _SpecialistHomePageState extends State<SpecialistHomePage> with LiveReloadState {
   late final SpecialistRepository _repository;
   late final SpecialistInbox _inbox;
   int _tab = _queueTab;
@@ -43,29 +46,60 @@ class _SpecialistHomePageState extends State<SpecialistHomePage> {
     super.dispose();
   }
 
+  // La file est partagée entre spécialistes : un confrère peut prendre un
+  // dossier sans que l'on soit notifié, d'où la relève toutes les 30 s.
+  @override
+  Set<LiveTopic> get liveTopics => const {LiveTopic.expertise};
+
+  @override
+  Duration? get livePollEvery => const Duration(seconds: 30);
+
+  @override
+  Future<void> liveReload() => _inbox.refresh();
+
   Future<void> _open(ExpertiseInboxItem item) async {
     await Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => SpecialistReviewPage(
           repository: _repository,
+          inbox: _inbox,
           item: item,
           currentUserId: widget.session.user?.id,
-          onChanged: _inbox.refresh,
         ),
       ),
     );
+    // Retour à la file : elle est relue (dossier pris, avis envoyé, ou
+    // changements faits par un confrère pendant ce temps).
     _inbox.refresh();
   }
 
-  void _onNotificationTap(AppNotification n) {
+  Future<void> _onNotificationTap(AppNotification n) async {
+    if (n.type == NotificationType.nurseRegistrationRequest) {
+      setState(() => _tab = _registrationsTab);
+      return;
+    }
     final id = n.consultationId;
-    final item = id == null ? null : _inbox.items.where((i) => i.consultationId == id).firstOrNull;
-    if (item != null) {
-      _open(item);
-    } else {
+    if (id == null) {
       setState(() => _tab = _queueTab);
       _inbox.refresh();
+      return;
     }
+    // Dossier annoncé par la notification mais pas encore dans la file chargée.
+    var item = _inbox.find(id);
+    if (item == null) {
+      await _inbox.refresh();
+      if (!mounted) return;
+      item = _inbox.find(id);
+    }
+    if (item != null) {
+      _open(item);
+      return;
+    }
+    setState(() => _tab = _queueTab);
+    KSnack.show(
+      context,
+      'Ce dossier n’est plus dans votre file : un confrère l’a pris en charge ou l’avis a déjà été rendu.',
+    );
   }
 
   @override
@@ -81,6 +115,7 @@ class _SpecialistHomePageState extends State<SpecialistHomePage> {
               userName: widget.session.user?.fullName ?? '',
               onOpen: _open,
               onNotificationTap: _onNotificationTap,
+              onGoToMine: () => setState(() => _tab = _mineTab),
             ),
             SpecialistMineTab(
               inbox: _inbox,

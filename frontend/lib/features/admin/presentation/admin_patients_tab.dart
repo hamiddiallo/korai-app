@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/design/design.dart';
+import '../../../core/refresh/live_refresh.dart';
 import '../../../core/domain/korai_enums.dart';
 import '../../../core/utils/diagnosis_text.dart';
 import '../../../core/utils/patient_age.dart';
@@ -23,7 +24,7 @@ class AdminPatientsTab extends StatefulWidget {
   State<AdminPatientsTab> createState() => _AdminPatientsTabState();
 }
 
-class _AdminPatientsTabState extends State<AdminPatientsTab> {
+class _AdminPatientsTabState extends State<AdminPatientsTab> with LiveReloadState {
   List<AdminPatient> _patients = const [];
   List<AdminPatient> _deleted = const [];
   bool _loading = true;
@@ -38,6 +39,10 @@ class _AdminPatientsTabState extends State<AdminPatientsTab> {
     super.initState();
     _load();
   }
+
+  // Relu au retour de l'application au premier plan (changements faits ailleurs).
+  @override
+  Future<void> liveReload() => _load();
 
   Future<void> _load() async {
     setState(() => _loading = true);
@@ -356,7 +361,7 @@ class AdminPatientDossierPage extends StatefulWidget {
   State<AdminPatientDossierPage> createState() => _AdminPatientDossierPageState();
 }
 
-class _AdminPatientDossierPageState extends State<AdminPatientDossierPage> {
+class _AdminPatientDossierPageState extends State<AdminPatientDossierPage> with LiveReloadState {
   late AdminPatient _patient = widget.patient;
   List<AdminConsultation> _consultations = const [];
   bool _loading = true;
@@ -370,14 +375,20 @@ class _AdminPatientDossierPageState extends State<AdminPatientDossierPage> {
     _load();
   }
 
+  // Relu au retour de l'application au premier plan (changements faits ailleurs).
+  @override
+  Future<void> liveReload() => _load();
+
   Future<void> _load() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
+    setState(() => _loading = true);
     try {
       final list = await repo.listPatientConsultations(_patient.id);
-      if (mounted) setState(() => _consultations = list);
+      if (mounted) {
+        setState(() {
+          _consultations = list;
+          _error = null;
+        });
+      }
     } catch (e) {
       if (mounted) setState(() => _error = e);
     } finally {

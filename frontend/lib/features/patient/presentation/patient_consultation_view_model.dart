@@ -7,6 +7,7 @@ import '../../../core/auth/session_controller.dart';
 import '../../../core/domain/clinical_snapshot.dart';
 import '../../../core/domain/consultation_create_payload.dart';
 import '../../../core/domain/korai_enums.dart';
+import '../../../core/refresh/live_refresh.dart';
 import '../../../core/utils/orl_image_editor.dart';
 import '../data/patient_repository.dart';
 import '../../nurse/domain/ai_case.dart';
@@ -68,6 +69,12 @@ class PatientConsultationViewModel extends Cubit<PatientConsultationState> {
 
   static const totalSteps = 4;
 
+  late final _refresh = SerialRefresh(_reload);
+
+  /// Modifications du dossier faites sur l'appareil pendant une relecture :
+  /// elle est refaite pour ne pas les écraser.
+  int _localChanges = 0;
+
   bool get isReadOnly => patient?.isValidated == true;
 
   void _emitState() {
@@ -102,12 +109,14 @@ class PatientConsultationViewModel extends Cubit<PatientConsultationState> {
     }
   }
 
-  Future<void> _loadDossierData() async {
+  Future<void> _loadDossierData({bool prefill = true}) async {
     try {
       consultations = (await _repository.listCases()).sortedByNewest();
       historyError = null;
       final preCase = _findPreconsultationCase(consultations, linkedPatientId);
-      applyClinicalPrefillFromCase(preCase);
+      // Pré-remplissage au chargement seulement : une relecture ne doit pas
+      // effacer une pré-consultation en cours de saisie.
+      if (prefill) applyClinicalPrefillFromCase(preCase);
       readOnlyNotes = _extractNotesFromNarrative(preCase?.symptoms);
     } catch (e) {
       historyError = e;
@@ -115,8 +124,26 @@ class PatientConsultationViewModel extends Cubit<PatientConsultationState> {
   }
 
   /// Relit l'historique des consultations (tirer pour actualiser, réessayer).
-  Future<void> reloadHistory() async {
-    await _loadDossierData();
+  Future<void> reloadHistory() => refresh();
+
+  /// Relit le dossier (validation par le soignant, accords) et les
+  /// consultations, sans écran de chargement ni perte de la saisie en cours.
+  Future<void> refresh() => _refresh();
+
+  Future<void> _reload() async {
+    if (linkedPatientId.isEmpty || isLoading || isSubmitting) return;
+    try {
+      Patient? fresh;
+      int seen;
+      do {
+        seen = _localChanges;
+        fresh = await _repository.getPatient(linkedPatientId);
+      } while (seen != _localChanges);
+      patient = fresh;
+    } catch (_) {
+      // Hors ligne : le dossier déjà affiché reste valable.
+    }
+    await _loadDossierData(prefill: false);
     _emitState();
   }
 
@@ -219,6 +246,7 @@ class PatientConsultationViewModel extends Cubit<PatientConsultationState> {
         if (birthDate != null) 'birthDate': birthDate,
         if (sex != null) 'sex': sex,
       });
+      _localChanges++;
       patient = updated;
     } finally {
       isSavingProfile = false;
@@ -228,10 +256,12 @@ class PatientConsultationViewModel extends Cubit<PatientConsultationState> {
 
   /// Le patient donne ou retire ses accords (possible même dossier validé).
   Future<void> updateConsents({required bool ai, required bool teleExpertise}) async {
-    patient = await _repository.updatePatient(linkedPatientId, {
+    final updated = await _repository.updatePatient(linkedPatientId, {
       'consentForAi': ai,
       'consentForTeleExpertise': teleExpertise,
     });
+    _localChanges++;
+    patient = updated;
     _emitState();
   }
 
@@ -351,6 +381,7 @@ class PatientConsultationViewModel extends Cubit<PatientConsultationState> {
         'sex': sex,
         'isValidated': false,
       });
+      _localChanges++;
       patient = updatedPatient;
 
       aiCase = await _repository.diagnose(

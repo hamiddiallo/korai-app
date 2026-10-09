@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
@@ -30,17 +28,24 @@ class NotificationState {
   }
 }
 
+/// Notifications de l'utilisateur. La relève périodique est faite par
+/// `LiveRefresh` (premier plan seulement) ; chaque notification nouvelle est
+/// signalée par [onNewNotifications] pour que les écrans concernés se relisent.
 class NotificationCubit extends Cubit<NotificationState> {
-  NotificationCubit({required NotificationRepository repository})
+  NotificationCubit({required NotificationRepository repository, this.onNewNotifications})
       : _repository = repository,
         super(const NotificationState());
 
   final NotificationRepository _repository;
-  Timer? _pollTimer;
+
+  /// Notifications du serveur arrivées depuis la relève précédente.
+  final void Function(List<AppNotification> fresh)? onNewNotifications;
+
   bool _started = false;
 
-  /// Fréquence de relève serveur (polling), comme la synchronisation.
-  static const _pollInterval = Duration(seconds: 90);
+  /// Identifiants déjà vus ; `null` avant la première relève (celles qui
+  /// existaient à la connexion ne sont pas « nouvelles »).
+  Set<String>? _known;
 
   Future<void> start() async {
     if (_started) {
@@ -50,14 +55,11 @@ class NotificationCubit extends Cubit<NotificationState> {
     _started = true;
     await _loadCached();
     await refresh();
-    _pollTimer?.cancel();
-    _pollTimer = Timer.periodic(_pollInterval, (_) => refresh());
   }
 
   Future<void> stop() async {
     _started = false;
-    _pollTimer?.cancel();
-    _pollTimer = null;
+    _known = null;
     // Vide le cache local : le cache de notifications est global à l'appareil,
     // il ne doit pas réapparaître pour l'utilisateur suivant (changement de compte).
     try {
@@ -84,9 +86,9 @@ class NotificationCubit extends Cubit<NotificationState> {
     try {
       final items = await _repository.refresh();
       final unread = await _repository.unreadCount();
+      _announceNew(items);
       if (!isClosed) {
-        emit(state.copyWith(
-            items: items, unreadCount: unread, isLoading: false));
+        emit(state.copyWith(items: items, unreadCount: unread, isLoading: false));
       }
     } catch (_) {
       if (!isClosed) emit(state.copyWith(isLoading: false));
@@ -104,9 +106,12 @@ class NotificationCubit extends Cubit<NotificationState> {
     await _loadCached();
   }
 
-  @override
-  Future<void> close() async {
-    _pollTimer?.cancel();
-    return super.close();
+  void _announceNew(List<AppNotification> items) {
+    final server = items.where((n) => !n.isLocal).toList();
+    final known = _known;
+    _known = {...?known, for (final n in server) n.id};
+    if (known == null) return;
+    final fresh = server.where((n) => !known.contains(n.id)).toList();
+    if (fresh.isNotEmpty) onNewNotifications?.call(fresh);
   }
 }
